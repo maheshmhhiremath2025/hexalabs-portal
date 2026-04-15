@@ -24,29 +24,29 @@ const CONTAINER_IMAGES = {
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'ubuntu-mate': {
-    image: 'linuxserver/webtop:ubuntu-mate', label: 'Ubuntu Desktop (MATE)', os: 'Ubuntu',
+    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Desktop (MATE)', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'ubuntu-openbox': {
-    image: 'linuxserver/webtop:ubuntu-openbox', label: 'Ubuntu Minimal (Openbox)', os: 'Ubuntu',
+    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Minimal (Lightweight)', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '512m',
   },
   'alpine-xfce': {
-    image: 'linuxserver/webtop:alpine-xfce', label: 'Alpine Desktop (XFCE) — Ultra Light', os: 'Alpine Linux',
+    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Light Desktop', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '512m',
   },
   'fedora-xfce': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'Fedora Desktop (XFCE)', os: 'Fedora',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    image: 'kasmweb/desktop:1.16.0', label: 'Fedora-style Desktop (XFCE)', os: 'Ubuntu (Kasm)',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
   },
   'arch-xfce': {
-    image: 'linuxserver/webtop:arch-xfce', label: 'Arch Linux Desktop (XFCE)', os: 'Arch Linux',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    image: 'kasmweb/desktop:1.16.0', label: 'Arch-style Desktop (XFCE)', os: 'Ubuntu (Kasm)',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
   },
 
   // === KasmWeb Full Desktops (HTTPS, auth disabled for passwordless access) ===
