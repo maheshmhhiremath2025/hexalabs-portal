@@ -4,7 +4,7 @@ const User = require('../models/user');
 const Plan = require('../models/plan');
 const Subscription = require('../models/subscription');
 const Container = require('../models/container');
-const { createContainer } = require('../services/containerService');
+const { createContainer, buildAccessUrl } = require('../services/containerService');
 const { notifyInstanceReady } = require('../services/emailNotifications');
 const { setUser } = require('../services/auth');
 const { logger } = require('../plugins/logger');
@@ -226,7 +226,7 @@ async function handleDashboard(req, res) {
         cpus: c.cpus,
         memory: c.memory,
         isRunning: c.isRunning,
-        accessUrl: `${c.accessProtocol || 'http'}://${c.hostIp}:${c.vncPort}`,
+        accessUrl: buildAccessUrl(c),
         password: c.password,
         containerId: c.containerId,
         runtimeHours: Math.round((c.duration || 0) / 3600 * 10) / 10,

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ApiKey = require('../models/apiKey');
 const Container = require('../models/container');
-const { createContainer, stopContainer, startContainer, deleteContainer, getAvailableImages } = require('../services/containerService');
+const { createContainer, stopContainer, startContainer, deleteContainer, getAvailableImages, buildAccessUrl } = require('../services/containerService');
 const { logger } = require('../plugins/logger');
 
 // API Key authentication middleware
@@ -122,7 +122,7 @@ router.get('/v1/containers', apiKeyAuth, async (req, res) => {
 
   res.json(containers.map(c => ({
     id: c.containerId, name: c.name, isRunning: c.isRunning, os: c.os,
-    accessUrl: `${c.accessProtocol || 'http'}://${c.hostIp}:${c.vncPort}`,
+    accessUrl: buildAccessUrl(c),
     cpus: c.cpus, memory: c.memory,
     runtimeHours: Math.round((c.duration || 0) / 3600 * 10) / 10,
   })));

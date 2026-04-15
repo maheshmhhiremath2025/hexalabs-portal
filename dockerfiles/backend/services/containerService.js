@@ -5,6 +5,20 @@ const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 const { getDockerInstance, addContainerToHost, removeContainerFromHost, HOST_MODE } = require('./dockerHostManager');
 
+// Build HTTPS domain-based access URL for a container record
+function buildAccessUrl(container) {
+  const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
+  const protocol = container.accessProtocol || 'http';
+  const port = container.vncPort;
+  if (accessDomain && protocol === 'https') {
+    const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
+    return `https://${accessDomain}:${port + sslPortOffset}/`;
+  } else if (accessDomain) {
+    return `https://${accessDomain}/ws/${port}/`;
+  }
+  return `${protocol}://${container.hostIp}:${port}`;
+}
+
 // Fallback local Docker client (for stop/start/delete when host info is in container record)
 const localDocker = new Docker({
   socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
@@ -691,4 +705,5 @@ module.exports = {
   getCostComparison,
   prePullImage,
   CONTAINER_IMAGES,
+  buildAccessUrl,
 };
