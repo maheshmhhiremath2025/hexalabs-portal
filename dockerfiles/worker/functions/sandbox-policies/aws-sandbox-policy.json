@@ -1,0 +1,90 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowCheapEC2Only",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": [
+            "t3.micro",
+            "t3.small",
+            "t3.medium",
+            "t3a.micro",
+            "t3a.small",
+            "t3a.medium",
+            "t2.micro",
+            "t2.small",
+            "t2.medium"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyExpensiveInstances",
+      "Effect": "Deny",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "StringNotEquals": {
+          "ec2:InstanceType": [
+            "t3.micro", "t3.small", "t3.medium",
+            "t3a.micro", "t3a.small", "t3a.medium",
+            "t2.micro", "t2.small", "t2.medium"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyGPUInstances",
+      "Effect": "Deny",
+      "Action": "ec2:RunInstances",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "ec2:InstanceType": ["p*", "g*", "inf*", "trn*", "dl*"]
+        }
+      }
+    },
+    {
+      "Sid": "DenyExpensiveStorage",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:CreateVolume"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:VolumeType": ["io1", "io2"]
+        }
+      }
+    },
+    {
+      "Sid": "LimitVolumeSize",
+      "Effect": "Deny",
+      "Action": "ec2:CreateVolume",
+      "Resource": "*",
+      "Condition": {
+        "NumericGreaterThan": {
+          "ec2:VolumeSize": "50"
+        }
+      }
+    },
+    {
+      "Sid": "DenyExpensiveServices",
+      "Effect": "Deny",
+      "Action": [
+        "redshift:*",
+        "es:*",
+        "elasticache:*",
+        "emr:*",
+        "sagemaker:*",
+        "eks:*",
+        "ecs:CreateCluster"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

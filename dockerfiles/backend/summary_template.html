@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+        }
+        .invoice-container {
+            max-width: 800px;
+            margin: auto;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 150px;
+            height: 40px;
+            background-color: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #888;
+        }
+        .date {
+            font-size: 14px;
+            color: #888;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        .total-section {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .section-title {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+       
+        
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="header">
+            <div class="logo"> <img class="logo" src="https://portal.synergificsoftware.com/logo.png" alt="Company Logo" /> </div>
+            <div class="date">Date: {{currentDate}}</div>
+        </div>
+
+        <h2>Summary</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>VM Name</th>
+                    <th>Training Name</th>
+                    <th>Email</th>
+                    <th>Total Duration (mins)</th>
+                    <th>Rate (₹/hour)</th>
+                    <th>Total Amount (₹)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each this}}
+                {{#if name}}
+                <tr>
+                    <td>{{name}}</td>
+                    <td>{{trainingName}}</td>
+                    <td>{{email}}</td>
+                    <td>{{duration}}</td>
+                    <td>{{rate}}</td>
+                    <td>{{calcTotalAmount duration rate}}</td>
+                </tr>
+                {{/if}}
+                {{/each}}
+            </tbody>
+        </table>
+
+        <div class="total-section">
+            <p>Total VMs: {{totalVMs}}</p>
+            <p>Total Amount: ₹{{totalAmount}}</p>
+        </div>
+
+        <p style="text-align:center; margin-top:50px;">Thank you for your business!</p>
+    </div>
+
+    <div class="page-break"></div>
+    
+    <div class="invoice-container">
+        <div class="section-title" >Detailed Logs</div>
+
+        {{#each this}}
+        {{#if name}}
+        <h2>VM: {{name}} ({{trainingName}})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Start Time</th>
+                    <th>Stop Time</th>
+                    <th>Duration (mins)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each logs}}
+                <tr>
+                    <td>{{formatDate start}}</td>
+                    <td>{{formatDate stop}}</td>
+                    <td>{{duration}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+        {{/if}}
+        {{/each}}
+    </div>
+</body>
+</html>
