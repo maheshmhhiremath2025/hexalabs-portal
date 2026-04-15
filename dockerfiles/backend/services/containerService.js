@@ -36,36 +36,37 @@ function getDockerForContainer(containerDoc) {
 // Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
 // All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
-  // === Desktop Jump Servers (Alpine + IceWM + Chromium, ~2.5GB, branded wallpapers) ===
+  // === Real OS Desktops — linuxserver/webtop (HTTP/3000, SUBFOLDER proxy) ===
   'ubuntu-desktop': {
-    image: 'getlabs/desktop-ubuntu:1.0', label: 'Ubuntu Desktop', os: 'Ubuntu',
+    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Ubuntu Desktop'], shmSize: '256m',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Ubuntu Desktop'], shmSize: '512m',
   },
   'redhat-desktop': {
-    image: 'getlabs/desktop-redhat:1.0', label: 'Red Hat Enterprise Linux Desktop', os: 'RHEL',
+    image: 'linuxserver/webtop:fedora-xfce', label: 'Red Hat / Fedora Desktop (XFCE)', os: 'RHEL / Fedora',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=RHEL Desktop'], shmSize: '256m',
-  },
-  'oracle-desktop': {
-    image: 'getlabs/desktop-oracle:1.0', label: 'Oracle Linux Desktop', os: 'Oracle Linux',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Oracle Linux Desktop'], shmSize: '256m',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=RHEL Desktop'], shmSize: '512m',
   },
   'centos-desktop': {
-    image: 'getlabs/desktop-centos:1.0', label: 'CentOS Desktop', os: 'CentOS',
+    image: 'linuxserver/webtop:fedora-xfce', label: 'CentOS / Fedora Desktop (XFCE)', os: 'CentOS / Fedora',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=CentOS Desktop'], shmSize: '256m',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=CentOS Desktop'], shmSize: '512m',
   },
+  // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
   'kali-desktop': {
-    image: 'getlabs/desktop-kali:1.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Kali Linux Desktop'], shmSize: '256m',
+    image: 'kasmweb/kali-rolling-desktop:1.16.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
+  },
+  'oracle-desktop': {
+    image: 'kasmweb/oracle-8-desktop:1.16.0', label: 'Oracle Linux 8 Desktop', os: 'Oracle Linux 8',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
   'alma-desktop': {
-    image: 'getlabs/desktop-alma:1.0', label: 'AlmaLinux Desktop', os: 'AlmaLinux',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=AlmaLinux Desktop'], shmSize: '256m',
+    image: 'kasmweb/almalinux-9-desktop:1.16.0', label: 'AlmaLinux 9 Desktop', os: 'AlmaLinux 9',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
 
   // === Dev Environments (HTTP) ===
