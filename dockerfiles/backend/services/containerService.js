@@ -412,8 +412,11 @@ async function createContainer({
   const accessProtocol = imageConfig.protocol || 'http';
   const actualUsername = imageConfig.defaultUser || 'labuser';
 
-  // Build access URL — auth is disabled on Kasm images via VNCOPTIONS=-disableBasicAuth
-  const accessUrl = `${accessProtocol}://${hostIp}:${vncPort}`;
+  // Build access URL — use domain-based proxy if CONTAINER_ACCESS_DOMAIN is set
+  const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
+  const accessUrl = accessDomain
+    ? `https://${accessDomain}/ws/${vncPort}/`
+    : `${accessProtocol}://${hostIp}:${vncPort}`;
 
   // Save to DB
   const containerDoc = new Container({
