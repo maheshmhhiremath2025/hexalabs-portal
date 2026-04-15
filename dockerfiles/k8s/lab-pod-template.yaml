@@ -1,0 +1,88 @@
+# Template for creating individual lab desktop pods.
+# The backend dynamically generates this per user using the K8s API.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "lab-${LAB_NAME}"
+  namespace: lab-containers
+  labels:
+    app: lab-desktop
+    training: "${TRAINING_NAME}"
+    organization: "${ORGANIZATION}"
+    user: "${USER_EMAIL}"
+    image-type: "${IMAGE_KEY}"
+  annotations:
+    getlabs.cloud/rate: "${RATE}"
+    getlabs.cloud/azure-equivalent-rate: "${AZURE_RATE}"
+    getlabs.cloud/created-by: "getlabs-portal"
+spec:
+  # Schedule on spot nodes for cost savings
+  nodeSelector:
+    kubernetes.azure.com/scalesetpriority: spot
+  tolerations:
+    - key: "kubernetes.azure.com/scalesetpriority"
+      operator: "Equal"
+      value: "spot"
+      effect: "NoSchedule"
+  containers:
+    - name: desktop
+      image: "linuxserver/webtop:ubuntu-xfce"
+      ports:
+        - containerPort: 3000
+          name: vnc
+          protocol: TCP
+      env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "Asia/Kolkata"
+      resources:
+        requests:
+          cpu: "500m"        # 0.5 CPU minimum
+          memory: "1Gi"
+        limits:
+          cpu: "2000m"       # 2 CPU max
+          memory: "4Gi"
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 3000
+        initialDelaySeconds: 30
+        periodSeconds: 15
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 10
+---
+# Service to expose each pod via NodePort or LoadBalancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: "lab-${LAB_NAME}-svc"
+  namespace: lab-containers
+  labels:
+    app: lab-desktop
+    training: "${TRAINING_NAME}"
+spec:
+  type: ClusterIP
+  selector:
+    app: lab-desktop
+    # Selects specific pod by name label
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: vnc

@@ -1,0 +1,35 @@
+# Nginx Ingress Controller to route traffic to lab pods
+# Each lab gets a subdomain: lab-{name}.labs.getlabs.cloud
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lab-ingress
+  namespace: lab-containers
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # WebSocket support for noVNC
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "*.labs.getlabs.cloud"
+      secretName: labs-wildcard-tls
+  rules:
+    # Dynamic rules added per pod by the backend
+    - host: "lab-PLACEHOLDER.labs.getlabs.cloud"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lab-PLACEHOLDER-svc
+                port:
+                  number: 3000

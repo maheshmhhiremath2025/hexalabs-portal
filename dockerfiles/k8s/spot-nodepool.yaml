@@ -1,0 +1,40 @@
+# AKS Spot Node Pool configuration
+# Run via Azure CLI — this is the command reference, not a K8s manifest
+#
+# Create AKS cluster (one-time):
+# az aks create \
+#   --resource-group getlabs-k8s \
+#   --name getlabs-aks \
+#   --node-count 1 \
+#   --node-vm-size Standard_D2s_v3 \
+#   --generate-ssh-keys \
+#   --network-plugin azure
+#
+# Add Spot Node Pool for lab containers:
+# az aks nodepool add \
+#   --resource-group getlabs-k8s \
+#   --cluster-name getlabs-aks \
+#   --name labpool \
+#   --priority Spot \
+#   --eviction-policy Delete \
+#   --spot-max-price -1 \
+#   --node-vm-size Standard_D4s_v3 \
+#   --node-count 3 \
+#   --min-count 1 \
+#   --max-count 20 \
+#   --enable-cluster-autoscaler \
+#   --labels kubernetes.azure.com/scalesetpriority=spot \
+#   --node-taints kubernetes.azure.com/scalesetpriority=spot:NoSchedule
+#
+# Cost breakdown (Central India region):
+# Standard_D4s_v3 Spot: ~₹3.5/hr per node (vs ₹18/hr on-demand)
+# Each node runs ~15-20 lab pods (4 vCPU, 16 GB RAM per node)
+# 3 nodes = 45-60 simultaneous labs
+# 20 nodes (autoscaled) = 300-400 simultaneous labs
+#
+# For 500-1000 users:
+# - Peak: 15-25 nodes = ₹52-87/hr total infra cost
+# - Per user: ₹0.05-0.17/hr (vs Azure VM at ₹15-25/hr per user)
+# - Monthly (8hr/day, 22 days): ₹9,000-15,000 total vs ₹26,40,000+ on Azure VMs
+#
+# Savings: 95%+ compared to individual Azure VMs

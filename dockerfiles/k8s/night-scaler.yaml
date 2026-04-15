@@ -1,0 +1,94 @@
+# K8s CronJob: Scale down lab node pool to 1 node at 11 PM IST, scale up at 7 AM IST.
+# Uses Azure CLI inside a container to adjust AKS node pool size.
+#
+# Requires: Service principal credentials as K8s secret.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-sp-creds
+  namespace: lab-containers
+type: Opaque
+stringData:
+  AZURE_CLIENT_ID: "${CLIENT_ID}"
+  AZURE_CLIENT_SECRET: "${CLIENT_SECRET}"
+  AZURE_TENANT_ID: "${TENANT_ID}"
+  AZURE_SUBSCRIPTION_ID: "${SUBSCRIPTION_ID}"
+---
+# Scale DOWN at 11 PM IST (5:30 PM UTC)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: night-scale-down
+  namespace: lab-containers
+spec:
+  schedule: "30 17 * * *"  # 5:30 PM UTC = 11 PM IST
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scaler
+              image: mcr.microsoft.com/azure-cli:latest
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  az login --service-principal \
+                    -u $AZURE_CLIENT_ID \
+                    -p $AZURE_CLIENT_SECRET \
+                    --tenant $AZURE_TENANT_ID
+
+                  # Scale spot pool to 1 node
+                  az aks nodepool update \
+                    --resource-group getlabs-k8s \
+                    --cluster-name getlabs-aks \
+                    --name labpool \
+                    --min-count 1 \
+                    --max-count 3 \
+                    --update-cluster-autoscaler
+
+                  echo "Night mode: scaled down to min=1, max=3"
+              envFrom:
+                - secretRef:
+                    name: azure-sp-creds
+          restartPolicy: OnFailure
+---
+# Scale UP at 7 AM IST (1:30 AM UTC)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: morning-scale-up
+  namespace: lab-containers
+spec:
+  schedule: "30 1 * * *"  # 1:30 AM UTC = 7 AM IST
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scaler
+              image: mcr.microsoft.com/azure-cli:latest
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  az login --service-principal \
+                    -u $AZURE_CLIENT_ID \
+                    -p $AZURE_CLIENT_SECRET \
+                    --tenant $AZURE_TENANT_ID
+
+                  # Scale spot pool back up
+                  az aks nodepool update \
+                    --resource-group getlabs-k8s \
+                    --cluster-name getlabs-aks \
+                    --name labpool \
+                    --min-count 3 \
+                    --max-count 20 \
+                    --update-cluster-autoscaler
+
+                  echo "Morning mode: scaled up to min=3, max=20"
+              envFrom:
+                - secretRef:
+                    name: azure-sp-creds
+          restartPolicy: OnFailure

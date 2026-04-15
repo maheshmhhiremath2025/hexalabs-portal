@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+nohup.out
+logs/
+dist/
+dump.rdb
+gcp-service-account.json
+.DS_Store

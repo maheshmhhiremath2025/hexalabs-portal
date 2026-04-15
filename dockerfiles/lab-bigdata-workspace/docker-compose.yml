@@ -1,0 +1,172 @@
+# =============================================================================
+# Alternative deployment: per-student multi-container stack.
+#
+# Use this compose file when a customer demands true service isolation
+# (separate Kafka cluster, separate Spark master/worker, etc.) instead of the
+# all-in-one workspace image.
+#
+# Each student gets ONE compose project (`docker-compose -p student-01 up -d`)
+# which spins up:
+#   - workspace      (the lab-bigdata-workspace image, services disabled,
+#                     used as the student's entry point)
+#   - kafka          (official confluentinc/cp-kafka, KRaft mode)
+#   - spark-master   + spark-worker
+#   - mysql
+#   - cassandra      (optional, profile=cassandra)
+#
+# All services live on a dedicated bridge network so the student's workspace
+# can reach `kafka:9092`, `spark-master:7077`, `mysql:3306`, `cassandra:9042`
+# by hostname. Cross-student isolation is total — different compose projects
+# get different networks.
+#
+# Usage:
+#   docker-compose -p lab-student-01 up -d                  # default stack
+#   docker-compose -p lab-student-01 --profile cassandra up -d  # +Cassandra
+#   docker-compose -p lab-student-01 down -v                # tear down
+#
+# Resource budget per stack (no Cassandra): ~5 GB RAM, 2-3 vCPU
+# With Cassandra:                            ~7 GB RAM, 3-4 vCPU
+# =============================================================================
+
+version: '3.8'
+
+services:
+  workspace:
+    image: getlabs/lab-bigdata-workspace:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-workspace
+    hostname: workspace
+    environment:
+      ENABLE_KAFKA: "false"        # use the dedicated kafka service
+      ENABLE_SPARK: "false"        # use the dedicated spark services
+      ENABLE_CASSANDRA: "false"
+      ENABLE_SSH: "true"
+      LAB_PASSWORD: "${LAB_PASSWORD:-Welcome1234!}"
+    ports:
+      - "${WORKSPACE_TTY_PORT:-7681}:7681"
+      - "${WORKSPACE_SSH_PORT:-2222}:22"
+      - "${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - workspace-home:/home/lab
+    depends_on:
+      - kafka
+      - spark-master
+      - mysql
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2g
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-kafka
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_HEAP_OPTS: '-Xmx512m -Xms256m'
+      CLUSTER_ID: 'b1g-d4ta-l4b-cluster-id-001'
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
+
+  spark-master:
+    image: bitnami/spark:3.5.1
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-spark-master
+    hostname: spark-master
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: 'no'
+      SPARK_RPC_ENCRYPTION_ENABLED: 'no'
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: 'no'
+      SPARK_SSL_ENABLED: 'no'
+      SPARK_MASTER_OPTS: '-Dspark.deploy.defaultCores=2'
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768m
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-spark-worker
+    hostname: spark-worker
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_CORES: 2
+      SPARK_RPC_AUTHENTICATION_ENABLED: 'no'
+      SPARK_SSL_ENABLED: 'no'
+    depends_on:
+      - spark-master
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1.5g
+
+  mysql:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-mysql
+    hostname: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: labdb
+      MYSQL_USER: lab
+      MYSQL_PASSWORD: ${LAB_PASSWORD:-Welcome1234!}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-cassandra
+    hostname: cassandra
+    profiles: ["cassandra"]
+    environment:
+      CASSANDRA_CLUSTER_NAME: 'LabCluster'
+      MAX_HEAP_SIZE: '1G'
+      HEAP_NEWSIZE: '200M'
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    networks:
+      - lab-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1.5g
+
+networks:
+  lab-net:
+    driver: bridge
+
+volumes:
+  workspace-home:
+  mysql-data:
+  cassandra-data:

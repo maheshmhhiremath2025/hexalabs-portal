@@ -1,0 +1,41 @@
+
+=============================================================================
+              GetLabs Big Data Workspace — Welcome
+=============================================================================
+
+This container has the full big-data stack pre-installed and ready to use.
+
+USER:        lab          (sudo with NOPASSWD)
+PASSWORD:    Welcome1234!  (or your customized LAB_PASSWORD)
+WORKDIR:     /home/lab/work
+
+INSTALLED TOOLS:
+  Java:        $JAVA_HOME  (Eclipse Temurin JDK 17)
+  Python:      $(python3 --version 2>/dev/null)
+  Kafka:       $KAFKA_HOME  (3.7.0, KRaft mode — no Zookeeper)
+  Spark:       $SPARK_HOME  (3.5.1, local + standalone)
+  MySQL:       running on 127.0.0.1:3306 (db=labdb, user=lab)
+  Cassandra:   $CASSANDRA_HOME (start with: sudo supervisorctl start cassandra)
+
+QUICK STARTS:
+  Kafka topic:    kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test
+  Kafka producer: kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test
+  Kafka consumer: kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning
+  Spark shell:    spark-shell    (Scala) or pyspark (Python)
+  Spark submit:   spark-submit my_job.py
+  MySQL CLI:      mysql -ulab -p labdb
+  Spark UI:       http://<container-ip>:4040 (when a job is running)
+  Spark Master:   http://<container-ip>:8080 (when standalone master is running)
+
+SERVICE CONTROL:
+  Status:    sudo supervisorctl status
+  Restart:   sudo supervisorctl restart <service-name>
+  Logs:      tail -f /var/log/<service>.stdout.log
+
+DOCS:
+  Course datasets are in /home/lab/datasets (mount your own at runtime).
+  Kafka KRaft port: 9092 (broker), 9093 (controller)
+  Spark events log: /home/lab/.spark-events
+
+Happy hacking!
+=============================================================================

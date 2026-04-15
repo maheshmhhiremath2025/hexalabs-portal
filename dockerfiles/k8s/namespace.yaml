@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab-containers
+  labels:
+    app: getlabs
+    component: labs

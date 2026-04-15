@@ -1,0 +1,209 @@
+version: '3.8'
+
+services:
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+    container_name: backend
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - MONGO_URI=mongodb://mongodb:27017/cloudportal
+      - GUACAMOLE_URL=http://guacamole:8080/guacamole
+      - GUACAMOLE_PUBLIC_URL=${GUACAMOLE_PUBLIC_URL:-https://labs.getlabs.cloud/guacamole}
+      - CONTAINER_HOST_IP=${CONTAINER_HOST_IP:-0.0.0.0}
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - K8S_IN_CLUSTER=${K8S_IN_CLUSTER:-false}
+      - LABS_DOMAIN=${LABS_DOMAIN:-labs.getlabs.cloud}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./portal_data/shared_logs:/usr/src/app/shared_logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+    networks:
+      app_network:
+        aliases:
+          - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MongoDB Service
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: always
+    volumes:
+      - ./portal_data/mongodb:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+    networks:
+      app_network:
+        aliases:
+          - mongodb
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis Service
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    volumes:
+      - ./portal_data/redis:/data
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+    networks:
+      app_network:
+        aliases:
+          - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Guacamole - Browser-based VM access (RDP + SSH)
+  # Guacamole proxy daemon — handles RDP/SSH transcoding
+  # Scale replicas based on concurrent Windows VM sessions:
+  #   1 replica  = ~50-80  sessions
+  #   5 replicas = ~250-400 sessions
+  #   10 replicas = ~500-800 sessions
+  guacd:
+    image: guacamole/guacd:latest
+    restart: always
+    environment:
+      - GUACD_LOG_LEVEL=warning
+    deploy:
+      replicas: ${GUACD_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+        reservations:
+          cpus: "1"
+          memory: 2G
+    networks:
+      app_network:
+        aliases:
+          - guacd
+
+  # Guacamole web app — stateless, can also be scaled
+  guacamole:
+    image: guacamole/guacamole:latest
+    restart: always
+    depends_on:
+      - guacd
+      - guac-db
+    environment:
+      - GUACD_HOSTNAME=guacd
+      - GUACD_PORT=4822
+      - MYSQL_HOSTNAME=guac-db
+      - MYSQL_DATABASE=guacamole_db
+      - MYSQL_USER=guacamole_user
+      - MYSQL_PASSWORD=guacamole_pass
+      - WEBAPP_CONTEXT=guacamole
+      - EXTENSION_PRIORITY=mysql
+    deploy:
+      replicas: ${GUACAMOLE_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+    ports:
+      - "8085:8080"
+    networks:
+      app_network:
+        aliases:
+          - guacamole
+
+  guac-db:
+    image: mysql:8.0
+    container_name: guac-db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=guacamole_db
+      - MYSQL_USER=guacamole_user
+      - MYSQL_PASSWORD=guacamole_pass
+    volumes:
+      - ./portal_data/guac-db:/var/lib/mysql
+      - ./guacamole/initdb:/docker-entrypoint-initdb.d
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+    networks:
+      app_network:
+        aliases:
+          - guac-db
+
+  # Worker Services (worker-1 to worker-10)
+  worker:
+    build:
+      context: ./worker
+    restart: always
+    deploy:
+      replicas: 10
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+    volumes:
+      - ./portal_data/shared_logs:/usr/src/app/shared_logs
+      - /usr/bin/chromium-browser:/usr/bin/chromium-browser:ro
+      - /usr/lib/chromium:/usr/lib/chromium:ro # Adjust if needed
+    environment:
+      - REDIS_HOST=redis
+      - MONGO_URI=mongodb://mongodb:27017/cloudportal
+      - CHROMIUM_PATH=/usr/bin/chromium-browser
+    networks:
+      app_network:
+        aliases:
+          - worker
+          - worker-1
+          - worker-2
+          - worker-3
+          - worker-4
+          - worker-5
+          - worker-6
+          - worker-7
+          - worker-8
+          - worker-9
+          - worker-10
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Worker is running')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge
