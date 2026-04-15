@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { FaTrash, FaPlus, FaSearch, FaChevronUp, FaChevronDown } from 'react-icons/fa';
+import { FaTrash, FaPlus, FaSearch, FaChevronUp, FaChevronDown, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 const getNestedValue = (obj, path) => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+
 const Table = ({ data, Search, modalVisible, deleteData, title, header, columns = [] }) => {
     const [sortCol, setSortCol] = useState(null);
     const [sortDir, setSortDir] = useState('asc');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
     const isObjectData = data.length > 0 && typeof data[0] === 'object';
 
     const handleSort = (colIndex) => {
@@ -28,6 +32,15 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
         const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
         return sortDir === 'asc' ? cmp : -cmp;
     });
+
+    // Pagination
+    const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const startIdx = (safePage - 1) * pageSize;
+    const pageData = sortedData.slice(startIdx, startIdx + pageSize);
+
+    // Reset to page 1 when data changes
+    React.useEffect(() => { setPage(1); }, [data.length]);
 
     return (
         <div className="card overflow-hidden">
@@ -75,10 +88,10 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-surface-100">
-                        {sortedData.length > 0 ? (
-                            sortedData.map((item, index) => (
+                        {pageData.length > 0 ? (
+                            pageData.map((item, index) => (
                                 <tr key={index} className="hover:bg-surface-50/50 transition-colors">
-                                    <td className="py-2.5 px-4 text-surface-500 text-xs tabular-nums">{index + 1}</td>
+                                    <td className="py-2.5 px-4 text-surface-500 text-xs tabular-nums">{startIdx + index + 1}</td>
                                     {isObjectData ? (
                                         columns.map((colPath, colIndex) => (
                                             <td key={colIndex} className="py-2.5 px-4 text-surface-700">
@@ -109,6 +122,80 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {sortedData.length > 20 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-surface-200 bg-surface-50/50">
+                    <div className="flex items-center gap-2 text-xs text-surface-500">
+                        <span>Showing {startIdx + 1}-{Math.min(startIdx + pageSize, sortedData.length)} of {sortedData.length}</span>
+                        <select
+                            value={pageSize}
+                            onChange={(e) => { setPageSize(+e.target.value); setPage(1); }}
+                            className="px-2 py-1 border border-surface-200 rounded text-xs bg-white focus:outline-none"
+                        >
+                            {PAGE_SIZE_OPTIONS.map(s => (
+                                <option key={s} value={s}>{s} per page</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setPage(1)}
+                            disabled={safePage === 1}
+                            className="px-2 py-1 text-xs text-surface-600 hover:bg-surface-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            First
+                        </button>
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={safePage === 1}
+                            className="p-1.5 text-surface-600 hover:bg-surface-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <FaChevronLeft className="text-[10px]" />
+                        </button>
+                        {/* Page numbers */}
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                                pageNum = i + 1;
+                            } else if (safePage <= 3) {
+                                pageNum = i + 1;
+                            } else if (safePage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                            } else {
+                                pageNum = safePage - 2 + i;
+                            }
+                            return (
+                                <button
+                                    key={pageNum}
+                                    onClick={() => setPage(pageNum)}
+                                    className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                                        safePage === pageNum
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-surface-600 hover:bg-surface-200'
+                                    }`}
+                                >
+                                    {pageNum}
+                                </button>
+                            );
+                        })}
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={safePage === totalPages}
+                            className="p-1.5 text-surface-600 hover:bg-surface-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <FaChevronRight className="text-[10px]" />
+                        </button>
+                        <button
+                            onClick={() => setPage(totalPages)}
+                            disabled={safePage === totalPages}
+                            className="px-2 py-1 text-xs text-surface-600 hover:bg-surface-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            Last
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
