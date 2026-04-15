@@ -199,7 +199,7 @@ const CONTAINER_IMAGES = {
   // === Big Data / Streaming Labs ===
   'bigdata-workspace': {
     image: 'getlabs/lab-bigdata-workspace:1.0',
-    label: 'Big Data Lab — Kafka, Spark, MySQL, JDK17, Python 3.10',
+    label: 'Big Data Lab — Kafka, Spark, MySQL, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
     vncPort: 7681,         // ttyd browser terminal
@@ -209,7 +209,7 @@ const CONTAINER_IMAGES = {
       'ENABLE_KAFKA=true',
       'ENABLE_SPARK=true',
       'ENABLE_CASSANDRA=false',
-      'ENABLE_SSH=false',
+      'ENABLE_SSH=true',
       'ENABLE_JUPYTER=false',
       'LAB_PASSWORD=Welcome1234!',
     ],
@@ -217,7 +217,7 @@ const CONTAINER_IMAGES = {
   },
   'bigdata-workspace-cassandra': {
     image: 'getlabs/lab-bigdata-workspace:1.0',
-    label: 'Big Data Lab — with Cassandra (heavier)',
+    label: 'Big Data Lab — Kafka, Spark, MySQL, Cassandra, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
     vncPort: 7681,
@@ -227,7 +227,7 @@ const CONTAINER_IMAGES = {
       'ENABLE_KAFKA=true',
       'ENABLE_SPARK=true',
       'ENABLE_CASSANDRA=true',
-      'ENABLE_SSH=false',
+      'ENABLE_SSH=true',
       'ENABLE_JUPYTER=true',
       'LAB_PASSWORD=Welcome1234!',
     ],
