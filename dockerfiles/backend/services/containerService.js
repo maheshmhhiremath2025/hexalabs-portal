@@ -413,16 +413,17 @@ async function createContainer({
   const actualUsername = imageConfig.defaultUser || 'labuser';
 
   // Build access URL
-  // KasmVNC (HTTPS) containers have built-in SSL — access directly on port
-  // HTTP containers (Webtop, ttyd, Jupyter) go through Nginx /ws/ proxy
+  // KasmVNC (HTTPS) → Nginx SSL proxy on port 20000+ (valid cert, no "Not Secure" warning)
+  // HTTP containers → Nginx /ws/ proxy
   const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
+  const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
   let accessUrl;
-  if (accessDomain && accessProtocol === 'http') {
-    // HTTP containers — proxy through Nginx for SSL termination
+  if (accessDomain && accessProtocol === 'https') {
+    // HTTPS containers (KasmVNC) — Nginx SSL proxy on offset port (20XXX → 10XXX)
+    accessUrl = `https://${accessDomain}:${vncPort + sslPortOffset}/`;
+  } else if (accessDomain && accessProtocol === 'http') {
+    // HTTP containers — proxy through Nginx /ws/ path
     accessUrl = `https://${accessDomain}/ws/${vncPort}/`;
-  } else if (accessDomain) {
-    // HTTPS containers (KasmVNC) — direct access, container handles its own SSL
-    accessUrl = `https://${accessDomain}:${vncPort}/`;
   } else {
     accessUrl = `${accessProtocol}://${hostIp}:${vncPort}`;
   }
