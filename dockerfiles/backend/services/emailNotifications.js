@@ -379,7 +379,7 @@ async function notifySandboxWelcomeEmail({
   const cloudBadgeColor = { aws: '#FF9900', azure: '#00BCF2', gcp: '#34A853', oci: '#F80000' }[cloud] || '#2563EB';
   const cloudShortLabel = { aws: 'AWS', azure: 'AZURE', gcp: 'GCP', oci: 'OCI' }[cloud] || cloud.toUpperCase();
   const expiresStr = expiresAt ? new Date(expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }) : 'Contact your administrator';
-  const portalLink = portalUrl || 'https://portal.synergificsoftware.com';
+  const portalLink = portalUrl || 'https://getlabs.cloud';
 
   const cloudResource = compartmentName ? `Compartment: ${compartmentName}` :
                         resourceGroupName ? `Resource Group: ${resourceGroupName}` :
@@ -526,7 +526,7 @@ async function notifyResourceWelcomeEmail({
   };
 
   const brand = brandMap[resourceType] || brandMap.vm;
-  const portalLink = 'https://portal.synergificsoftware.com';
+  const portalLink = 'https://getlabs.cloud';
   const expiresStr = expiresAt
     ? new Date(expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
     : 'Contact your administrator';
