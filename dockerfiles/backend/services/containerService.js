@@ -519,12 +519,12 @@ async function createContainer({
  * Stop a container.
  */
 async function stopContainer(containerId) {
-  const doc = await Container.findOne({ containerId });
+  let doc = await Container.findOne({ containerId });
   const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
   const container = dockerClient.getContainer(containerId);
   await container.stop();
 
-  const doc = await Container.findOne({ containerId });
+  doc = await Container.findOne({ containerId });
   if (doc) {
     doc.isRunning = false;
     // Update last log entry
