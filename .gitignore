@@ -7,3 +7,4 @@ dist/
 dump.rdb
 gcp-service-account.json
 .DS_Store
+dockerfiles/portal_data/
