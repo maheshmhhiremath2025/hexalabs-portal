@@ -36,34 +36,34 @@ function getDockerForContainer(containerDoc) {
 // Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
 // All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
-  // === Desktop Jump Servers (lightweight, Chromium pre-installed) ===
+  // === Desktop Jump Servers (Alpine + IceWM + Chromium, ~2.5GB, branded wallpapers) ===
   'ubuntu-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'Ubuntu Desktop', os: 'Ubuntu',
+    image: 'getlabs/desktop-ubuntu:1.0', label: 'Ubuntu Desktop', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Ubuntu Desktop'], shmSize: '256m',
   },
   'redhat-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'Red Hat Enterprise Linux Desktop', os: 'RHEL',
+    image: 'getlabs/desktop-redhat:1.0', label: 'Red Hat Enterprise Linux Desktop', os: 'RHEL',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=RHEL Desktop'], shmSize: '256m',
   },
   'oracle-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'Oracle Linux Desktop', os: 'Oracle Linux',
+    image: 'getlabs/desktop-oracle:1.0', label: 'Oracle Linux Desktop', os: 'Oracle Linux',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Oracle Linux Desktop'], shmSize: '256m',
   },
   'centos-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'CentOS Desktop', os: 'CentOS',
+    image: 'getlabs/desktop-centos:1.0', label: 'CentOS Desktop', os: 'CentOS',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=CentOS Desktop'], shmSize: '256m',
   },
   'kali-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
+    image: 'getlabs/desktop-kali:1.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Kali Linux Desktop'], shmSize: '256m',
   },
   'alma-desktop': {
-    image: 'getlabs/desktop-lite:1.0', label: 'AlmaLinux Desktop', os: 'AlmaLinux',
+    image: 'getlabs/desktop-alma:1.0', label: 'AlmaLinux Desktop', os: 'AlmaLinux',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=AlmaLinux Desktop'], shmSize: '256m',
   },
