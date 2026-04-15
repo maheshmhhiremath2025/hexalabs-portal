@@ -22,7 +22,7 @@ function getDockerForContainer(containerDoc) {
 const CONTAINER_IMAGES = {
   // === Linux Desktop Environments (LinuxServer Webtop — HTTP) ===
   'ubuntu-xfce': {
-    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
+    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
