@@ -346,4 +346,29 @@ router.get("/report/:trainingName/data", async (req, res) => {
   }
 });
 
+// Docker Host Pool Management
+router.get('/docker-hosts', async (req, res) => {
+  try {
+    const DockerHost = require('../models/dockerHost');
+    const hosts = await DockerHost.find({ status: { $ne: 'terminated' } }).sort({ createdAt: -1 }).lean();
+    res.json(hosts);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.post('/docker-hosts/provision', async (req, res) => {
+  try {
+    const { provisionNewHost } = require('../services/dockerHostManager');
+    res.json({ message: 'Provisioning started' });
+    provisionNewHost().catch(e => require('../plugins/logger').logger.error(`Manual provision failed: ${e.message}`));
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete('/docker-hosts/:id', async (req, res) => {
+  try {
+    const { terminateHost } = require('../services/dockerHostManager');
+    await terminateHost(req.params.id);
+    res.json({ message: 'Host terminated' });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 module.exports = router;

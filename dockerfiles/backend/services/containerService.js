@@ -3,12 +3,20 @@ const Container = require('../models/container');
 const Training = require('../models/training');
 const User = require('../models/user');
 const { logger } = require('../plugins/logger');
+const { getDockerInstance, addContainerToHost, removeContainerFromHost, HOST_MODE } = require('./dockerHostManager');
 
-// Connect to Docker - supports local socket or remote TCP
-const docker = new Docker({
+// Fallback local Docker client (for stop/start/delete when host info is in container record)
+const localDocker = new Docker({
   socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
-  // For remote: host: process.env.DOCKER_HOST, port: process.env.DOCKER_PORT
 });
+
+// Get Docker client for a specific container (looks up its host)
+function getDockerForContainer(containerDoc) {
+  if (containerDoc.dockerHostIp && containerDoc.dockerHostIp !== 'localhost') {
+    return new Docker({ host: containerDoc.dockerHostIp, port: containerDoc.dockerHostPort || 2376 });
+  }
+  return localDocker;
+}
 
 // Available container images organized by category
 const CONTAINER_IMAGES = {
@@ -319,6 +327,7 @@ async function getNextAvailablePort() {
 
 /**
  * Create a Docker container with Ubuntu GUI.
+ * Uses auto-scaling Docker host pool when DOCKER_HOST_MODE=auto.
  */
 async function createContainer({
   name, trainingName, organization, email, imageKey,
@@ -327,6 +336,10 @@ async function createContainer({
   guacamole = false, expiresAt = null
 }) {
   const imageConfig = CONTAINER_IMAGES[imageKey] || CONTAINER_IMAGES['ubuntu-xfce'];
+
+  // Get Docker instance — auto-scales if needed
+  const { docker: dockerClient, host: dockerHost } = await getDockerInstance(memory);
+  const docker = dockerClient;
   if (!imageConfig || !imageConfig.image) {
     throw new Error(`Unknown container image key: "${imageKey}". Available: ${Object.keys(CONTAINER_IMAGES).join(', ')}`);
   }
@@ -428,7 +441,7 @@ async function createContainer({
     accessUrl = `${accessProtocol}://${hostIp}:${vncPort}`;
   }
 
-  // Save to DB
+  // Save to DB — include Docker host info for remote access
   const containerDoc = new Container({
     name,
     containerId: info.Id,
@@ -453,8 +466,16 @@ async function createContainer({
     accessProtocol,
     type: 'container',
     expiresAt: expiresAt ? new Date(expiresAt) : null,
+    dockerHostId: dockerHost?._id || null,
+    dockerHostIp: dockerHost?.publicIp || 'localhost',
+    dockerHostPort: dockerHost?.dockerPort || 2376,
   });
   await containerDoc.save();
+
+  // Update Docker host counters
+  if (dockerHost) {
+    await addContainerToHost(dockerHost._id, info.Id, name, memory);
+  }
 
   // Update training mapping
   const existing = await Training.findOne({ name: trainingName, organization });
@@ -498,7 +519,9 @@ async function createContainer({
  * Stop a container.
  */
 async function stopContainer(containerId) {
-  const container = docker.getContainer(containerId);
+  const doc = await Container.findOne({ containerId });
+  const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
+  const container = dockerClient.getContainer(containerId);
   await container.stop();
 
   const doc = await Container.findOne({ containerId });
@@ -521,7 +544,9 @@ async function stopContainer(containerId) {
  * Start a stopped container.
  */
 async function startContainer(containerId) {
-  const container = docker.getContainer(containerId);
+  const doc = await Container.findOne({ containerId });
+  const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
+  const container = dockerClient.getContainer(containerId);
   await container.start();
 
   const doc = await Container.findOne({ containerId });
@@ -537,15 +562,21 @@ async function startContainer(containerId) {
  * Delete a container permanently.
  */
 async function deleteContainer(containerId) {
+  const doc = await Container.findOne({ containerId });
+  const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
+
   try {
-    const container = docker.getContainer(containerId);
+    const container = dockerClient.getContainer(containerId);
     try { await container.stop(); } catch {} // may already be stopped
     await container.remove({ force: true });
   } catch (err) {
     logger.error(`Docker remove error: ${err.message}`);
   }
 
-  const doc = await Container.findOne({ containerId });
+  // Update Docker host counters
+  if (doc?.dockerHostId) {
+    await removeContainerFromHost(doc.dockerHostId, containerId, doc.memory || 2048);
+  }
   if (doc) {
     doc.isAlive = false;
     doc.isRunning = false;

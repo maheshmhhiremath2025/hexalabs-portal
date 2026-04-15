@@ -27,6 +27,7 @@ const { containerIdleShutdown } = require('./automations/containerIdleShutdown')
 const { nightPause } = require('./automations/nightPause')
 const { rosaCleanup } = require('./automations/rosaCleanup')
 const { aroCleanup } = require('./automations/aroCleanup')
+const { dockerHostScaler } = require('./automations/dockerHostScaler')
 const { hostBudgetAlert } = require('./automations/hostBudgetAlert')
 const { checkQuotaWarnings } = require('./services/emailNotifications')
 
@@ -131,6 +132,9 @@ connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')
       });
       aroCleanup().catch(err => {
         logger.error(`ARO cluster cleanup failed: ${err.message}`);
+      });
+      dockerHostScaler().catch(err => {
+        logger.error(`Docker host scaler failed: ${err.message}`);
       });
     });
 

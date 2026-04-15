@@ -49,7 +49,11 @@ const containerSchema = new mongoose.Schema({
   // Idle auto-stop (container equivalent of VM idle shutdown)
   autoShutdown: { type: Boolean, default: true },
   idleMinutes: { type: Number, default: 30 },
-  idleSince: { type: Date, default: null },          // tracks when container went idle; reset on activity
+  idleSince: { type: Date, default: null },
+  // Docker host info (for auto-scaling pool)
+  dockerHostId: { type: mongoose.Schema.Types.ObjectId, ref: 'DockerHost' },
+  dockerHostIp: { type: String, default: 'localhost' },
+  dockerHostPort: { type: Number, default: 2376 },
 }, { timestamps: true });
 
 containerSchema.index({ trainingName: 1, organization: 1 });
