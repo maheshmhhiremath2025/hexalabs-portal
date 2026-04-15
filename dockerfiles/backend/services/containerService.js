@@ -47,50 +47,50 @@ const CONTAINER_IMAGES = {
     env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '512m',
   },
   'fedora-xfce': {
-    image: 'kasmweb/desktop:1.16.0', label: 'Fedora-style Desktop (XFCE)', os: 'Ubuntu (Kasm)',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:fedora-xfce', label: 'Fedora Desktop (XFCE)', os: 'Fedora',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'arch-xfce': {
-    image: 'kasmweb/desktop:1.16.0', label: 'Arch-style Desktop (XFCE)', os: 'Ubuntu (Kasm)',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:arch-xfce', label: 'Arch Linux Desktop (XFCE)', os: 'Arch Linux',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
 
-  // === KasmWeb Full Desktops (HTTPS, auth disabled for passwordless access) ===
+  // === Full Desktops (Selkies Webtop — HTTP via Nginx HTTPS proxy) ===
   'kasm-desktop': {
-    image: 'kasmweb/desktop:1.16.0', label: 'Kasm Ubuntu Desktop', os: 'Ubuntu (Kasm)',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop', os: 'Ubuntu',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'kasm-desktop-deluxe': {
-    image: 'kasmweb/desktop-deluxe:1.16.0', label: 'Kasm Ubuntu Desktop Deluxe (Dev Tools)', os: 'Ubuntu (Kasm)',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:ubuntu-kde', label: 'Ubuntu Desktop Deluxe (KDE)', os: 'Ubuntu',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
 
-  // === RHEL / CentOS Family (HTTPS, auth disabled) ===
+  // === RHEL / CentOS Family (Selkies Webtop — HTTP via Nginx HTTPS proxy) ===
   'rocky-9': {
-    image: 'kasmweb/rockylinux-9-desktop:1.16.0', label: 'Rocky Linux 9 Desktop (RHEL)', os: 'Rocky Linux 9',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:fedora-xfce', label: 'Rocky Linux 9 Desktop (RHEL-family)', os: 'Rocky Linux 9',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'alma-9': {
-    image: 'kasmweb/almalinux-9-desktop:1.16.0', label: 'AlmaLinux 9 Desktop (RHEL)', os: 'AlmaLinux 9',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:fedora-xfce', label: 'AlmaLinux 9 Desktop (RHEL-family)', os: 'AlmaLinux 9',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'oracle-8': {
-    image: 'kasmweb/oracle-8-desktop:1.16.0', label: 'Oracle Linux 8 Desktop', os: 'Oracle Linux 8',
-    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:fedora-xfce', label: 'Oracle Linux 8 Desktop (RHEL-family)', os: 'Oracle Linux 8',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
 
   // === Cybersecurity / Pentesting ===
   'kali-desktop': {
-    image: 'kasmweb/kali-rolling-desktop:1.16.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
-    category: 'security', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Kali-style Linux Desktop', os: 'Kali Linux',
+    category: 'security', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
   },
   'kali-xfce': {
     image: 'lukaszlach/kali-desktop:xfce', label: 'Kali Linux (XFCE) — Lightweight', os: 'Kali Linux',
@@ -388,8 +388,10 @@ async function createContainer({
   const isSysbox = imageConfig.runtime === 'sysbox-runc';
   const hostConfig = {
     PortBindings: {
-      [`${imageConfig.vncPort}/tcp`]: [{ HostPort: String(vncPort) }],
-      '22/tcp': [{ HostPort: String(sshPort) }],
+      // Bind to 127.0.0.1 on local host so ports are only reachable via Nginx proxy (HTTPS domain).
+      // On remote Docker hosts, bind to 0.0.0.0 so the main Nginx can proxy to them.
+      [`${imageConfig.vncPort}/tcp`]: [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(vncPort) }],
+      '22/tcp': [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(sshPort) }],
     },
     Memory: memory * 1024 * 1024,
     NanoCpus: cpus * 1e9,
@@ -425,19 +427,18 @@ async function createContainer({
   const accessProtocol = imageConfig.protocol || 'http';
   const actualUsername = imageConfig.defaultUser || 'labuser';
 
-  // Build access URL
-  // KasmVNC (HTTPS) → Nginx SSL proxy on port 20000+ (valid cert, no "Not Secure" warning)
-  // HTTP containers → Nginx /ws/ proxy
+  // Build access URL — always route through HTTPS domain proxy when available
   const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
   const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
   let accessUrl;
   if (accessDomain && accessProtocol === 'https') {
-    // HTTPS containers (KasmVNC) — Nginx SSL proxy on offset port (20XXX → 10XXX)
+    // HTTPS containers (KasmWeb single apps) — Nginx SSL proxy on offset port
     accessUrl = `https://${accessDomain}:${vncPort + sslPortOffset}/`;
-  } else if (accessDomain && accessProtocol === 'http') {
-    // HTTP containers — proxy through Nginx /ws/ path
+  } else if (accessDomain) {
+    // All HTTP containers (Selkies Webtop, ttyd, etc.) — proxy through Nginx /ws/ path
     accessUrl = `https://${accessDomain}/ws/${vncPort}/`;
   } else {
+    // Fallback only when no domain configured (local dev)
     accessUrl = `${accessProtocol}://${hostIp}:${vncPort}`;
   }
 
