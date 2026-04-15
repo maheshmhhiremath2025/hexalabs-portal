@@ -309,6 +309,11 @@ async function checkAndScaleDown() {
 /**
  * Get Docker instance — auto-scales if needed
  * Returns { docker: Dockerode, host: DockerHost|null }
+ *
+ * Strategy:
+ * 1. Try existing remote Docker host with capacity
+ * 2. If no remote host available → use LOCAL Docker immediately (no wait)
+ * 3. In background → provision new Azure Spot VM for future containers
  */
 async function getDockerInstance(memoryMb = 512) {
   if (HOST_MODE === 'local') {
@@ -318,17 +323,33 @@ async function getDockerInstance(memoryMb = 512) {
     };
   }
 
-  // Try existing host
+  // Try existing remote host with capacity
   let host = await getAvailableHost(memoryMb);
 
-  if (!host) {
-    // Provision new host
-    logger.info(`[docker-host] No capacity — provisioning new Azure Spot VM...`);
-    host = await provisionNewHost();
-    if (!host) throw new Error('Failed to provision Docker host');
+  if (host) {
+    return { docker: getDockerClient(host), host };
   }
 
-  return { docker: getDockerClient(host), host };
+  // No remote host available — use LOCAL Docker immediately (zero wait)
+  logger.info('[docker-host] No remote host available — deploying locally');
+
+  // Check if a host is already provisioning (don't double-provision)
+  const provisioning = await DockerHost.findOne({ status: 'provisioning' });
+  if (!provisioning) {
+    // Provision new Azure host in BACKGROUND (don't block the container deploy)
+    logger.info('[docker-host] Provisioning new Azure Spot VM in background...');
+    provisionNewHost().catch(err => {
+      logger.error(`[docker-host] Background provisioning failed: ${err.message}`);
+    });
+  } else {
+    logger.info(`[docker-host] Host ${provisioning.name} already provisioning — waiting for it`);
+  }
+
+  // Return local Docker — container deploys instantly
+  return {
+    docker: new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' }),
+    host: null,
+  };
 }
 
 module.exports = {
