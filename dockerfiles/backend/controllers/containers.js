@@ -74,6 +74,7 @@ async function handleCreateContainers(req, res) {
             resourceName: name,
             trainingName,
             organization,
+            imageKey,
             imageLabel: imageConfig?.label || imageKey,
             cpus,
             memoryMb: memory,
