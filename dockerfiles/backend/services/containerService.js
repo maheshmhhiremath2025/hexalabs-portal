@@ -33,110 +33,39 @@ function getDockerForContainer(containerDoc) {
 }
 
 // Available container images organized by category
+// Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
+// All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
-  // === Linux Desktop Environments (LinuxServer Webtop — HTTP) ===
-  'ubuntu-xfce': {
-    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
+  // === Desktop Jump Servers (lightweight, Chromium pre-installed) ===
+  'ubuntu-desktop': {
+    image: 'getlabs/desktop-lite:1.0', label: 'Ubuntu Desktop', os: 'Ubuntu',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Ubuntu Desktop'], shmSize: '256m',
   },
-  'ubuntu-kde': {
-    image: 'linuxserver/webtop:ubuntu-kde', label: 'Ubuntu Desktop (KDE)', os: 'Ubuntu',
+  'redhat-desktop': {
+    image: 'getlabs/desktop-lite:1.0', label: 'Red Hat Enterprise Linux Desktop', os: 'RHEL',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=RHEL Desktop'], shmSize: '256m',
   },
-  'ubuntu-mate': {
-    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Desktop (MATE)', os: 'Ubuntu',
+  'oracle-desktop': {
+    image: 'getlabs/desktop-lite:1.0', label: 'Oracle Linux Desktop', os: 'Oracle Linux',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Oracle Linux Desktop'], shmSize: '256m',
   },
-  'ubuntu-openbox': {
-    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Minimal (Lightweight)', os: 'Ubuntu',
+  'centos-desktop': {
+    image: 'getlabs/desktop-lite:1.0', label: 'CentOS Desktop', os: 'CentOS',
     category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '512m',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=CentOS Desktop'], shmSize: '256m',
   },
-  'alpine-xfce': {
-    image: 'linuxserver/webtop:ubuntu-xfce-kasm-version-a17e259b', label: 'Ubuntu Light Desktop', os: 'Ubuntu',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '512m',
-  },
-  'fedora-xfce': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'Fedora Desktop (XFCE)', os: 'Fedora',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-  'arch-xfce': {
-    image: 'linuxserver/webtop:arch-xfce', label: 'Arch Linux Desktop (XFCE)', os: 'Arch Linux',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-
-  // === Full Desktops (Selkies Webtop — HTTP via Nginx HTTPS proxy) ===
-  'kasm-desktop': {
-    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop', os: 'Ubuntu',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-  'kasm-desktop-deluxe': {
-    image: 'linuxserver/webtop:ubuntu-kde', label: 'Ubuntu Desktop Deluxe (KDE)', os: 'Ubuntu',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-
-  // === RHEL / CentOS Family (Selkies Webtop — HTTP via Nginx HTTPS proxy) ===
-  'rocky-9': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'Rocky Linux 9 Desktop (RHEL-family)', os: 'Rocky Linux 9',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-  'alma-9': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'AlmaLinux 9 Desktop (RHEL-family)', os: 'AlmaLinux 9',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-  'oracle-8': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'Oracle Linux 8 Desktop (RHEL-family)', os: 'Oracle Linux 8',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
-  },
-
-  // === Cybersecurity / Pentesting ===
   'kali-desktop': {
-    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Kali-style Linux Desktop', os: 'Kali Linux',
-    category: 'security', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    image: 'getlabs/desktop-lite:1.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Kali Linux Desktop'], shmSize: '256m',
   },
-  'kali-xfce': {
-    image: 'lukaszlach/kali-desktop:xfce', label: 'Kali Linux (XFCE) — Lightweight', os: 'Kali Linux',
-    category: 'security', vncPort: 6080, protocol: 'http',
-    env: [],
-  },
-
-  // === Single Applications (HTTPS — KasmWeb, auth disabled) ===
-  'chrome': {
-    image: 'kasmweb/chrome:1.16.0', label: 'Google Chrome Browser', os: 'Chrome',
-    category: 'app', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
-  },
-  'firefox': {
-    image: 'kasmweb/firefox:1.16.0', label: 'Firefox Browser', os: 'Firefox',
-    category: 'app', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
-  },
-  'vscode-kasm': {
-    image: 'kasmweb/vs-code:1.16.0', label: 'VS Code (Desktop in Browser)', os: 'VS Code',
-    category: 'dev', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
-  },
-  'terminal': {
-    image: 'kasmweb/terminal:1.16.0', label: 'Terminal Only', os: 'Terminal',
-    category: 'dev', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
-  },
-  'libreoffice': {
-    image: 'kasmweb/libre-office:1.16.0', label: 'LibreOffice Suite', os: 'LibreOffice',
-    category: 'app', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
-    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
+  'alma-desktop': {
+    image: 'getlabs/desktop-lite:1.0', label: 'AlmaLinux Desktop', os: 'AlmaLinux',
+    category: 'desktop', vncPort: 3000, protocol: 'http',
+    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=AlmaLinux Desktop'], shmSize: '256m',
   },
 
   // === Dev Environments (HTTP) ===
@@ -391,6 +320,8 @@ async function createContainer({
       return e;
     }),
     `RESOLUTION=1920x1080`,
+    // Desktop containers need SUBFOLDER for reverse proxy subpath routing
+    ...(imageConfig.vncPort === 3000 ? [`SUBFOLDER=/ws/${vncPort}/`] : []),
   ];
 
   // Parse shm_size
