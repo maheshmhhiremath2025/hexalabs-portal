@@ -13,9 +13,11 @@ const transporter = nodemailer.createTransport({
 
 const FROM = `"Synergific Cloud Portal" <${process.env.GMAIL_USER}>`;
 
+const CC_RECIPIENTS = 'itops@synergificsoftware.com, vinay.chandra@synergificsoftware.com';
+
 async function sendEmail(to, subject, html) {
   try {
-    await transporter.sendMail({ from: FROM, to, subject, html });
+    await transporter.sendMail({ from: FROM, to, cc: CC_RECIPIENTS, subject, html });
     logger.info(`Email sent to ${to}: ${subject}`);
   } catch (err) {
     logger.error(`Email failed to ${to}: ${err.message}`);
