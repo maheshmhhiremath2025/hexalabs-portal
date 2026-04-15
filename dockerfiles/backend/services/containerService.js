@@ -545,12 +545,12 @@ async function stopContainer(containerId) {
  * Start a stopped container.
  */
 async function startContainer(containerId) {
-  const doc = await Container.findOne({ containerId });
+  let doc = await Container.findOne({ containerId });
   const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
   const container = dockerClient.getContainer(containerId);
   await container.start();
 
-  const doc = await Container.findOne({ containerId });
+  doc = await Container.findOne({ containerId });
   if (doc) {
     doc.isRunning = true;
     doc.logs.push({ start: new Date() });
