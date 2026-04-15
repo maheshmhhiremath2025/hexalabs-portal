@@ -14,9 +14,9 @@ const docker = new Docker({
 const CONTAINER_IMAGES = {
   // === Linux Desktop Environments (LinuxServer Webtop — HTTP) ===
   'ubuntu-xfce': {
-    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata'], shmSize: '1gb',
+    image: 'kasmweb/desktop:1.16.0', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'],
   },
   'ubuntu-kde': {
     image: 'linuxserver/webtop:ubuntu-kde', label: 'Ubuntu Desktop (KDE)', os: 'Ubuntu',
