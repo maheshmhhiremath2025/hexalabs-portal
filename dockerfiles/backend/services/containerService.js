@@ -70,6 +70,15 @@ const CONTAINER_IMAGES = {
     env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
 
+  // === Windows Desktop (QEMU/KVM — noVNC on port 8006) ===
+  'windows-desktop': {
+    image: 'dockurr/windows:latest', label: 'Windows 11 Desktop (Chrome)', os: 'Windows 11',
+    category: 'desktop', vncPort: 8006, protocol: 'http', defaultUser: 'User',
+    env: ['RAM_SIZE=4G', 'CPU_CORES=2', 'DISK_SIZE=20G', 'VERSION=tiny11'],
+    shmSize: '512m',
+    requiresKvm: true,
+  },
+
   // === Dev Environments (HTTP) ===
   'code-server': {
     image: 'codercom/code-server:latest', label: 'VS Code Server (code-server)', os: 'VS Code Server',
@@ -352,6 +361,28 @@ async function createContainer({
     hostConfig.Runtime = 'sysbox-runc';
   } else {
     hostConfig.SecurityOpt = ['seccomp=unconfined']; // needed for some desktop images
+  }
+
+  // Windows containers need KVM device + NET_ADMIN capability
+  if (imageConfig.requiresKvm) {
+    hostConfig.Devices = [{ PathOnHost: '/dev/kvm', PathInContainer: '/dev/kvm', CgroupPermissions: 'rwm' }];
+    hostConfig.CapAdd = ['NET_ADMIN'];
+    // Don't limit memory/CPU for Windows — QEMU manages its own allocation
+    delete hostConfig.Memory;
+    delete hostConfig.NanoCpus;
+    // Mount persistent storage for the Windows disk so it persists across restarts
+    const storagePath = `/opt/windows-disks/${name}`;
+    hostConfig.Binds = [`${storagePath}:/storage`];
+    // Create storage dir and copy pre-installed base disk if available (skips 20-min install)
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    fs.mkdirSync(storagePath, { recursive: true });
+    const baseDisk = '/opt/windows-disks/base/data.img';
+    if (fs.existsSync(baseDisk) && !fs.existsSync(`${storagePath}/data.img`)) {
+      logger.info(`Copying pre-installed Windows disk for ${name}...`);
+      execSync(`cp "${baseDisk}" "${storagePath}/data.img"`);
+      logger.info(`Windows disk copied — container will boot in ~30 seconds`);
+    }
   }
 
   // Create container
