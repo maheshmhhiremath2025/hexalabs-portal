@@ -513,18 +513,8 @@ const Controller = ({ superadminApiRoutes }) => {
             title="Organizations"
             count={organization.length}
             icon={sectionIcons.org}
-            collapsible
-            collapsed={collapse.org}
-            onToggle={() => setCollapse((c) => ({ ...c, org: !c.org }))}
           />
-          <AnimatePresence initial={false}>
-            {!collapse.org && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
-                exit={{ height: 0, opacity: 0 }} 
-                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              >
+          <div>
                 {loading.org && <LoadingRows rows={5} />}
                 {!loading.org && errors.org && <ErrorState message={errors.org} onRetry={getOrganization} />}
                 {!loading.org && !errors.org && organization.length === 0 && (
@@ -553,9 +543,7 @@ const Controller = ({ superadminApiRoutes }) => {
                     />
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </Card>
 
         {/* Users Section */}
@@ -564,18 +552,8 @@ const Controller = ({ superadminApiRoutes }) => {
             title="Users"
             count={userList.length}
             icon={sectionIcons.users}
-            collapsible
-            collapsed={collapse.users}
-            onToggle={() => setCollapse((c) => ({ ...c, users: !c.users }))}
           />
-          <AnimatePresence initial={false}>
-            {!collapse.users && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
-                exit={{ height: 0, opacity: 0 }} 
-                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              >
+          <div>
                 {loading.users && <LoadingRows rows={6} />}
                 {!loading.users && errors.users && <ErrorState message={errors.users} onRetry={getusers} />}
                 {!loading.users && !errors.users && userList.length === 0 && (
@@ -605,9 +583,7 @@ const Controller = ({ superadminApiRoutes }) => {
                     />
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </Card>
 
         {/* Templates Section */}
@@ -616,18 +592,8 @@ const Controller = ({ superadminApiRoutes }) => {
             title="Templates"
             count={templatesList.length}
             icon={sectionIcons.tpl}
-            collapsible
-            collapsed={collapse.tpl}
-            onToggle={() => setCollapse((c) => ({ ...c, tpl: !c.tpl }))}
           />
-          <AnimatePresence initial={false}>
-            {!collapse.tpl && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
-                exit={{ height: 0, opacity: 0 }} 
-                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              >
+          <div>
                 {loading.tpl && <LoadingRows rows={5} />}
                 {!loading.tpl && errors.tpl && <ErrorState message={errors.tpl} onRetry={gettemplates} />}
                 {!loading.tpl && !errors.tpl && templatesList.length === 0 && (
@@ -657,9 +623,7 @@ const Controller = ({ superadminApiRoutes }) => {
                     />
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </Card>
 
         {/* Assigned Templates Section */}
@@ -668,18 +632,8 @@ const Controller = ({ superadminApiRoutes }) => {
             title="Assigned Templates"
             count={assignedList.length}
             icon={sectionIcons.asg}
-            collapsible
-            collapsed={collapse.asg}
-            onToggle={() => setCollapse((c) => ({ ...c, asg: !c.asg }))}
           />
-          <AnimatePresence initial={false}>
-            {!collapse.asg && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
-                exit={{ height: 0, opacity: 0 }} 
-                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              >
+          <div>
                 {loading.asg && <LoadingRows rows={5} />}
                 {!loading.asg && errors.asg && <ErrorState message={errors.asg} onRetry={getassigned} />}
                 {!loading.asg && !errors.asg && assignedList.length === 0 && (
@@ -709,9 +663,7 @@ const Controller = ({ superadminApiRoutes }) => {
                     />
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </Card>
       </div>
 
