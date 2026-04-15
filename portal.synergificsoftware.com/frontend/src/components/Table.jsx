@@ -5,13 +5,13 @@ const getNestedValue = (obj, path) => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
 
-const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100];
 
 const Table = ({ data, Search, modalVisible, deleteData, title, header, columns = [] }) => {
     const [sortCol, setSortCol] = useState(null);
     const [sortDir, setSortDir] = useState('asc');
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(20);
+    const [pageSize, setPageSize] = useState(5);
     const isObjectData = data.length > 0 && typeof data[0] === 'object';
 
     const handleSort = (colIndex) => {
@@ -67,7 +67,7 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
                 </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
                 <table className="min-w-full text-sm">
                     <thead>
                         <tr className="bg-surface-50 border-b border-surface-200">
@@ -124,7 +124,7 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
             </div>
 
             {/* Pagination */}
-            {sortedData.length > 20 && (
+            {sortedData.length > 5 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-surface-200 bg-surface-50/50">
                     <div className="flex items-center gap-2 text-xs text-surface-500">
                         <span>Showing {startIdx + 1}-{Math.min(startIdx + pageSize, sortedData.length)} of {sortedData.length}</span>
