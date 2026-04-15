@@ -413,9 +413,12 @@ async function createContainer({
   const actualUsername = imageConfig.defaultUser || 'labuser';
 
   // Build access URL — use domain-based proxy if CONTAINER_ACCESS_DOMAIN is set
+  // /ws/ for HTTP containers (Webtop, ttyd, Jupyter)
+  // /wss/ for HTTPS containers (KasmVNC, Kasm Desktop)
   const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
+  const proxyPath = accessProtocol === 'https' ? 'wss' : 'ws';
   const accessUrl = accessDomain
-    ? `https://${accessDomain}/ws/${vncPort}/`
+    ? `https://${accessDomain}/${proxyPath}/${vncPort}/`
     : `${accessProtocol}://${hostIp}:${vncPort}`;
 
   // Save to DB
