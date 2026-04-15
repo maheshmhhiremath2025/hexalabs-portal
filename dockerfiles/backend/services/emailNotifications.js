@@ -188,34 +188,92 @@ async function notifyLabWelcomeEmail({
     `;
   } else if (isBigData) {
     installedSection = `
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Java</td><td style="padding:4px 12px;font-size:13px;color:#111;">JDK 17 (Eclipse Temurin)</td></tr>
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Python</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.10 + pip + PySpark</td></tr>
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Kafka</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.7 (KRaft) on localhost:9092</td></tr>
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Spark</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.5.1 + spark-submit + pyspark</td></tr>
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">MySQL</td><td style="padding:4px 12px;font-size:13px;color:#111;">8.0 on localhost:3306 (db: labdb)</td></tr>
-      ${isCassandra ? '<tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Cassandra</td><td style="padding:4px 12px;font-size:13px;color:#111;">4.1.5 on localhost:9042</td></tr>' : ''}
-      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Tools</td><td style="padding:4px 12px;font-size:13px;color:#111;">git, vim, tmux, htop, curl, wget</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">OS</td><td style="padding:4px 12px;font-size:13px;color:#111;">Ubuntu 22.04 LTS</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Java</td><td style="padding:4px 12px;font-size:13px;color:#111;">JDK 17 (Eclipse Temurin) — JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Python</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.10 + pip + PySpark + Jupyter ${isCassandra ? '(enabled)' : ''}</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Kafka</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.7 (KRaft mode, no ZooKeeper) — localhost:9092</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Spark</td><td style="padding:4px 12px;font-size:13px;color:#111;">3.5.1 (master + worker) — Spark UI at localhost:8080</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">MySQL</td><td style="padding:4px 12px;font-size:13px;color:#111;">8.0 — localhost:3306 (database: labdb, user: lab)</td></tr>
+      ${isCassandra ? '<tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Cassandra</td><td style="padding:4px 12px;font-size:13px;color:#111;">4.1.5 — localhost:9042 (CQL shell: cqlsh)</td></tr>' : ''}
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">Tools</td><td style="padding:4px 12px;font-size:13px;color:#111;">git, vim, nano, tmux, htop, curl, wget, jq</td></tr>
+      <tr><td style="padding:4px 12px;color:#6b7280;font-size:13px;">SSH</td><td style="padding:4px 12px;font-size:13px;color:#111;">Enabled — ssh lab@host -p &lt;ssh-port&gt;</td></tr>
     `;
     quickStartSection = `
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-        <div style="font-weight:600;color:#166534;font-size:14px;margin-bottom:10px;">Quick start commands</div>
-        <div style="font-family:monospace;font-size:12px;color:#374151;line-height:1.8;">
-          <div><span style="color:#9ca3af;">#</span> Verify everything works:</div>
-          <div>java -version && python3 --version</div>
+        <div style="font-weight:600;color:#166534;font-size:14px;margin-bottom:10px;">Step 1 — Verify Your Environment</div>
+        <div style="font-family:monospace;font-size:12px;color:#374151;line-height:1.9;background:#f8fafc;padding:12px;border-radius:6px;">
+          <div><span style="color:#9ca3af;"># Check all versions</span></div>
+          <div>java -version</div>
+          <div>python3 --version</div>
           <div>kafka-topics.sh --version</div>
           <div>spark-submit --version 2>&1 | head -2</div>
-          <div>mysql -ulab -p${password} -e "SELECT 1"</div>
-          ${isCassandra ? '<div>cqlsh -e "DESCRIBE KEYSPACES"</div>' : ''}
-          <div style="margin-top:8px;"><span style="color:#9ca3af;">#</span> Create a Kafka topic:</div>
-          <div>kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 3</div>
-          <div style="margin-top:8px;"><span style="color:#9ca3af;">#</span> Spark interactive shell:</div>
-          <div>pyspark    <span style="color:#9ca3af;"># Python</span></div>
-          <div>spark-shell  <span style="color:#9ca3af;"># Scala</span></div>
-          <div style="margin-top:8px;"><span style="color:#9ca3af;">#</span> MySQL:</div>
-          <div>mysql -ulab -p${password} labdb</div>
-          <div style="margin-top:8px;"><span style="color:#9ca3af;">#</span> Service control:</div>
+          <div>mysql --version</div>
+          ${isCassandra ? '<div>cqlsh --version</div>' : ''}
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Check all services are running</span></div>
           <div>sudo supervisorctl status</div>
         </div>
+      </div>
+
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
+        <div style="font-weight:600;color:#1e40af;font-size:14px;margin-bottom:10px;">Step 2 — Kafka Quick Start</div>
+        <div style="font-family:monospace;font-size:12px;color:#374151;line-height:1.9;background:#f8fafc;padding:12px;border-radius:6px;">
+          <div><span style="color:#9ca3af;"># Create a topic</span></div>
+          <div>kafka-topics.sh --bootstrap-server localhost:9092 \\</div>
+          <div>  --create --topic my-events --partitions 3 --replication-factor 1</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># List topics</span></div>
+          <div>kafka-topics.sh --bootstrap-server localhost:9092 --list</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Produce messages (type messages, Ctrl+C to stop)</span></div>
+          <div>kafka-console-producer.sh --bootstrap-server localhost:9092 --topic my-events</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Consume messages (open another terminal tab)</span></div>
+          <div>kafka-console-consumer.sh --bootstrap-server localhost:9092 \\</div>
+          <div>  --topic my-events --from-beginning</div>
+        </div>
+      </div>
+
+      <div style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;padding:16px;margin:16px 0;">
+        <div style="font-weight:600;color:#7e22ce;font-size:14px;margin-bottom:10px;">Step 3 — Spark Quick Start</div>
+        <div style="font-family:monospace;font-size:12px;color:#374151;line-height:1.9;background:#f8fafc;padding:12px;border-radius:6px;">
+          <div><span style="color:#9ca3af;"># PySpark interactive shell</span></div>
+          <div>pyspark</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Scala Spark shell</span></div>
+          <div>spark-shell</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Submit a Spark job</span></div>
+          <div>spark-submit --master local[*] your_script.py</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Spark UI (check jobs, stages, executors)</span></div>
+          <div><span style="color:#9ca3af;"># Open http://localhost:8080 in the browser</span></div>
+        </div>
+      </div>
+
+      <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
+        <div style="font-weight:600;color:#a16207;font-size:14px;margin-bottom:10px;">Step 4 — MySQL ${isCassandra ? '& Cassandra ' : ''}Quick Start</div>
+        <div style="font-family:monospace;font-size:12px;color:#374151;line-height:1.9;background:#f8fafc;padding:12px;border-radius:6px;">
+          <div><span style="color:#9ca3af;"># Connect to MySQL</span></div>
+          <div>mysql -ulab -p'${password}' labdb</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Create a sample table</span></div>
+          <div>CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), email VARCHAR(100));</div>
+          <div>INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');</div>
+          <div>SELECT * FROM users;</div>
+          ${isCassandra ? `
+          <div style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;"><span style="color:#9ca3af;"># Connect to Cassandra (CQL shell)</span></div>
+          <div>cqlsh</div>
+          <div style="margin-top:6px;"><span style="color:#9ca3af;"># Create a keyspace and table</span></div>
+          <div>CREATE KEYSPACE lab WITH replication = {'class':'SimpleStrategy', 'replication_factor':1};</div>
+          <div>USE lab;</div>
+          <div>CREATE TABLE events (id UUID PRIMARY KEY, event_type TEXT, timestamp TIMESTAMP);</div>
+          ` : ''}
+        </div>
+      </div>
+
+      <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
+        <div style="font-weight:600;color:#065f46;font-size:14px;margin-bottom:10px;">Service Ports Reference</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <tr style="border-bottom:1px solid #d1fae5;"><td style="padding:4px 8px;color:#6b7280;">Kafka Broker</td><td style="padding:4px 8px;font-family:monospace;">localhost:9092</td></tr>
+          <tr style="border-bottom:1px solid #d1fae5;"><td style="padding:4px 8px;color:#6b7280;">Spark Master UI</td><td style="padding:4px 8px;font-family:monospace;">localhost:8080</td></tr>
+          <tr style="border-bottom:1px solid #d1fae5;"><td style="padding:4px 8px;color:#6b7280;">MySQL</td><td style="padding:4px 8px;font-family:monospace;">localhost:3306</td></tr>
+          ${isCassandra ? '<tr style="border-bottom:1px solid #d1fae5;"><td style="padding:4px 8px;color:#6b7280;">Cassandra CQL</td><td style="padding:4px 8px;font-family:monospace;">localhost:9042</td></tr>' : ''}
+          ${isCassandra ? '<tr style="border-bottom:1px solid #d1fae5;"><td style="padding:4px 8px;color:#6b7280;">Jupyter Notebook</td><td style="padding:4px 8px;font-family:monospace;">localhost:8888</td></tr>' : ''}
+          <tr><td style="padding:4px 8px;color:#6b7280;">SSH</td><td style="padding:4px 8px;font-family:monospace;">port 22 (ssh lab@host -p &lt;port&gt;)</td></tr>
+        </table>
       </div>
     `;
   } else if (isKali) {
@@ -287,12 +345,18 @@ async function notifyLabWelcomeEmail({
 
         <!-- Troubleshooting -->
         <div style="margin:20px 0;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
-          <div style="font-weight:600;color:#92400e;font-size:13px;margin-bottom:6px;">If something isn't working:</div>
-          <ol style="margin:0;padding-left:18px;font-size:12px;color:#78350f;line-height:1.7;">
-            <li>Run <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl status</code> — all services should say RUNNING</li>
-            <li>Restart any stopped service: <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl restart kafka</code></li>
-            <li>If the terminal tab disconnects, just refresh the browser — your session is preserved</li>
-            <li>If nothing helps, reply to this email</li>
+          <div style="font-weight:600;color:#92400e;font-size:13px;margin-bottom:8px;">Troubleshooting Guide</div>
+          <ol style="margin:0;padding-left:18px;font-size:12px;color:#78350f;line-height:1.8;">
+            <li><strong>Check service status:</strong> <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl status</code> — all services should say RUNNING</li>
+            <li><strong>Restart a service:</strong> <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl restart kafka</code> (replace kafka with mysql, spark-master, etc.)</li>
+            <li><strong>Restart all services:</strong> <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl restart all</code></li>
+            <li><strong>View service logs:</strong> <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl tail -f kafka</code> or check /var/log/supervisor/</li>
+            <li><strong>Terminal disconnected:</strong> Just refresh the browser — your session and data are preserved</li>
+            <li><strong>Kafka not responding:</strong> Wait 30 seconds after lab starts — Kafka takes time to initialize KRaft metadata</li>
+            ${isCassandra ? '<li><strong>Cassandra slow to start:</strong> Cassandra can take 60–90 seconds to fully initialize. Run <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">nodetool status</code> to check</li>' : ''}
+            <li><strong>MySQL connection refused:</strong> <code style="background:#fef3c7;padding:2px 4px;border-radius:3px;">sudo supervisorctl restart mysql</code> then wait 10 seconds</li>
+            <li><strong>Need to extend lab time?</strong> Open the Lab Console in the portal and click "Extend"</li>
+            <li><strong>Still stuck?</strong> Reply to this email or contact your trainer</li>
           </ol>
         </div>
 
