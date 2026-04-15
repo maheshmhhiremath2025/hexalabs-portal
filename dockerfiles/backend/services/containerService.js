@@ -36,23 +36,24 @@ function getDockerForContainer(containerDoc) {
 // Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
 // All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
-  // === Real OS Desktops — linuxserver/webtop (HTTP/3000, SUBFOLDER proxy) ===
+  // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
+  // All desktops use kasmweb images: real OS, real desktop, real apps.
+  // Access via https://getlabs.cloud:<port+10000>/
   'ubuntu-desktop': {
-    image: 'linuxserver/webtop:ubuntu-xfce', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=Ubuntu Desktop'], shmSize: '512m',
+    image: 'kasmweb/desktop:1.16.0', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
   'redhat-desktop': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'Red Hat / Fedora Desktop (XFCE)', os: 'RHEL / Fedora',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=RHEL Desktop'], shmSize: '512m',
+    image: 'kasmweb/rockylinux-9-desktop:1.16.0', label: 'Red Hat / Rocky Linux Desktop', os: 'RHEL / Rocky Linux 9',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
   'centos-desktop': {
-    image: 'linuxserver/webtop:fedora-xfce', label: 'CentOS / Fedora Desktop (XFCE)', os: 'CentOS / Fedora',
-    category: 'desktop', vncPort: 3000, protocol: 'http',
-    env: ['PUID=1000', 'PGID=1000', 'TZ=Asia/Kolkata', 'TITLE=CentOS Desktop'], shmSize: '512m',
+    image: 'kasmweb/rockylinux-9-desktop:1.16.0', label: 'CentOS / Rocky Linux Desktop', os: 'CentOS / Rocky Linux 9',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
-  // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
   'kali-desktop': {
     image: 'kasmweb/kali-rolling-desktop:1.16.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
     category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
@@ -321,8 +322,8 @@ async function createContainer({
       return e;
     }),
     `RESOLUTION=1920x1080`,
-    // Desktop containers need SUBFOLDER for reverse proxy subpath routing
-    ...(imageConfig.vncPort === 3000 ? [`SUBFOLDER=/ws/${vncPort}/`] : []),
+    // Desktop containers (linuxserver/webtop) need SUBFOLDER for subpath proxy
+    ...(imageConfig.vncPort === 3000 && imageConfig.category === 'desktop' ? [`SUBFOLDER=/ws/${vncPort}/`] : []),
   ];
 
   // Parse shm_size
