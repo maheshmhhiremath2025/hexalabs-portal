@@ -25,6 +25,8 @@ const RESERVED_CPU_PERCENT = parseInt(process.env.DOCKER_HOST_RESERVED_CPU_PERCE
 const VM_MEMORY = {
   'Standard_B2s': 4096, 'Standard_B2ms': 8192,
   'Standard_B4ms': 16384, 'Standard_B8ms': 32768,
+  'Standard_D2s_v3': 8192, 'Standard_D4s_v3': 16384,
+  'Standard_D2as_v5': 8192, 'Standard_D4as_v5': 16384,
 };
 
 /**
@@ -57,8 +59,13 @@ async function getAvailableHost(requiredMemoryMb = 512) {
   return null;
 }
 
+// Fallback regions and VM sizes when primary has no Spot capacity
+const FALLBACK_REGIONS = (process.env.DOCKER_HOST_FALLBACK_REGIONS || 'southindia,southeastasia,centralindia,eastasia').split(',');
+const FALLBACK_VM_SIZES = (process.env.DOCKER_HOST_FALLBACK_VM_SIZES || 'Standard_B4ms,Standard_B2ms,Standard_D2s_v3,Standard_D4s_v3').split(',');
+
 /**
- * Provision a new Azure Spot VM as a Docker host
+ * Provision a new Azure Spot VM as a Docker host.
+ * Tries multiple regions and VM sizes until one succeeds.
  */
 async function provisionNewHost() {
   const { ClientSecretCredential } = require('@azure/identity');
@@ -79,7 +86,42 @@ async function provisionNewHost() {
   const rgName = `docker-host-${timestamp}-rg`;
   const vmName = `docker-host-${timestamp}`;
 
-  logger.info(`[docker-host] Provisioning new host: ${hostName} (${VM_SIZE} Spot, ${REGION})`);
+  // Try multiple regions and VM sizes until one succeeds
+  let selectedRegion = REGION;
+  let selectedVmSize = VM_SIZE;
+  let provisionSuccess = false;
+
+  for (const region of FALLBACK_REGIONS) {
+    for (const vmSize of FALLBACK_VM_SIZES) {
+      if (provisionSuccess) break;
+      try {
+        logger.info(`[docker-host] Trying ${vmSize} Spot in ${region}...`);
+        selectedRegion = region;
+        selectedVmSize = vmSize;
+        // Test if this size/region has Spot capacity
+        const skus = [];
+        for await (const sku of computeClient.resourceSkus.list({ filter: `location eq '${region}'` })) {
+          if (sku.name === vmSize && sku.resourceType === 'virtualMachines') {
+            const restricted = sku.restrictions?.some(r => r.type === 'Location' || r.reasonCode === 'NotAvailableForSubscription');
+            if (!restricted) provisionSuccess = true;
+            break;
+          }
+        }
+        if (provisionSuccess) break;
+      } catch {
+        continue;
+      }
+    }
+    if (provisionSuccess) break;
+  }
+
+  // If SKU check didn't work (API might not list all), just try the primary and let it fail-fast
+  if (!provisionSuccess) {
+    selectedRegion = REGION;
+    selectedVmSize = VM_SIZE;
+  }
+
+  logger.info(`[docker-host] Provisioning new host: ${hostName} (${selectedVmSize} Spot, ${selectedRegion})`);
 
   // Save to DB immediately as 'provisioning'
   const hostDoc = await DockerHost.create({
@@ -88,28 +130,28 @@ async function provisionNewHost() {
     vmName,
     resourceGroup: rgName,
     status: 'provisioning',
-    vmSize: VM_SIZE,
-    totalMemoryMb: VM_MEMORY[VM_SIZE] || 16384,
+    vmSize: selectedVmSize,
+    totalMemoryMb: VM_MEMORY[selectedVmSize] || 16384,
     maxContainers: MAX_CONTAINERS_PER_HOST,
-    region: REGION,
+    region: selectedRegion,
     spotInstance: true,
     provisionedAt: new Date(),
   });
 
   try {
     // 1. Create resource group
-    await resourceClient.resourceGroups.createOrUpdate(rgName, { location: REGION });
+    await resourceClient.resourceGroups.createOrUpdate(rgName, { location: selectedRegion });
 
     // 2. Create VNet + Subnet
     const vnetResult = await networkClient.virtualNetworks.beginCreateOrUpdateAndWait(rgName, `${vmName}-vnet`, {
-      location: REGION,
+      location: selectedRegion,
       addressSpace: { addressPrefixes: ['10.0.0.0/16'] },
       subnets: [{ name: 'default', addressPrefix: '10.0.1.0/24' }],
     });
 
     // 3. Create NSG with required ports
     const nsgResult = await networkClient.networkSecurityGroups.beginCreateOrUpdateAndWait(rgName, `${vmName}-nsg`, {
-      location: REGION,
+      location: selectedRegion,
       securityRules: [
         { name: 'SSH', priority: 100, direction: 'Inbound', access: 'Allow', protocol: 'Tcp',
           sourceAddressPrefix: '*', sourcePortRange: '*', destinationAddressPrefix: '*', destinationPortRange: '22' },
@@ -124,7 +166,7 @@ async function provisionNewHost() {
 
     // 4. Create Public IP
     const ipResult = await networkClient.publicIPAddresses.beginCreateOrUpdateAndWait(rgName, `${vmName}-ip`, {
-      location: REGION,
+      location: selectedRegion,
       publicIPAllocationMethod: 'Static',
       sku: { name: 'Standard' },
     });
@@ -133,7 +175,7 @@ async function provisionNewHost() {
     // 5. Create NIC
     const subnetId = vnetResult.subnets[0].id;
     const nicResult = await networkClient.networkInterfaces.beginCreateOrUpdateAndWait(rgName, `${vmName}-nic`, {
-      location: REGION,
+      location: selectedRegion,
       ipConfigurations: [{
         name: 'ipconfig1',
         subnet: { id: subnetId },
@@ -161,8 +203,8 @@ echo 'READY' > /root/docker-ready.txt
 
     // 7. Create Spot VM
     await computeClient.virtualMachines.beginCreateOrUpdateAndWait(rgName, vmName, {
-      location: REGION,
-      hardwareProfile: { vmSize: VM_SIZE },
+      location: selectedRegion,
+      hardwareProfile: { vmSize: selectedVmSize },
       priority: 'Spot',
       evictionPolicy: 'Deallocate',
       billingProfile: { maxPrice: -1 }, // Pay up to on-demand price
