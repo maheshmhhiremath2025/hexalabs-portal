@@ -412,14 +412,20 @@ async function createContainer({
   const accessProtocol = imageConfig.protocol || 'http';
   const actualUsername = imageConfig.defaultUser || 'labuser';
 
-  // Build access URL — use domain-based proxy if CONTAINER_ACCESS_DOMAIN is set
-  // /ws/ for HTTP containers (Webtop, ttyd, Jupyter)
-  // /wss/ for HTTPS containers (KasmVNC, Kasm Desktop)
+  // Build access URL
+  // KasmVNC (HTTPS) containers have built-in SSL — access directly on port
+  // HTTP containers (Webtop, ttyd, Jupyter) go through Nginx /ws/ proxy
   const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
-  const proxyPath = accessProtocol === 'https' ? 'wss' : 'ws';
-  const accessUrl = accessDomain
-    ? `https://${accessDomain}/${proxyPath}/${vncPort}/`
-    : `${accessProtocol}://${hostIp}:${vncPort}`;
+  let accessUrl;
+  if (accessDomain && accessProtocol === 'http') {
+    // HTTP containers — proxy through Nginx for SSL termination
+    accessUrl = `https://${accessDomain}/ws/${vncPort}/`;
+  } else if (accessDomain) {
+    // HTTPS containers (KasmVNC) — direct access, container handles its own SSL
+    accessUrl = `https://${accessDomain}:${vncPort}/`;
+  } else {
+    accessUrl = `${accessProtocol}://${hostIp}:${vncPort}`;
+  }
 
   // Save to DB
   const containerDoc = new Container({
