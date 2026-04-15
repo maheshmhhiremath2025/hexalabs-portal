@@ -7,7 +7,7 @@ export default function SelfServiceDashboard() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('containers');
   const [deploying, setDeploying] = useState(false);
-  const [selectedImage, setSelectedImage] = useState('ubuntu-xfce');
+  const [selectedImage, setSelectedImage] = useState('ubuntu-desktop');
   const [images, setImages] = useState([]);
   const [sandboxName, setSandboxName] = useState('');
   const [sandboxCloud, setSandboxCloud] = useState('azure');

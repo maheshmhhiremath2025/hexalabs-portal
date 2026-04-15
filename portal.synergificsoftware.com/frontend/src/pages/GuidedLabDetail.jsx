@@ -31,7 +31,7 @@ export default function GuidedLabDetail() {
   const startSandbox = async () => {
     try {
       if (lab.cloud === 'container') {
-        await apiCaller.post('/selfservice/deploy', { imageKey: lab.containerImage || 'ubuntu-xfce' });
+        await apiCaller.post('/selfservice/deploy', { imageKey: lab.containerImage || 'ubuntu-desktop' });
       } else {
         await apiCaller.post('/selfservice/sandbox', { cloud: lab.cloud, name: `lab-${slug.slice(0, 8)}` });
       }

@@ -40,7 +40,7 @@ function CostSavingsBanner({ comparison }) {
 
 export default function DeployContainer({ userDetails }) {
   const [images, setImages] = useState([]);
-  const [selectedImage, setSelectedImage] = useState('ubuntu-xfce');
+  const [selectedImage, setSelectedImage] = useState('ubuntu-desktop');
   const [preset, setPreset] = useState(RESOURCE_PRESETS[2]); // 2 CPU / 4 GB default
   const [trainingName, setTrainingName] = useState('');
   const [organization, setOrganization] = useState(userDetails?.organization || '');
