@@ -16,6 +16,11 @@ const REGION = process.env.DOCKER_HOST_REGION || 'southindia';
 const MAX_CONTAINERS_PER_HOST = parseInt(process.env.DOCKER_HOST_MAX_CONTAINERS || '30');
 const HOST_MODE = process.env.DOCKER_HOST_MODE || 'local'; // 'auto' or 'local'
 
+// Reserve resources for portal services (backend, workers, MongoDB, Redis, Nginx)
+// When free RAM drops below this, new containers go to Azure instead of local
+const RESERVED_RAM_MB = parseInt(process.env.DOCKER_HOST_RESERVED_RAM_MB || '3072'); // 3GB for portal
+const RESERVED_CPU_PERCENT = parseInt(process.env.DOCKER_HOST_RESERVED_CPU_PERCENT || '25'); // keep 25% CPU free
+
 // VM size → memory mapping
 const VM_MEMORY = {
   'Standard_B2s': 4096, 'Standard_B2ms': 8192,
@@ -307,49 +312,82 @@ async function checkAndScaleDown() {
 }
 
 /**
+ * Check if the local host has enough free resources for a new container
+ * while keeping enough reserved for portal services.
+ */
+async function localHostHasCapacity(requiredMemoryMb) {
+  try {
+    const os = require('os');
+    const freeMemMb = Math.round(os.freemem() / 1024 / 1024);
+    const totalMemMb = Math.round(os.totalmem() / 1024 / 1024);
+    const loadAvg1m = os.loadavg()[0];
+    const cpuCount = os.cpus().length;
+    const cpuUsagePercent = Math.round((loadAvg1m / cpuCount) * 100);
+
+    // After deploying this container, would we still have enough for the portal?
+    const remainingAfterDeploy = freeMemMb - requiredMemoryMb;
+    const memOk = remainingAfterDeploy >= RESERVED_RAM_MB;
+    const cpuOk = cpuUsagePercent < (100 - RESERVED_CPU_PERCENT);
+
+    logger.info(`[docker-host] Local resources: ${freeMemMb}MB free / ${totalMemMb}MB total, CPU ${cpuUsagePercent}% | Need ${requiredMemoryMb}MB + ${RESERVED_RAM_MB}MB reserved = ${memOk ? 'OK' : 'FULL'}`);
+
+    return memOk && cpuOk;
+  } catch {
+    return true; // If we can't check, assume OK
+  }
+}
+
+/**
  * Get Docker instance — auto-scales if needed
  * Returns { docker: Dockerode, host: DockerHost|null }
  *
- * Strategy:
- * 1. Try existing remote Docker host with capacity
- * 2. If no remote host available → use LOCAL Docker immediately (no wait)
- * 3. In background → provision new Azure Spot VM for future containers
+ * Strategy (auto mode):
+ * 1. Check if local host has enough free RAM/CPU (after reserving for portal)
+ * 2. If local has capacity → deploy locally (instant)
+ * 3. If local is full → try existing remote Azure Docker host
+ * 4. If no remote host → deploy locally anyway (don't block) + provision Azure in background
+ *
+ * This ensures the portal (backend, MongoDB, Redis, workers, Nginx) always has
+ * enough resources, while auto-scaling to Azure when the local server gets busy.
  */
 async function getDockerInstance(memoryMb = 512) {
+  const localDocker = new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' });
+
   if (HOST_MODE === 'local') {
-    return {
-      docker: new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' }),
-      host: null,
-    };
+    return { docker: localDocker, host: null };
   }
 
-  // Try existing remote host with capacity
+  // AUTO mode: check local capacity first
+  const localOk = await localHostHasCapacity(memoryMb);
+
+  if (localOk) {
+    // Local has room — deploy here (instant, no Azure cost)
+    return { docker: localDocker, host: null };
+  }
+
+  // Local is getting full — try remote Azure hosts
+  logger.info(`[docker-host] Local host low on resources — looking for remote Azure host`);
   let host = await getAvailableHost(memoryMb);
 
   if (host) {
+    logger.info(`[docker-host] Using remote host ${host.name} (${host.publicIp})`);
     return { docker: getDockerClient(host), host };
   }
 
-  // No remote host available — use LOCAL Docker immediately (zero wait)
-  logger.info('[docker-host] No remote host available — deploying locally');
-
-  // Check if a host is already provisioning (don't double-provision)
+  // No remote host available — provision one in background
   const provisioning = await DockerHost.findOne({ status: 'provisioning' });
   if (!provisioning) {
-    // Provision new Azure host in BACKGROUND (don't block the container deploy)
     logger.info('[docker-host] Provisioning new Azure Spot VM in background...');
     provisionNewHost().catch(err => {
       logger.error(`[docker-host] Background provisioning failed: ${err.message}`);
     });
   } else {
-    logger.info(`[docker-host] Host ${provisioning.name} already provisioning — waiting for it`);
+    logger.info(`[docker-host] Host ${provisioning.name} already provisioning`);
   }
 
-  // Return local Docker — container deploys instantly
-  return {
-    docker: new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' }),
-    host: null,
-  };
+  // Meanwhile deploy locally to avoid blocking the user (Azure VM takes ~3 min)
+  logger.info('[docker-host] No remote host ready yet — deploying locally (Azure provisioning in background)');
+  return { docker: localDocker, host: null };
 }
 
 module.exports = {
