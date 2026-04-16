@@ -10,6 +10,11 @@ function buildAccessUrl(container) {
   const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
   const protocol = container.accessProtocol || 'http';
   const port = container.vncPort;
+
+  // Windows containers on remote host → proxy via /win/<port>/
+  if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && protocol === 'http' && accessDomain) {
+    return `https://${accessDomain}/win/${port}/`;
+  }
   if (accessDomain && protocol === 'https') {
     const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
     return `https://${accessDomain}:${port + sslPortOffset}/`;
@@ -70,13 +75,15 @@ const CONTAINER_IMAGES = {
     env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
   },
 
-  // === Windows Desktop (QEMU/KVM — noVNC on port 8006) ===
+  // === Windows Desktop (QEMU/KVM — noVNC on port 8006, runs on dedicated Azure host) ===
   'windows-desktop': {
-    image: 'dockurr/windows:latest', label: 'Windows 11 Desktop (Chrome)', os: 'Windows 11',
+    image: 'dockurr/windows:latest', label: 'Windows 11 Desktop (Chrome + VS Code)', os: 'Windows 11',
     category: 'desktop', vncPort: 8006, protocol: 'http', defaultUser: 'User',
-    env: ['RAM_SIZE=4G', 'CPU_CORES=2', 'DISK_SIZE=20G', 'VERSION=tiny11'],
+    env: ['RAM_SIZE=4G', 'CPU_CORES=2', 'DISK_SIZE=30G', 'VERSION=tiny11'],
     shmSize: '512m',
     requiresKvm: true,
+    // Route to dedicated Windows host, proxy via https://getlabs.cloud/win/<port>/
+    windowsHost: true,
   },
 
   // === Dev Environments (HTTP) ===
@@ -291,8 +298,19 @@ async function createContainer({
 }) {
   const imageConfig = CONTAINER_IMAGES[imageKey] || CONTAINER_IMAGES['ubuntu-xfce'];
 
-  // Get Docker instance — auto-scales if needed
-  const { docker: dockerClient, host: dockerHost } = await getDockerInstance(memory);
+  // Get Docker instance — Windows containers go to dedicated KVM host, others auto-scale
+  let dockerClient, dockerHost;
+  if (imageConfig.windowsHost) {
+    const winHost = await DockerHost.findOne({ kvmEnabled: true, status: 'ready' });
+    if (!winHost) throw new Error('No Windows-capable host available. Contact admin.');
+    dockerClient = new Docker({ host: winHost.publicIp, port: winHost.dockerPort || 2376 });
+    dockerHost = winHost;
+    logger.info(`[windows] Routing to KVM host ${winHost.name} (${winHost.publicIp})`);
+  } else {
+    const result = await getDockerInstance(memory);
+    dockerClient = result.docker;
+    dockerHost = result.host;
+  }
   const docker = dockerClient;
   if (!imageConfig || !imageConfig.image) {
     throw new Error(`Unknown container image key: "${imageKey}". Available: ${Object.keys(CONTAINER_IMAGES).join(', ')}`);
