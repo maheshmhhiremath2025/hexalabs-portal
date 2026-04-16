@@ -569,6 +569,16 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         </div>
       </div>
 
+      {/* Idle auto-shutdown banner */}
+      {aliveVms.some(vm => vm.autoShutdown) && (
+        <div className="flex items-center gap-2 px-4 py-2.5 mb-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+          <FaPowerOff className="w-3 h-3 flex-shrink-0" />
+          <span className="text-xs font-medium">
+            Auto-save enabled: VMs will automatically stop after {aliveVms[0]?.idleMinutes || 15} minutes of inactivity to save costs. Your data is preserved — click Start to resume instantly.
+          </span>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
