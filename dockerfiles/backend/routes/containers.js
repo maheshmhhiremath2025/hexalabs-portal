@@ -35,4 +35,41 @@ router.post('/pre-pull', async (req, res) => {
   res.json(result);
 });
 
+// Capture a running container as a reusable template
+// POST /containers/capture  body: { containerId, templateName, templateLabel }
+router.post('/capture', async (req, res) => {
+  const { userType } = req.user || {};
+  if (userType !== 'admin' && userType !== 'superadmin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  try {
+    const { captureContainerAsTemplate } = require('../services/containerService');
+    const { containerId, templateName, templateLabel } = req.body;
+    if (!containerId || !templateName) {
+      return res.status(400).json({ message: 'containerId and templateName are required' });
+    }
+    const result = await captureContainerAsTemplate({ containerId, templateName, templateLabel });
+
+    // Save to custom images collection for the portal dropdown
+    const CustomImage = require('../models/customImage');
+    await CustomImage.create({
+      key: result.templateKey,
+      label: result.label,
+      type: result.type,
+      image: result.image || null,
+      diskPath: result.diskPath || null,
+      sourceImage: result.sourceImage || null,
+      vncPort: result.vncPort || null,
+      protocol: result.protocol || null,
+      organization: req.user.organization,
+      createdBy: req.user.email,
+      createdAt: new Date(),
+    });
+
+    res.json({ message: `Template "${result.label}" created successfully`, template: result });
+  } catch (err) {
+    res.status(500).json({ message: `Capture failed: ${err.message}` });
+  }
+});
+
 module.exports = router;

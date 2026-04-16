@@ -391,15 +391,26 @@ async function createContainer({
     // Mount persistent storage for the Windows disk so it persists across restarts
     const storagePath = `/opt/windows-disks/${name}`;
     hostConfig.Binds = [`${storagePath}:/storage`];
-    // Create storage dir and copy pre-installed base disk if available (skips 20-min install)
-    const fs = require('fs');
-    const { execSync } = require('child_process');
-    fs.mkdirSync(storagePath, { recursive: true });
-    const baseDisk = '/opt/windows-disks/base/data.img';
-    if (fs.existsSync(baseDisk) && !fs.existsSync(`${storagePath}/data.img`)) {
-      logger.info(`Copying pre-installed Windows disk for ${name}...`);
-      execSync(`cp "${baseDisk}" "${storagePath}/data.img"`);
-      logger.info(`Windows disk copied — container will boot in ~30 seconds`);
+    // Create storage dir and copy pre-installed base disk (skips 20-min install)
+    // For remote hosts, run the copy command via Docker exec on the host
+    const baseDiskPath = '/opt/windows-base-template/data.img';
+    if (dockerHost) {
+      // Remote host — use SSH or docker exec to copy
+      const { execSync } = require('child_process');
+      try {
+        execSync(`sshpass -p 'WinContainers2026!P' ssh -o StrictHostKeyChecking=no azureuser@${dockerHost.publicIp} "sudo mkdir -p ${storagePath} && [ ! -f ${storagePath}/data.img ] && sudo cp ${baseDiskPath} ${storagePath}/data.img && echo COPIED || echo EXISTS"`, { timeout: 120000 });
+        logger.info(`Windows base disk ready for ${name} on ${dockerHost.publicIp}`);
+      } catch (e) {
+        logger.warn(`Windows disk copy warning: ${e.message}`);
+      }
+    } else {
+      const fs = require('fs');
+      const { execSync } = require('child_process');
+      fs.mkdirSync(storagePath, { recursive: true });
+      if (fs.existsSync(baseDiskPath) && !fs.existsSync(`${storagePath}/data.img`)) {
+        execSync(`cp "${baseDiskPath}" "${storagePath}/data.img"`);
+        logger.info(`Windows disk copied locally for ${name}`);
+      }
     }
   }
 
@@ -688,4 +699,74 @@ module.exports = {
   prePullImage,
   CONTAINER_IMAGES,
   buildAccessUrl,
+  captureContainerAsTemplate,
 };
+
+/**
+ * Capture a running/stopped container as a reusable template.
+ *
+ * Linux containers: uses `docker commit` to save the container state as a new image.
+ * Windows containers: copies the QEMU disk image as a new base template.
+ *
+ * The new template appears in the portal dropdown for future deployments.
+ */
+async function captureContainerAsTemplate({ containerId, templateName, templateLabel }) {
+  const containerDoc = await Container.findOne({ containerId });
+  if (!containerDoc) throw new Error('Container not found');
+
+  const imageConfig = Object.values(CONTAINER_IMAGES).find(c => c.image === containerDoc.image)
+    || Object.values(CONTAINER_IMAGES).find(c => containerDoc.image.includes(c.image?.split(':')[0]));
+
+  const isWindows = imageConfig?.requiresKvm || containerDoc.image.includes('windows');
+  const docker = getDockerForContainer(containerDoc);
+
+  const sanitizedName = templateName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+  if (isWindows) {
+    // Windows: copy the disk image as a new base template
+    const hostIp = containerDoc.dockerHostIp || 'localhost';
+    const sourceDisk = `/opt/windows-disks/${containerDoc.name}/data.img`;
+    const targetDir = `/opt/windows-templates/${sanitizedName}`;
+    const { execSync } = require('child_process');
+
+    if (hostIp !== 'localhost') {
+      execSync(`sshpass -p 'WinContainers2026!P' ssh -o StrictHostKeyChecking=no azureuser@${hostIp} "sudo mkdir -p ${targetDir} && sudo cp ${sourceDisk} ${targetDir}/data.img"`, { timeout: 300000 });
+    } else {
+      const fs = require('fs');
+      fs.mkdirSync(targetDir, { recursive: true });
+      execSync(`cp "${sourceDisk}" "${targetDir}/data.img"`, { timeout: 300000 });
+    }
+
+    logger.info(`Windows template saved: ${sanitizedName} from ${containerDoc.name}`);
+    return {
+      templateKey: sanitizedName,
+      type: 'windows',
+      diskPath: `${targetDir}/data.img`,
+      label: templateLabel || `Windows - ${templateName}`,
+    };
+
+  } else {
+    // Linux: docker commit to create a new image
+    const container = docker.getContainer(containerId);
+    const newImageName = `getlabs/custom-${sanitizedName}:1.0`;
+
+    // Commit the container as a new image
+    const commitResult = await container.commit({
+      repo: `getlabs/custom-${sanitizedName}`,
+      tag: '1.0',
+      comment: `Custom template from ${containerDoc.name}`,
+      author: 'GetLabs Portal',
+    });
+
+    logger.info(`Linux template saved: ${newImageName} from ${containerDoc.name}`);
+    return {
+      templateKey: sanitizedName,
+      type: 'linux',
+      image: newImageName,
+      label: templateLabel || `Custom - ${templateName}`,
+      sourceImage: containerDoc.image,
+      vncPort: imageConfig?.vncPort || 3000,
+      protocol: imageConfig?.protocol || 'http',
+    };
+  }
+}
