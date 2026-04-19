@@ -74,41 +74,59 @@ function AppInner() {
   const navigate = useNavigate();
   const { fetchBranding, resetBranding } = useBranding();
 
-  // Auto-logout after 15 minutes of inactivity
-  const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-  const idleTimer = useRef(null);
+  // Auto-logout after 15 minutes of inactivity.
+  //
+  // The previous version of this effect had three bugs that in practice
+  // kept users logged in forever:
+  //   1. 'mousemove' was in the event list. Every pixel of cursor movement
+  //      fired a handler that reset the timer — so the timer effectively
+  //      never reached the 15-min mark as long as the mouse was alive.
+  //      Fix: rely on real interaction (click / key / scroll / touch) only.
+  //   2. The inner "final logout" setTimeout wasn't stored in a ref, so
+  //      nothing could cancel it. Clicking "Stay logged in" didn't stop
+  //      the already-scheduled logout.
+  //   3. The `if (idleTimer.current)` guard inside the inner timer was
+  //      always truthy (clearTimeout doesn't null the ref). Dead code.
+  const IDLE_TIMEOUT = 15 * 60 * 1000;        // total inactivity → logout
+  const IDLE_WARN_AT = 13 * 60 * 1000;        // show warning here
+  const warnTimer = useRef(null);
+  const logoutTimer = useRef(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+
+  const clearIdleTimers = useCallback(() => {
+    if (warnTimer.current)   { clearTimeout(warnTimer.current);   warnTimer.current = null; }
+    if (logoutTimer.current) { clearTimeout(logoutTimer.current); logoutTimer.current = null; }
+  }, []);
 
   const resetIdleTimer = useCallback(() => {
     setShowIdleWarning(false);
-    if (idleTimer.current) clearTimeout(idleTimer.current);
+    clearIdleTimers();
     if (!isLoggedIn) return;
 
-    // Show warning at 13 minutes, logout at 15
-    idleTimer.current = setTimeout(() => {
+    warnTimer.current = setTimeout(() => {
       setShowIdleWarning(true);
-      setTimeout(() => {
-        if (idleTimer.current) {
-          localStorage.clear();
-          setIsLoggedIn(false);
-          setUserDetails(null);
-          navigate("/login");
-        }
-      }, 2 * 60 * 1000); // 2 more minutes before actual logout
-    }, IDLE_TIMEOUT - 2 * 60 * 1000); // warn at 13 min
-  }, [isLoggedIn, navigate]);
+      logoutTimer.current = setTimeout(() => {
+        localStorage.clear();
+        setIsLoggedIn(false);
+        setUserDetails(null);
+        navigate("/login");
+      }, IDLE_TIMEOUT - IDLE_WARN_AT);  // 2 min after warning
+    }, IDLE_WARN_AT);
+  }, [isLoggedIn, navigate, clearIdleTimers]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'];
+    // Real-interaction events only. Explicitly NOT mousemove — it fires
+    // constantly on a live cursor and defeats the timer.
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
     const handler = () => resetIdleTimer();
     events.forEach(e => window.addEventListener(e, handler, { passive: true }));
     resetIdleTimer();
     return () => {
       events.forEach(e => window.removeEventListener(e, handler));
-      if (idleTimer.current) clearTimeout(idleTimer.current);
+      clearIdleTimers();
     };
-  }, [isLoggedIn, resetIdleTimer]);
+  }, [isLoggedIn, resetIdleTimer, clearIdleTimers]);
 
   useEffect(() => {
     if (isLoggedIn) {
