@@ -54,6 +54,30 @@ else
     "Backend /health not responding at http://127.0.0.1:8001/health. Check: pm2 list; pm2 logs synergific-backend --err --lines 30"
 fi
 
+# ─── check 1b: PUBLIC URL reachability (what customers actually see) ─────
+# Was added after a 2026-04-19 incident where /etc/nginx/sites-enabled/
+# getlabs.cloud.broken coexisted with the live config, causing
+# intermittent 404s on https://getlabs.cloud/. Local /health returned
+# healthy the whole time because it bypassed nginx. Now we also test
+# from the outside (via the public domain) to catch nginx-level issues.
+PUBLIC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 https://getlabs.cloud/ || echo "000")
+if [ "$PUBLIC_STATUS" = "200" ]; then
+  alert_on_change public_site ok "Public site RECOVERED" "https://getlabs.cloud/ is returning 200 again."
+else
+  alert_on_change public_site fail "Public site BROKEN (HTTP $PUBLIC_STATUS)" \
+    "https://getlabs.cloud/ returned HTTP $PUBLIC_STATUS — customers cannot reach the login page. Check nginx first: nginx -t; nginx -T 2>&1 | grep -i warn; ls /etc/nginx/sites-enabled/"
+fi
+
+# ─── check 1c: nginx config warnings (catches duplicate server_names) ────
+NGINX_WARN_COUNT=$(nginx -t 2>&1 | grep -cE "^nginx:.*warn|conflict" || echo 0)
+if [ "${NGINX_WARN_COUNT:-0}" -eq 0 ]; then
+  alert_on_change nginx_warn ok "nginx config RECOVERED" "nginx -t is clean again."
+else
+  NGINX_WARN_DETAIL=$(nginx -t 2>&1 | grep -E "warn|conflict" | head -3)
+  alert_on_change nginx_warn fail "nginx config has $NGINX_WARN_COUNT warning(s)" \
+    "nginx -t reported warnings. Likely a duplicate server_name or stale file in sites-enabled/ (never use .broken / .old / .bak rename — remove the symlink instead). Details: $NGINX_WARN_DETAIL"
+fi
+
 # ─── check 2: PM2 restart count jumped since last tick ───────────────────
 CURR_RESTARTS=$(pm2 jlist 2>/dev/null | node -e '
   let d = "";

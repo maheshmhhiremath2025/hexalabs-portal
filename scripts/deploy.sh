@@ -138,4 +138,39 @@ else
   warn "curl not found — skipping health check"
 fi
 
+# ─── 6. Public-URL sanity (what customers actually see) ──────────────────────
+# A local /health OK doesn't mean the public site is OK — nginx can still route
+# /, /login, /signup to the wrong server block (learned the hard way on
+# 2026-04-19 when getlabs.cloud.broken coexisted with the live config).
+# Hit the public domain the same way a customer would.
+PUBLIC_BASE="${PUBLIC_BASE_URL:-https://getlabs.cloud}"
+log "Public-URL sanity on $PUBLIC_BASE ..."
+PUBLIC_FAIL=0
+for path in / /login /signup; do
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 8 "$PUBLIC_BASE$path" 2>/dev/null || echo "000")
+  if [ "$CODE" = "200" ]; then
+    log "  $path -> $CODE OK"
+  else
+    warn "  $path -> $CODE  (expected 200 — check nginx config + dist/)"
+    PUBLIC_FAIL=$((PUBLIC_FAIL + 1))
+  fi
+done
+
+# ─── 7. nginx config warnings (duplicate server_name, bad include, etc.) ─────
+if command -v nginx >/dev/null 2>&1; then
+  NGINX_WARN=$(nginx -t 2>&1 | grep -iE "^nginx:.*warn|conflict" || true)
+  if [ -n "$NGINX_WARN" ]; then
+    warn "nginx config has warnings:"
+    echo "$NGINX_WARN" | while read line; do warn "  $line"; done
+    warn "Fix: check /etc/nginx/sites-enabled/ for stale .broken / .old / .bak files"
+    PUBLIC_FAIL=$((PUBLIC_FAIL + 1))
+  else
+    log "nginx -t clean"
+  fi
+fi
+
+if [ "$PUBLIC_FAIL" -gt 0 ]; then
+  warn "Deploy completed but $PUBLIC_FAIL post-deploy check(s) failed. See above."
+fi
+
 log "Done."
