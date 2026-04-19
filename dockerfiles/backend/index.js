@@ -28,7 +28,11 @@ const { nightPause } = require('./automations/nightPause')
 const { rosaCleanup } = require('./automations/rosaCleanup')
 const { aroCleanup } = require('./automations/aroCleanup')
 const { dockerHostScaler } = require('./automations/dockerHostScaler')
+const { vmStateReconciler } = require('./automations/vmStateReconciler')
+const { rebuildFromDb: rebuildNginxUpstreams } = require('./services/nginxUpstreamManager')
 const { hostBudgetAlert } = require('./automations/hostBudgetAlert')
+const { orphanCleanupJob } = require('./automations/orphanCleanup')
+const { spotEvictionHandler } = require('./automations/spotEvictionHandler')
 const { checkQuotaWarnings } = require('./services/emailNotifications')
 
 // Variables
@@ -67,6 +71,16 @@ app.use(cors(corsOptions));
 
 //middlewares
 app.use(express.json());
+// Catch malformed JSON bodies before they bubble up as unhandled exceptions
+// and crash the process. Without this, a single bad request (bot, scanner, or
+// buggy client sending invalid JSON) takes down the whole server. PM2 was
+// restarting the backend ~45×/day because of this.
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+    return res.status(400).json({ message: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
 app.set('trust proxy', true);
 app.use(cookieParser());
 
@@ -136,6 +150,12 @@ connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')
       dockerHostScaler().catch(err => {
         logger.error(`Docker host scaler failed: ${err.message}`);
       });
+      vmStateReconciler().catch(err => {
+        logger.error(`VM state reconciler failed: ${err.message}`);
+      });
+      spotEvictionHandler().catch(err => {
+        logger.error(`Spot eviction handler failed: ${err.message}`);
+      });
     });
 
     // Night auto-pause - check every minute (acts only at PAUSE_HOUR/RESUME_HOUR)
@@ -155,6 +175,14 @@ connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')
       });
     });
 
+    // Orphan resource cleanup - every Sunday at 2 AM IST (20:30 UTC Saturday)
+    cron.schedule('30 20 * * 6', () => {
+      logger.info('Running weekly orphan resource cleanup...');
+      orphanCleanupJob().catch(err => {
+        logger.error(`Orphan cleanup failed: ${err.message}`);
+      });
+    });
+
     // Azure cost sync - every 6 hours
     cron.schedule('0 */6 * * *', () => {
       logger.info('Running Azure cost sync...');
@@ -162,6 +190,9 @@ connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')
         logger.error(`Azure cost sync failed: ${err.message}`);
       });
     });
+
+    // Rebuild Nginx upstream map from DB (crash recovery)
+    rebuildNginxUpstreams().catch(err => logger.error(`Nginx upstream rebuild failed: ${err.message}`));
 
     // Initial run of scheduled tasks
     logger.info('Initial run of scheduled tasks...');
