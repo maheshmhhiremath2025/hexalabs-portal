@@ -402,6 +402,38 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   const csvFileRef = useRef(null);
   const [csvUploadStatus, setCsvUploadStatus] = useState(null);
 
+  // Live deploy progress — set after a successful submit, polls Lab Console
+  // for VMs in the new training and renders a progress card. Cleared by the
+  // user via the "Hide" button or auto when all VMs are running.
+  const [deployProgress, setDeployProgress] = useState(null);
+  const deployPollRef = useRef(null);
+  useEffect(() => () => { if (deployPollRef.current) clearInterval(deployPollRef.current); }, []);
+
+  const startDeployTracking = useCallback((trainingName, expectedCount) => {
+    const startedAt = Date.now();
+    setDeployProgress({ trainingName, expectedCount, ready: 0, total: 0, startedAt, vms: [], finished: false });
+    if (deployPollRef.current) clearInterval(deployPollRef.current);
+    const tick = async () => {
+      try {
+        const res = await apiCaller.get('/azure/machines', { params: { trainingName } });
+        const vms = (res.data || []).filter(v => v.isAlive);
+        const ready = vms.filter(v => v.publicIp && v.adminPass).length;
+        const finished = vms.length >= expectedCount && ready >= expectedCount;
+        setDeployProgress(p => p && ({ ...p, ready, total: vms.length, vms, finished }));
+        if (finished) {
+          clearInterval(deployPollRef.current); deployPollRef.current = null;
+        }
+      } catch { /* swallow — keep polling */ }
+    };
+    tick();
+    deployPollRef.current = setInterval(tick, 12000);
+  }, []);
+
+  const stopDeployTracking = useCallback(() => {
+    if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
+    setDeployProgress(null);
+  }, []);
+
   // Active tab state
   const [activeTab, setActiveTab] = useState('Operating System');
 
@@ -598,6 +630,9 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
           setSubmitting(true);
           const response = await apiCaller.post(`${apiRoutes.machineApi}`, createvmdata);
           pushToast(response?.data?.message ?? 'VM creation started', 'success');
+          // Start polling Lab Console for these VMs so the user sees them
+          // come up live (was previously a 5-10 min black box).
+          startDeployTracking(trainingName, validEmails.length);
           closeModal();
           fetchTemplates();
         } catch (err) {
@@ -682,6 +717,49 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
+
+      {/* Live deploy progress (shows after submit, polls Lab Console) */}
+      {deployProgress && (() => {
+        const elapsedMin = Math.floor((Date.now() - deployProgress.startedAt) / 60000);
+        const elapsedSec = Math.floor((Date.now() - deployProgress.startedAt) / 1000) % 60;
+        const ESTIMATED_MIN = 8;
+        const pctTime = Math.min(95, Math.round(((Date.now() - deployProgress.startedAt) / 60000 / ESTIMATED_MIN) * 100));
+        const pctActual = deployProgress.expectedCount > 0 ? Math.round((deployProgress.ready / deployProgress.expectedCount) * 100) : 0;
+        const pct = deployProgress.finished ? 100 : Math.max(pctActual, pctTime);
+        return (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-blue-900">
+                {deployProgress.finished
+                  ? `All ${deployProgress.expectedCount} VMs ready for "${deployProgress.trainingName}"`
+                  : `Provisioning ${deployProgress.expectedCount} VM${deployProgress.expectedCount > 1 ? 's' : ''} for "${deployProgress.trainingName}"...`}
+              </div>
+              <button onClick={stopDeployTracking} className="text-xs text-blue-700 hover:underline">Hide</button>
+            </div>
+            <div className="text-xs text-blue-700 mb-2 tabular-nums">
+              {deployProgress.ready}/{deployProgress.expectedCount} ready &middot; {deployProgress.total} created &middot; {elapsedMin}m {elapsedSec}s elapsed{!deployProgress.finished && ` &middot; ~${Math.max(0, ESTIMATED_MIN - elapsedMin)}m left`}
+            </div>
+            <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+              <div className={`h-2 rounded-full transition-all duration-500 ${deployProgress.finished ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+            </div>
+            {deployProgress.vms.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {deployProgress.vms.map(vm => {
+                  const ready = vm.publicIp && vm.adminPass;
+                  return (
+                    <span key={vm._id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${ready ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {ready ? '✓' : '⋯'} {vm.name}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-blue-600 mt-2">
+              View full details + access credentials on the Lab Console once VMs are ready.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* KPIs - Updated with marketplace count */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
