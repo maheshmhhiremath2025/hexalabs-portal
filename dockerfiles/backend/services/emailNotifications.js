@@ -8,7 +8,9 @@
 // builds a sections array and hands it to renderEmail().
 
 const nodemailer = require('nodemailer');
+const dns = require('dns').promises;
 const VM = require('../models/vm');
+const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 const { renderEmail, credentials, info, steps, warning, button, BRAND } = require('./emailTemplate');
 const { quickStartFor } = require('../data/imageQuickStarts');
@@ -22,18 +24,97 @@ const transporter = nodemailer.createTransport({
 });
 
 const FROM = `"${BRAND.name}" <${process.env.GMAIL_USER}>`;
-const CC_RECIPIENTS = 'itops@synergificsoftware.com, vinay.chandra@synergificsoftware.com';
+// Always CC'd on EVERY email so we keep a central record.
+const INTERNAL_CC = ['itops@synergificsoftware.com', 'vinay.chandra@synergificsoftware.com'];
+const CC_RECIPIENTS = INTERNAL_CC.join(', ');
 
 /**
  * Low-level send. Both `html` and `text` are sent so corporate gateways
  * that strip HTML still get a readable email.
+ *
+ * Accepts optional { cc } to override the default internal CC list
+ * (e.g. to add an org admin).
  */
-async function sendEmail(to, subject, html, text) {
+async function sendEmail(to, subject, html, text, opts = {}) {
   try {
-    await transporter.sendMail({ from: FROM, to, cc: CC_RECIPIENTS, subject, html, text });
+    const cc = opts.cc != null ? opts.cc : CC_RECIPIENTS;
+    await transporter.sendMail({ from: FROM, to, cc, subject, html, text });
     logger.info(`Email sent to ${to}: ${subject}`);
   } catch (err) {
     logger.error(`Email failed to ${to}: ${err.message}`);
+  }
+}
+
+/**
+ * Look up admin emails for an organization. Used to route bulk-deploy
+ * credential tables to the customer's own admin in addition to ops.
+ * Returns [] on error or if no admin is registered.
+ */
+async function getOrgAdminEmails(organization) {
+  if (!organization) return [];
+  try {
+    const admins = await User.find({ organization, userType: 'admin' })
+      .select('email').lean();
+    return admins.map(a => a.email).filter(Boolean);
+  } catch (err) {
+    logger.error(`getOrgAdminEmails(${organization}) failed: ${err.message}`);
+    return [];
+  }
+}
+
+/** Deduplicate + join an email list, stripping empties. */
+function joinEmails(list) {
+  const seen = new Set();
+  return list
+    .filter(e => e && typeof e === 'string')
+    .map(e => e.trim())
+    .filter(e => e && (seen.has(e.toLowerCase()) ? false : (seen.add(e.toLowerCase()), true)))
+    .join(', ');
+}
+
+// ─── email deliverability heuristic ──────────────────────────────────────
+//
+// Bulk deploys frequently use placeholder emails (e.g. hyperv@g.com, the
+// auto-generated userN@<org>.lab fallback). Sending welcomes to those is
+// wasteful and can hurt our sending reputation. This function returns
+// true only if the email looks real AND the domain has MX records.
+//
+// Returns false for: invalid syntax, known-fake domains (.lab, example.*,
+// test.*, localhost, invalid.*), or a domain with no MX records.
+//
+// Per-domain result is cached for 10 min so 30 students with the same
+// company domain trigger only one DNS call.
+
+const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}$/;
+const BLOCK_DOMAINS = [
+  /\.lab$/i, /^localhost$/i, /^example\./i, /^test\./i,
+  /\.example$/i, /\.test$/i, /^invalid\./i, /\.invalid$/i,
+];
+const mxCache = new Map(); // domain -> { valid, expiresAt }
+const MX_TTL_MS = 10 * 60 * 1000;
+
+async function isLikelyDeliverable(email) {
+  if (!email || typeof email !== 'string') return false;
+  if (!EMAIL_RE.test(email)) return false;
+
+  const domain = email.split('@')[1].toLowerCase();
+  if (BLOCK_DOMAINS.some(re => re.test(domain))) return false;
+
+  const cached = mxCache.get(domain);
+  if (cached && cached.expiresAt > Date.now()) return cached.valid;
+
+  try {
+    const mx = await Promise.race([
+      dns.resolveMx(domain),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('DNS timeout')), 3000)),
+    ]);
+    const valid = Array.isArray(mx) && mx.length > 0;
+    mxCache.set(domain, { valid, expiresAt: Date.now() + MX_TTL_MS });
+    return valid;
+  } catch {
+    // No MX record or DNS timed out — treat as undeliverable
+    mxCache.set(domain, { valid: false, expiresAt: Date.now() + MX_TTL_MS });
+    return false;
   }
 }
 
@@ -318,63 +399,151 @@ async function notifyResourceWelcomeEmail({
   await sendEmail(email, subject, html, text);
 }
 
-// ─── 8. Ops deploy summary (internal — kept plain-tabular intentionally) ─
+// ─── 8. Bulk deploy summary (TO: org admin; CC: internal + deployer) ─────
+//
+// Replaces the old "per-student welcome email" flow for BULK deploys, since
+// most student emails are dummies. The org admin gets one consolidated
+// roster they can distribute to learners directly.
+//
+// Columns are generic — both container and sandbox bulk deploys can share
+// this renderer by providing their own `columns` config.
 
+async function sendBulkDeploySummary({
+  opsEmail, trainingName, organization,
+  kindLabel,         // e.g. "Workspaces", "AWS Sandboxes"
+  imageOrTemplate,   // e.g. "bigdata-workspace" or "AWS CLF-C02"
+  columns,           // [{ key, label, mono?, link? }, ...]
+  rows,              // array of objects matching column keys
+  extraNote,         // optional footer paragraph
+}) {
+  const orgAdmins = await getOrgAdminEmails(organization);
+  const toList = orgAdmins.length ? orgAdmins : [opsEmail].filter(Boolean);
+  const to = joinEmails(toList);
+  const cc = joinEmails([...INTERNAL_CC, opsEmail].filter(e => !toList.includes(e)));
+
+  if (!to) {
+    logger.warn(`sendBulkDeploySummary: no recipient for ${organization}/${trainingName}, skipping`);
+    return;
+  }
+
+  const subject = `[${BRAND.name}] ${kindLabel} roster — ${trainingName} (${rows.length} seat${rows.length === 1 ? '' : 's'})`;
+
+  // Plain-text — for forwarding or copying into tickets
+  const txt = [
+    `${BRAND.name} — ${kindLabel} Roster`,
+    `Training:     ${trainingName}`,
+    `Organization: ${organization}`,
+    `Type:         ${imageOrTemplate || '—'}`,
+    `Seats:        ${rows.length}`,
+    '',
+    rows.map((r, i) => {
+      const line1 = `${(i + 1).toString().padStart(3)}. ` +
+        columns.map(c => `${c.label}: ${r[c.key] ?? '—'}`).join('  ·  ');
+      return line1;
+    }).join('\n'),
+    '',
+    extraNote || '',
+  ].filter(Boolean).join('\n');
+
+  // HTML table
+  const ths = ['#', ...columns.map(c => c.label)].map(h =>
+    `<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">${h}</th>`
+  ).join('');
+
+  const trs = rows.map((r, i) => {
+    const tds = [`<td style="padding:6px 10px;font-size:12px;color:#6b7280;">${i + 1}</td>`,
+      ...columns.map(c => {
+        const v = r[c.key];
+        if (v == null || v === '') return `<td style="padding:6px 10px;font-size:12px;">—</td>`;
+        const styled = c.mono
+          ? `<span style="font-family:monospace;">${escapeHtml(v)}</span>`
+          : escapeHtml(v);
+        const rendered = c.link && typeof v === 'string' && v.startsWith('http')
+          ? `<a href="${escapeHtml(v)}" style="color:#2563eb;">${styled}</a>`
+          : styled;
+        return `<td style="padding:6px 10px;font-size:12px;">${rendered}</td>`;
+      }),
+    ].join('');
+    return `<tr style="border-bottom:1px solid #f3f4f6;${i % 2 ? 'background:#f9fafb;' : ''}">${tds}</tr>`;
+  }).join('');
+
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:800px;margin:0 auto;">
+      <div style="background:linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);padding:18px 22px;border-radius:6px 6px 0 0;">
+        <div style="color:#fff;font-size:15px;font-weight:600;">Lab Roster Delivered</div>
+        <div style="color:rgba(255,255,255,0.85);font-size:12px;margin-top:3px;">${escapeHtml(trainingName || '')} · ${escapeHtml(organization || '')} · ${rows.length} ${kindLabel.toLowerCase()}${imageOrTemplate ? ' · ' + escapeHtml(imageOrTemplate) : ''}</div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 6px 6px;padding:18px 22px;background:#fff;">
+        <p style="font-size:13px;color:#374151;margin:0 0 14px;">
+          The table below lists every ${kindLabel.slice(0, -1).toLowerCase()} provisioned for this training.
+          Please share the individual credentials with each learner ${orgAdmins.length ? '— only the org admin and the Synergific ops team are on this email.' : '.'}
+        </p>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:#f3f4f6;">${ths}</tr></thead>
+            <tbody>${trs}</tbody>
+          </table>
+        </div>
+        ${extraNote ? `<p style="color:#6b7280;font-size:12px;margin:14px 0 0;">${escapeHtml(extraNote)}</p>` : ''}
+        <p style="color:#9ca3af;font-size:11px;margin:14px 0 0;">
+          Need help? Reply to this email. &nbsp;·&nbsp; ${BRAND.name} · ${BRAND.tagline}
+        </p>
+      </div>
+    </div>`;
+
+  await sendEmail(to, subject, html, txt, { cc });
+}
+
+// Legacy-friendly wrapper — containers bulk deploy.
+// Signature compatible with the old `notifyOpsDeploySummary`, plus returns
+// the new bulk-routed email instead.
 async function notifyOpsDeploySummary({
   opsEmail, trainingName, organization, imageLabel,
   containers, // [{ name, email, accessUrl, password, sshPort }]
 }) {
-  const subject = `[Ops] Deploy complete — ${trainingName} (${containers.length} seat${containers.length === 1 ? '' : 's'})`;
+  return sendBulkDeploySummary({
+    opsEmail, trainingName, organization,
+    kindLabel: 'Workspaces',
+    imageOrTemplate: imageLabel,
+    columns: [
+      { key: 'email',     label: 'Learner' },
+      { key: 'name',      label: 'Instance', mono: true },
+      { key: 'accessUrl', label: 'URL', link: true, mono: true },
+      { key: 'password',  label: 'Password', mono: true },
+      { key: 'sshPort',   label: 'SSH', mono: true },
+    ],
+    rows: containers,
+  });
+}
 
-  // Plain-text body — meant for forwarding to support tickets
-  const txtRows = containers.map((c, i) =>
-    `${(i + 1).toString().padStart(3)}. ${(c.email || '—').padEnd(34)} ${c.accessUrl || ''}\n     pw: ${c.password}${c.sshPort ? `   ssh-port: ${c.sshPort}` : ''}`
-  ).join('\n');
-  const text = [
-    `${BRAND.name} — Ops Deploy Summary`,
-    `Training:     ${trainingName}`,
-    `Organization: ${organization}`,
-    `Image:        ${imageLabel || '—'}`,
-    `Seats:        ${containers.length}`,
-    '',
-    txtRows,
-  ].join('\n');
+// New: sandbox bulk summary (AWS/Azure/GCP/OCI — parallel to containers).
+async function notifySandboxBulkSummary({
+  opsEmail, trainingName, organization, templateName, cloud,
+  sandboxes, // [{ email, username, password, accessUrl, region, expiresAt }]
+}) {
+  const cloudShort = (cloud || '').toUpperCase();
+  return sendBulkDeploySummary({
+    opsEmail, trainingName, organization,
+    kindLabel: cloudShort ? `${cloudShort} Sandboxes` : 'Sandboxes',
+    imageOrTemplate: templateName,
+    columns: [
+      { key: 'email',     label: 'Learner' },
+      { key: 'username',  label: 'Username', mono: true },
+      { key: 'password',  label: 'Password', mono: true },
+      { key: 'accessUrl', label: 'Console URL', link: true, mono: true },
+      { key: 'region',    label: 'Region' },
+    ],
+    rows: sandboxes,
+    extraNote: `All sandboxes auto-clean at their expiry. Learner activity is restricted to the allowed services on the template.`,
+  });
+}
 
-  // Compact HTML table
-  const tableRows = containers.map((c, i) => `
-    <tr style="border-bottom:1px solid #f3f4f6;${i % 2 ? 'background:#f9fafb;' : ''}">
-      <td style="padding:6px 10px;font-size:12px;color:#6b7280;">${i + 1}</td>
-      <td style="padding:6px 10px;font-size:12px;">${c.email || '—'}</td>
-      <td style="padding:6px 10px;font-size:12px;"><a href="${c.accessUrl || '#'}" style="color:#2563eb;">${c.accessUrl || '—'}</a></td>
-      <td style="padding:6px 10px;font-size:12px;font-family:monospace;">${c.password}</td>
-      <td style="padding:6px 10px;font-size:12px;font-family:monospace;">${c.sshPort || '—'}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-    <div style="font-family:-apple-system,sans-serif;max-width:740px;margin:0 auto;">
-      <div style="background:#11192a;padding:16px 20px;border-radius:6px 6px 0 0;">
-        <div style="color:#fff;font-size:15px;font-weight:600;">[Ops] Batch Deploy Complete</div>
-        <div style="color:#93c5fd;font-size:12px;margin-top:2px;">${trainingName} · ${organization} · ${containers.length} seats · ${imageLabel || ''}</div>
-      </div>
-      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 6px 6px;padding:16px 20px;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead>
-            <tr style="background:#f3f4f6;">
-              <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">#</th>
-              <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">Student</th>
-              <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">URL</th>
-              <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">Password</th>
-              <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:#6b7280;">SSH</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-        <p style="color:#9ca3af;font-size:11px;margin:14px 0 0;">Welcome emails sent to each student email above.</p>
-      </div>
-    </div>`;
-
-  await sendEmail(opsEmail, subject, html, text);
+// Small HTML escape used inside the bulk-summary builder.
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 module.exports = {
@@ -387,4 +556,8 @@ module.exports = {
   notifyOpsDeploySummary,
   notifySandboxWelcomeEmail,
   notifyResourceWelcomeEmail,
+  // new in 2026-04-19 bulk-routing upgrade:
+  notifySandboxBulkSummary,
+  isLikelyDeliverable,
+  getOrgAdminEmails,
 };

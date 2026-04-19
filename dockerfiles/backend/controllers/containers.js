@@ -3,7 +3,7 @@ const {
   getContainers, getAvailableImages, getCostComparison, CONTAINER_IMAGES,
 } = require('../services/containerService');
 const { logger } = require('../plugins/logger');
-const { notifyResourceWelcomeEmail, notifyOpsDeploySummary } = require('../services/emailNotifications');
+const { notifyResourceWelcomeEmail, notifyOpsDeploySummary, isLikelyDeliverable } = require('../services/emailNotifications');
 
 // In-memory deploy job tracker
 const deployJobs = new Map();
@@ -62,26 +62,35 @@ async function handleCreateContainers(req, res) {
           job.completed++;
           job.results.push({ success: true, ...result, email });
 
-          // Send welcome email to the student (non-blocking — don't fail the deploy if email fails)
+          // Send per-student welcome email ONLY if the email looks real
+          // (has valid syntax + domain has MX records). Dummy placeholders
+          // like hyperv@g.com or user1@<org>.lab are skipped — the
+          // consolidated roster email to the org admin covers them.
           const imageConfig = CONTAINER_IMAGES[imageKey];
-          notifyResourceWelcomeEmail({
-            email,
-            resourceType: 'workspace',
-            portalPassword: 'Welcome1234!',
-            accessUrl: result.accessUrl,
-            accessUsername: 'lab',
-            accessPassword: result.password,
-            resourceName: name,
-            trainingName,
-            organization,
-            imageKey,
-            imageLabel: imageConfig?.label || imageKey,
-            cpus,
-            memoryMb: memory,
-            expiresAt: expiresAt || null,
-            hostIp: result.hostIp,
-            sshPort: result.sshPort,
-            vncPort: result.vncPort,
+          isLikelyDeliverable(email).then(deliverable => {
+            if (!deliverable) {
+              logger.info(`[deploy] skipping welcome email to ${email} (not deliverable)`);
+              return;
+            }
+            return notifyResourceWelcomeEmail({
+              email,
+              resourceType: 'workspace',
+              portalPassword: 'Welcome1234!',
+              accessUrl: result.accessUrl,
+              accessUsername: 'lab',
+              accessPassword: result.password,
+              resourceName: name,
+              trainingName,
+              organization,
+              imageKey,
+              imageLabel: imageConfig?.label || imageKey,
+              cpus,
+              memoryMb: memory,
+              expiresAt: expiresAt || null,
+              hostIp: result.hostIp,
+              sshPort: result.sshPort,
+              vncPort: result.vncPort,
+            });
           }).catch(e => logger.error(`Welcome email failed for ${email}: ${e.message}`));
         } catch (err) {
           job.failed++;

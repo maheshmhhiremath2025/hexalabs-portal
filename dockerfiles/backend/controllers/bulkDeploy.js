@@ -3,7 +3,7 @@ const SandboxTemplate = require('../models/sandboxTemplate');
 const { createAwsSandbox } = require('../services/directSandbox');
 const awsUser = require('../models/aws');
 const User = require('../models/user');
-const { notifySandboxWelcomeEmail } = require('../services/emailNotifications');
+const { notifySandboxWelcomeEmail, notifySandboxBulkSummary, isLikelyDeliverable } = require('../services/emailNotifications');
 
 /**
  * POST /sandbox/bulk-deploy
@@ -52,7 +52,23 @@ async function handleBulkDeploy(req, res) {
         .replace(/[^a-zA-Z0-9._@+-]/g, '')
         .slice(0, 64);
 
-      const awsResult = await createAwsSandbox(username, email);
+      // Use Connect-specific US account if template is flagged for it
+      const useConnectAccount = template.sandboxConfig?.useConnectAccount === true;
+      const awsAccessKey = useConnectAccount ? process.env.AWS_CONNECT_ACCESS_KEY : process.env.AWS_ACCESS_KEY;
+      const awsSecretKey = useConnectAccount ? process.env.AWS_CONNECT_ACCESS_SECRET : process.env.AWS_ACCESS_SECRET;
+      const awsRegion = useConnectAccount ? (process.env.AWS_CONNECT_REGION || 'us-east-1') : (template.sandboxConfig?.region || 'ap-south-1');
+
+      const awsResult = await createAwsSandbox(username, email, useConnectAccount ? { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } : undefined);
+
+      // For Connect templates, attach the managed Connect student policy
+      if (useConnectAccount && process.env.AWS_CONNECT_STUDENT_POLICY_ARN) {
+        try {
+          const { IAMClient: IAM2, AttachUserPolicyCommand } = require('@aws-sdk/client-iam');
+          const connectIam = new IAM2({ region: awsRegion, credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } });
+          await connectIam.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: process.env.AWS_CONNECT_STUDENT_POLICY_ARN }));
+          logger.info(`Connect student policy attached to ${username}`);
+        } catch (e) { logger.error(`Failed to attach Connect policy: ${e.message}`); }
+      }
 
       // Replace the base policies with a compact course-specific policy
       // AWS has a 2048 byte TOTAL limit for all inline policies per user.
@@ -61,8 +77,8 @@ async function handleBulkDeploy(req, res) {
       try {
         const { IAMClient, PutUserPolicyCommand, DeleteUserPolicyCommand } = require('@aws-sdk/client-iam');
         const client = new IAMClient({
-          region: template.sandboxConfig?.region || 'ap-south-1',
-          credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET },
+          region: awsRegion,
+          credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey },
         });
 
         // Remove the base policies that createAwsSandbox() added
@@ -148,6 +164,8 @@ async function handleBulkDeploy(req, res) {
           email,
           userId: username,
           password: awsResult.password,
+          accessUrl: awsResult.accessUrl,
+          region: awsResult.region,
           duration,
           sandboxTtlHours: ttlHours,
           startDate: now,
@@ -175,6 +193,8 @@ async function handleBulkDeploy(req, res) {
           await awsUser.updateOne({ email }, {
             userId: username,
             password: awsResult.password,
+            accessUrl: awsResult.accessUrl,
+            region: awsResult.region,
             duration,
             sandboxTtlHours: ttlHours,
             startDate: now,
@@ -215,14 +235,22 @@ async function handleBulkDeploy(req, res) {
         await User.create({ email, name: email, password: 'Welcome1234!', userType: 'sandboxuser', organization: template.name });
       }
 
-      // Send welcome email
-      notifySandboxWelcomeEmail({
-        email, cloud: 'aws', portalPassword: 'Welcome1234!',
-        sandboxUsername: awsResult.username, sandboxPassword: awsResult.password,
-        sandboxAccessUrl: awsResult.accessUrl,
-        region: template.sandboxConfig?.region || 'ap-south-1',
-        expiresAt, templateName: template.name,
-        allowedServices: template.allowedServices, blockedServices: template.blockedServices,
+      // Per-student welcome email ONLY for real addresses. Dummies
+      // (hyperv@g.com style) are skipped — the consolidated roster email
+      // sent after the loop covers them for the org admin + ops team.
+      isLikelyDeliverable(email).then(deliverable => {
+        if (!deliverable) {
+          logger.info(`[bulk-deploy] skipping welcome email to ${email} (not deliverable)`);
+          return;
+        }
+        return notifySandboxWelcomeEmail({
+          email, cloud: 'aws', portalPassword: 'Welcome1234!',
+          sandboxUsername: awsResult.username, sandboxPassword: awsResult.password,
+          sandboxAccessUrl: awsResult.accessUrl,
+          region: template.sandboxConfig?.region || 'ap-south-1',
+          expiresAt, templateName: template.name,
+          allowedServices: template.allowedServices, blockedServices: template.blockedServices,
+        });
       }).catch(e => logger.error(`Welcome email failed for ${email}: ${e.message}`));
 
       logger.info(`[bulk-deploy] Sandbox created for ${email} (template: ${template.slug})`);
@@ -230,6 +258,27 @@ async function handleBulkDeploy(req, res) {
       logger.error(`[bulk-deploy] Failed for ${email}: ${err.message}`);
       errors.push({ email, error: err.message });
     }
+  }
+
+  // Consolidated roster email — TO: org admin(s), CC: deployer + internal.
+  // This is the "one table to rule them all" so the admin can distribute
+  // creds regardless of whether individual addresses were deliverable.
+  if (results.length > 0) {
+    notifySandboxBulkSummary({
+      opsEmail: req.user?.email,
+      trainingName: template.name,
+      organization: (results[0] && results[0].organization) || template.name,
+      templateName: template.name,
+      cloud: 'aws',
+      sandboxes: results.map(r => ({
+        email: r.email,
+        username: r.username,
+        password: r.password,
+        accessUrl: r.accessUrl,
+        region: r.region,
+        expiresAt: r.expiresAt,
+      })),
+    }).catch(e => logger.error(`[bulk-deploy] Roster email failed: ${e.message}`));
   }
 
   return res.json({
