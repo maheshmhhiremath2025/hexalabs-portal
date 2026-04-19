@@ -69,13 +69,14 @@ else
 fi
 
 # ─── check 1c: nginx config warnings (catches duplicate server_names) ────
-NGINX_WARN_COUNT=$(nginx -t 2>&1 | grep -cE "^nginx:.*warn|conflict" || echo 0)
-if [ "${NGINX_WARN_COUNT:-0}" -eq 0 ]; then
+# grep -c exits 1 when there are no matches (still prints "0") — use `|| true`
+# to swallow the exit code without appending extra output to the var.
+NGINX_WARN_OUTPUT=$(nginx -t 2>&1 | grep -iE "warn|conflict" || true)
+if [ -z "$NGINX_WARN_OUTPUT" ]; then
   alert_on_change nginx_warn ok "nginx config RECOVERED" "nginx -t is clean again."
 else
-  NGINX_WARN_DETAIL=$(nginx -t 2>&1 | grep -E "warn|conflict" | head -3)
-  alert_on_change nginx_warn fail "nginx config has $NGINX_WARN_COUNT warning(s)" \
-    "nginx -t reported warnings. Likely a duplicate server_name or stale file in sites-enabled/ (never use .broken / .old / .bak rename — remove the symlink instead). Details: $NGINX_WARN_DETAIL"
+  alert_on_change nginx_warn fail "nginx config has warnings" \
+    "nginx -t reported warnings. Likely a duplicate server_name or stale file in sites-enabled/ (never use .broken/.old/.bak rename — remove the symlink instead). Details: $(echo "$NGINX_WARN_OUTPUT" | head -3)"
 fi
 
 # ─── check 2: PM2 restart count jumped since last tick ───────────────────
