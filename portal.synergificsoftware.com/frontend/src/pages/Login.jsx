@@ -231,15 +231,25 @@ const Login = ({ onLogin, apiRoutes }) => {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-3xl shadow-2xl">
-                <FaShieldAlt className="text-emerald-400 w-3.5 h-3.5" />
-                <span className="text-[11px] font-bold text-slate-100 uppercase tracking-widest leading-none">
-                  ISO 9001 &middot; ISO 10004
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 backdrop-blur-3xl shadow-2xl">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                  <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-widest leading-none">
+                    White Label Ready
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 backdrop-blur-3xl shadow-2xl">
+                  <FaShieldAlt className="text-emerald-400 w-3.5 h-3.5" />
+                  <span className="text-[11px] font-bold text-slate-100 uppercase tracking-widest leading-none">
+                    ISO 9001 &middot; 10004
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Intro */}
+            {/* Intro — copy tuned for training-provider SEO (SpringPeople,
+                Edforce, and similar companies that run instructor-led cloud
+                certification batches at scale) */}
             <div className="max-w-2xl">
               <motion.h2
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -247,9 +257,9 @@ const Login = ({ onLogin, apiRoutes }) => {
                 transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
                 className="text-6xl xl:text-7xl font-black leading-[0.9] text-white tracking-tighter"
               >
-                Every cloud.<br />
+                Cloud training labs,<br />
                 <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent italic">
-                  One portal.
+                  delivered at scale.
                 </span>
               </motion.h2>
               <motion.p
@@ -259,7 +269,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                 className="mt-8 text-slate-400 text-lg leading-relaxed max-w-lg font-medium"
               >
                 {branding.loginBanner ||
-                  'Deploy cloud sandboxes, workspaces, and managed OpenShift clusters across five cloud providers — with cost guardrails, auto-cleanup, and enterprise security built in.'}
+                  'Built for training companies running instructor-led cloud certification batches. Provision 100+ AWS, Azure, GCP, and OCI sandboxes in seconds, enforce cost caps, auto-clean when the batch ends — under your own brand.'}
               </motion.p>
             </div>
 
@@ -296,6 +306,18 @@ const Login = ({ onLogin, apiRoutes }) => {
 
         {/* ── Right: Sign-in form ───────────────────────────────────────── */}
         <section className="flex w-full flex-col justify-center p-8 lg:w-1/2 lg:p-16 xl:p-24 relative">
+          {/* Top-right signup pill — absolute-positioned so it doesn't push
+              the centered form. Matches original login's UX of "don't have
+              an account? sign up" in the corner. */}
+          <Link
+            to="/signup"
+            className="group absolute top-6 right-6 lg:top-8 lg:right-8 z-20 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-blue-500/50 bg-white/[0.03] hover:bg-white/[0.08] rounded-full backdrop-blur-xl transition-all"
+          >
+            <span className="text-slate-500 group-hover:text-slate-400 hidden sm:inline">New here?</span>
+            <span>Create account</span>
+            <FaArrowRight className="w-3 h-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+
           <div className="relative z-10 mx-auto w-full max-w-sm">
             <motion.div
               initial={{ opacity: 0, y: 24 }}
@@ -433,35 +455,31 @@ const Login = ({ onLogin, apiRoutes }) => {
                 </motion.button>
               </form>
 
-              {/* Supported clouds strip — visual proof of multi-cloud reach */}
-              <div className="pt-2 space-y-3">
-                <div className="text-center text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em]"
+              {/* Supported clouds strip — bigger + brighter icons, front and
+                  center. Default 80% opacity, 100% + scale on hover. */}
+              <div className="pt-4 space-y-4">
+                <div className="text-center text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em]"
                   style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                   Deploy across
                 </div>
-                <div className="flex items-center justify-center gap-5">
+                <div className="flex items-center justify-center gap-6">
                   {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
                     <motion.div
                       key={label}
-                      whileHover={{ scale: 1.2, y: -2 }}
+                      whileHover={{ scale: 1.25, y: -3 }}
                       title={label}
-                      className="opacity-50 hover:opacity-100 transition-opacity cursor-default"
+                      className="opacity-80 hover:opacity-100 transition-opacity cursor-default"
+                      style={{ filter: `drop-shadow(0 0 8px ${color}55)` }}
                     >
-                      <Icon className="w-5 h-5" style={{ color }} />
+                      <Icon className="w-8 h-8" style={{ color }} />
                     </motion.div>
                   ))}
                 </div>
               </div>
 
-              {/* Footer: signup + trust */}
-              <div className="pt-6 border-t border-white/5 space-y-4">
-                <p className="text-center text-xs text-slate-500">
-                  New here?{' '}
-                  <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-semibold transition-colors">
-                    Create account →
-                  </Link>
-                </p>
-                <div className="flex items-center justify-center gap-5 text-[10px] text-slate-600 font-semibold uppercase tracking-[0.15em]">
+              {/* Footer: trust badges only (signup moved to top-right) */}
+              <div className="pt-6 border-t border-white/5">
+                <div className="flex items-center justify-center gap-5 text-[10px] text-slate-500 font-semibold uppercase tracking-[0.15em]">
                   <span className="flex items-center gap-1.5">
                     <FaLock className="w-2.5 h-2.5 text-emerald-500" /> 256-bit SSL
                   </span>
