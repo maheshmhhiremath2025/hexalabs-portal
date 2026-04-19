@@ -319,15 +319,9 @@ export default function RosaCluster() {
           </div>
         </div>
 
-        {/* Cost estimate */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="text-sm font-semibold text-blue-800">
-            Estimated: INR {formatINR(costPerHour)}/hr (INR {formatINR(costPerDay)}/day)
-          </div>
-          <p className="text-xs text-blue-600 mt-1">
-            Control plane: INR {CONTROL_PLANE_RATE}/hr + {workerNodes} x {instanceRate} INR/hr per worker
-          </p>
-        </div>
+        {/* Pricing intentionally hidden from this form — pricing is a sales
+            conversation, not a UI element. Internal cluster cost still tracked
+            in the Existing Clusters panel below. */}
 
         <div className="flex items-center gap-3">
           <button
