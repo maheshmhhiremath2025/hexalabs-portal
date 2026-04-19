@@ -87,8 +87,8 @@ function AppInner() {
   //      the already-scheduled logout.
   //   3. The `if (idleTimer.current)` guard inside the inner timer was
   //      always truthy (clearTimeout doesn't null the ref). Dead code.
-  const IDLE_TIMEOUT = 15 * 60 * 1000;        // total inactivity → logout
-  const IDLE_WARN_AT = 13 * 60 * 1000;        // show warning here
+  const IDLE_TIMEOUT = 5 * 60 * 1000;         // total inactivity → logout (5 min)
+  const IDLE_WARN_AT = 3 * 60 * 1000;         // show warning here (3 min) — 2-min grace
   const warnTimer = useRef(null);
   const logoutTimer = useRef(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
