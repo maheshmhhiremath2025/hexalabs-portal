@@ -3,7 +3,7 @@
 // previous revision (POST /user/login, localStorage write, onLogin callback,
 // ?org=xxx public branding). Only visuals + copy changed.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import apiCaller from '../services/apiCaller';
@@ -51,22 +51,28 @@ function StatBox({ label, value, delay }) {
 }
 
 // ─── Animated ambient background (mesh blobs + grid) ─────────────────────
-function CloudBackground() {
+// The three blobs drift independently. When the user prefers reduced motion
+// (WCAG 2.3.3), we render them statically so we don't trigger motion
+// sickness — the visual theme is preserved, just without the drift.
+function CloudBackground({ reduced = false }) {
+  const drift = reduced ? {} : { x: [0, 100, -50, 0], y: [0, -50, 100, 0], scale: [1, 1.2, 0.9, 1] };
+  const drift2 = reduced ? {} : { x: [0, -80, 120, 0], y: [0, 120, -50, 0], scale: [1, 0.8, 1.1, 1] };
+  const drift3 = reduced ? {} : { x: [0, 50, -100, 0], y: [0, 100, -80, 0], scale: [1, 1.1, 0.9, 1] };
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
       <motion.div
-        animate={{ x: [0, 100, -50, 0], y: [0, -50, 100, 0], scale: [1, 1.2, 0.9, 1] }}
-        transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
+        animate={drift}
+        transition={reduced ? {} : { duration: 25, repeat: Infinity, ease: 'linear' }}
         className="absolute -top-1/4 -left-1/4 w-[80%] h-[80%] bg-blue-600/20 blur-[120px] rounded-full"
       />
       <motion.div
-        animate={{ x: [0, -80, 120, 0], y: [0, 120, -50, 0], scale: [1, 0.8, 1.1, 1] }}
-        transition={{ duration: 30, repeat: Infinity, ease: 'linear', delay: -5 }}
+        animate={drift2}
+        transition={reduced ? {} : { duration: 30, repeat: Infinity, ease: 'linear', delay: -5 }}
         className="absolute -bottom-1/4 -right-1/4 w-[70%] h-[70%] bg-emerald-500/15 blur-[120px] rounded-full"
       />
       <motion.div
-        animate={{ x: [0, 50, -100, 0], y: [0, 100, -80, 0], scale: [1, 1.1, 0.9, 1] }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'linear', delay: -10 }}
+        animate={drift3}
+        transition={reduced ? {} : { duration: 20, repeat: Infinity, ease: 'linear', delay: -10 }}
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-indigo-600/10 blur-[150px] rounded-full"
       />
       <div
@@ -81,6 +87,20 @@ function CloudBackground() {
   );
 }
 
+// Chrome's default autofill background is a jarring yellow-on-dark against
+// this theme. These rules coerce autofilled inputs to keep the dark look.
+const AUTOFILL_OVERRIDE_CSS = `
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px rgba(255,255,255,0.03) inset !important;
+    -webkit-text-fill-color: #fff !important;
+    caret-color: #fff !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+`;
+
 // ─── Main component ──────────────────────────────────────────────────────
 const Login = ({ onLogin, apiRoutes }) => {
   const [username, setUsername] = useState('');
@@ -88,14 +108,39 @@ const Login = ({ onLogin, apiRoutes }) => {
   const [loginError, setLoginError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const { branding, fetchPublicBranding } = useBranding();
   const [searchParams] = useSearchParams();
+  const emailRef = useRef(null);
+
+  // Autofocus the email field on mount so returning users can just start typing.
+  // Skipped on mobile to avoid the keyboard popping up and covering the form.
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      emailRef.current?.focus();
+    }
+  }, []);
 
   // ?org=xxx in URL → fetch org's public branding (unchanged)
   useEffect(() => {
     const orgParam = searchParams.get('org');
     if (orgParam) fetchPublicBranding(orgParam);
   }, [searchParams, fetchPublicBranding]);
+
+  // Caps-lock detection: show a small warning when caps is on and password
+  // field is focused. Reacts to keydown/keyup on the password input itself,
+  // plus a global listener so the warning clears if the user toggles caps
+  // while focused elsewhere.
+  const handleCapsCheck = (e) => {
+    if (typeof e.getModifierState === 'function') setCapsLockOn(e.getModifierState('CapsLock'));
+  };
+
+  // Respect the user's reduced-motion preference. Those users get a static
+  // background — no drifting blobs — since constant motion can trigger
+  // vestibular issues. Motion still works for focus/hover, just not ambient.
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Login flow (unchanged from previous revision)
   const loginUser = async (e) => {
@@ -129,8 +174,9 @@ const Login = ({ onLogin, apiRoutes }) => {
       className="min-h-screen bg-[#020617] overflow-hidden text-slate-200 selection:bg-blue-500/30"
       style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}
     >
+      <style>{AUTOFILL_OVERRIDE_CSS}</style>
       <div className="flex min-h-screen w-full relative">
-        <CloudBackground />
+        <CloudBackground reduced={prefersReducedMotion} />
 
         {/* ── Left: Showcase (hidden on small screens) ──────────────────── */}
         <section className="relative hidden w-1/2 flex-col justify-between p-12 xl:p-16 lg:flex border-r border-white/5 bg-slate-900/10 backdrop-blur-sm">
@@ -229,9 +275,9 @@ const Login = ({ onLogin, apiRoutes }) => {
         <section className="flex w-full flex-col justify-center p-8 lg:w-1/2 lg:p-16 xl:p-24 relative">
           <div className="relative z-10 mx-auto w-full max-w-sm">
             <motion.div
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="space-y-8"
             >
               {/* Mobile logo (shows only when left panel is hidden) */}
@@ -291,6 +337,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                   <div className="relative">
                     <FaEnvelope className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-400 transition-colors w-4 h-4" />
                     <motion.input
+                      ref={emailRef}
                       whileFocus={{ scale: 1.005, backgroundColor: 'rgba(255,255,255,0.05)' }}
                       type="email"
                       required
@@ -298,15 +345,24 @@ const Login = ({ onLogin, apiRoutes }) => {
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="you@company.com"
-                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-base font-medium shadow-2xl"
+                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-500 text-base font-medium shadow-2xl"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2 group">
-                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest pl-1 group-focus-within:text-blue-400 transition-colors">
-                    Password
-                  </label>
+                  <div className="flex items-center justify-between pl-1 pr-1">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest group-focus-within:text-blue-400 transition-colors">
+                      Password
+                    </label>
+                    {/* Caps-lock warning — only while the password field is focused */}
+                    {capsLockOn && (
+                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#fbbf24]" />
+                        Caps Lock on
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <FaLock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-400 transition-colors w-4 h-4" />
                     <motion.input
@@ -316,13 +372,17 @@ const Login = ({ onLogin, apiRoutes }) => {
                       autoComplete="current-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={handleCapsCheck}
+                      onKeyUp={handleCapsCheck}
+                      onBlur={() => setCapsLockOn(false)}
                       placeholder="••••••••••••"
-                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-12 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-base font-medium shadow-2xl"
+                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-12 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-500 text-base font-medium shadow-2xl"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-blue-400 transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
                     </button>
@@ -337,7 +397,10 @@ const Login = ({ onLogin, apiRoutes }) => {
                   className="relative group w-full h-14 overflow-hidden rounded-2xl bg-white text-black font-black text-base tracking-tight disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-[0_20px_50px_rgba(255,255,255,0.1)] hover:shadow-[0_20px_50px_rgba(255,255,255,0.2)]"
                 >
                   {isLoading ? (
-                    <div className="h-5 w-5 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
+                    <>
+                      <div className="h-5 w-5 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
+                      <span>Signing in...</span>
+                    </>
                   ) : (
                     <>
                       <span>Sign in</span>
