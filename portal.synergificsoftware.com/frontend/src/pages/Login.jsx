@@ -155,6 +155,16 @@ const Login = ({ onLogin, apiRoutes }) => {
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // "Welcome back" only makes sense for returning users. First-time visitors
+  // (especially prospects who just landed from Google) would be confused by
+  // it. Detect prior login via localStorage; if there's no prior email on
+  // this device, show neutral copy instead.
+  const hasPriorLogin =
+    typeof window !== 'undefined' && !!localStorage.getItem('email');
+  const priorEmailFirstName = hasPriorLogin
+    ? (localStorage.getItem('email') || '').split('@')[0].split(/[._-]/)[0]
+    : '';
+
   // Login flow — same happy path as before, with explicit 429 handling so
   // rate-limited users get a clear "try again in X min" message instead of
   // a generic "Login failed".
@@ -269,12 +279,57 @@ const Login = ({ onLogin, apiRoutes }) => {
                 className="mt-8 text-slate-400 text-lg leading-relaxed max-w-lg font-medium"
               >
                 {branding.loginBanner ||
-                  'Built for training companies running instructor-led cloud certification batches. Provision 100+ AWS, Azure, GCP, and OCI sandboxes in seconds, enforce cost caps, auto-clean when the batch ends — under your own brand.'}
+                  'Built for training companies running instructor-led cloud certification batches. Provision per-student sandboxes across AWS, Azure, GCP, and OCI in seconds, enforce cost caps, auto-clean when the batch ends — under your own brand.'}
               </motion.p>
+
+              {/* Primary CTA for prospect training-providers landing from
+                  Google. Enterprise buyers want a human conversation, not a
+                  self-service signup — so the demo button leads with mailto
+                  until a proper booking link (Calendly/HubSpot) is wired. */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.8 }}
+                className="mt-10 flex items-center gap-4"
+              >
+                <a
+                  href="mailto:itops@synergificsoftware.com?subject=Demo%20request%20-%20Synergific%20Cloud%20Portal&body=Hi%20team%2C%0A%0AI%27d%20like%20to%20see%20a%20demo%20of%20Synergific%20Cloud%20Portal%20for%20our%20training%20delivery%20needs.%0A%0ACompany%3A%20%0AExpected%20batch%20size%3A%20%0APreferred%20time%3A%20%0A%0AThanks!"
+                  className="group inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-white text-black font-bold text-sm tracking-tight shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:shadow-[0_20px_50px_rgba(255,255,255,0.2)] transition-all"
+                >
+                  Book a demo
+                  <FaArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </a>
+                <a
+                  href="#features"
+                  onClick={(e) => { e.preventDefault(); document.getElementById('features-grid')?.scrollIntoView({ behavior: 'smooth' }); }}
+                  className="text-slate-300 hover:text-white font-semibold text-sm tracking-tight transition-colors"
+                >
+                  See capabilities →
+                </a>
+              </motion.div>
+
+              {/* Social-proof placeholder — once a few customers give logo
+                  permission, replace the text with <img> tags. Until then,
+                  honest text: "trusted by training partners across India". */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.9, duration: 1 }}
+                className="mt-8 flex items-center gap-3 text-xs text-slate-500"
+              >
+                <div className="flex -space-x-1">
+                  {[0, 1, 2, 3, 4].map(i => (
+                    <div key={i} className="h-6 w-6 rounded-full border-2 border-slate-900 bg-gradient-to-br from-blue-500/40 to-emerald-500/40 flex items-center justify-center text-[9px] font-bold text-white/70">
+                      {'SCPMK'[i]}
+                    </div>
+                  ))}
+                </div>
+                <span>Trusted by training partners running cloud certification batches across India.</span>
+              </motion.div>
             </div>
 
             {/* Feature grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <div id="features-grid" className="grid grid-cols-2 gap-4">
               <FeatureCard icon={FaBolt}       title="Instant Provisioning" desc="Workspaces in seconds, VMs in minutes. No tickets, no waiting." delay={0.5} />
               <FeatureCard icon={FaGlobe}      title="Multi-Cloud"          desc="AWS, Azure, GCP, OCI, and Red Hat OpenShift from one interface." delay={0.6} />
               <FeatureCard icon={FaMicrochip}  title="Cost Guardrails"      desc="Quotas, idle auto-shutdown, expiry cleanup, budget caps — built in." delay={0.7} />
@@ -306,17 +361,28 @@ const Login = ({ onLogin, apiRoutes }) => {
 
         {/* ── Right: Sign-in form ───────────────────────────────────────── */}
         <section className="flex w-full flex-col justify-center p-8 lg:w-1/2 lg:p-16 xl:p-24 relative">
-          {/* Top-right signup pill — absolute-positioned so it doesn't push
-              the centered form. Matches original login's UX of "don't have
-              an account? sign up" in the corner. */}
-          <Link
-            to="/signup"
-            className="group absolute top-6 right-6 lg:top-8 lg:right-8 z-20 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-blue-500/50 bg-white/[0.03] hover:bg-white/[0.08] rounded-full backdrop-blur-xl transition-all"
-          >
-            <span className="text-slate-500 group-hover:text-slate-400 hidden sm:inline">New here?</span>
-            <span>Create account</span>
-            <FaArrowRight className="w-3 h-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
-          </Link>
+          {/* Top-right CTA pills — two distinct paths for prospects vs
+              self-service. 'Book demo' for enterprise training-providers
+              (SpringPeople/Edforce type buyers — human conversation).
+              'Create account' for B2C self-service signups. Both absolute
+              so they don't push the centered form. */}
+          <div className="absolute top-5 right-5 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
+            <a
+              href="mailto:itops@synergificsoftware.com?subject=Demo%20request%20-%20Synergific%20Cloud%20Portal&body=Hi%20team%2C%0A%0AI%27d%20like%20to%20see%20a%20demo%20of%20Synergific%20Cloud%20Portal%20for%20our%20training%20delivery%20needs.%0A%0ACompany%3A%20%0AExpected%20batch%20size%3A%20%0APreferred%20time%3A%20%0A%0AThanks!"
+              className="group hidden md:inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-blue-200 hover:text-white border border-blue-500/30 hover:border-blue-400/60 bg-blue-500/10 hover:bg-blue-500/20 rounded-full backdrop-blur-xl transition-all"
+            >
+              <span>Book demo</span>
+              <FaArrowRight className="w-3 h-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+            </a>
+            <Link
+              to="/signup"
+              className="group inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-blue-500/50 bg-white/[0.03] hover:bg-white/[0.08] rounded-full backdrop-blur-xl transition-all"
+            >
+              <span className="text-slate-500 group-hover:text-slate-400 hidden sm:inline">New here?</span>
+              <span>Create account</span>
+              <FaArrowRight className="w-3 h-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
 
           <div className="relative z-10 mx-auto w-full max-w-sm">
             <motion.div
@@ -356,10 +422,14 @@ const Login = ({ onLogin, apiRoutes }) => {
                   </div>
                 </div>
                 <h3 className="text-5xl font-black text-white tracking-tighter leading-none">
-                  Welcome <span className="italic">back.</span>
+                  {hasPriorLogin
+                    ? (<>Welcome <span className="italic">back{priorEmailFirstName ? `, ${priorEmailFirstName}` : ''}.</span></>)
+                    : (<>Sign in to your <span className="italic">portal.</span></>)}
                 </h3>
                 <p className="text-slate-400 font-medium">
-                  Access your cloud training portal.
+                  {hasPriorLogin
+                    ? 'Access your cloud training portal.'
+                    : 'New to Synergific? Use "Book demo" above — we\'ll walk you through it.'}
                 </p>
               </div>
 
