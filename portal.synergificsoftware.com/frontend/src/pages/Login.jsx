@@ -282,24 +282,8 @@ const Login = ({ onLogin, apiRoutes }) => {
                   'Built for training companies running instructor-led cloud certification batches. Provision per-student sandboxes across AWS, Azure, GCP, and OCI in seconds, enforce cost caps, auto-clean when the batch ends — under your own brand.'}
               </motion.p>
 
-              {/* Primary CTA for prospect training-providers landing from
-                  Google. Enterprise buyers want a human conversation, not a
-                  self-service signup — so the demo button leads with mailto
-                  until a proper booking link (Calendly/HubSpot) is wired. */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.8 }}
-                className="mt-10"
-              >
-                <a
-                  href="mailto:itops@synergificsoftware.com?subject=Demo%20request%20-%20Synergific%20Cloud%20Portal&body=Hi%20team%2C%0A%0AI%27d%20like%20to%20see%20a%20demo%20of%20Synergific%20Cloud%20Portal%20for%20our%20training%20delivery%20needs.%0A%0ACompany%3A%20%0AExpected%20batch%20size%3A%20%0APreferred%20time%3A%20%0A%0AThanks!"
-                  className="group inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-white text-black font-bold text-sm tracking-tight shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:shadow-[0_20px_50px_rgba(255,255,255,0.2)] transition-all"
-                >
-                  Book a demo
-                  <FaArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </a>
-              </motion.div>
+              {/* CTA lives in the top-right pill bar — no duplicate button
+                  in the middle of the showcase. */}
             </div>
 
             {/* Feature grid */}
