@@ -69,14 +69,37 @@ else
 fi
 
 # ─── check 1c: nginx config warnings (catches duplicate server_names) ────
-# grep -c exits 1 when there are no matches (still prints "0") — use `|| true`
-# to swallow the exit code without appending extra output to the var.
-NGINX_WARN_OUTPUT=$(nginx -t 2>&1 | grep -iE "warn|conflict" || true)
+# Captures nginx -t once so the "what was wrong" text we email matches the
+# "is it failing" check exactly — no possibility of the body saying
+# "Details:" with nothing after it (happened 2026-04-19).
+NGINX_FULL_OUTPUT=$(nginx -t 2>&1 || true)
+NGINX_WARN_OUTPUT=$(echo "$NGINX_FULL_OUTPUT" | grep -iE "warn|conflict" || true)
 if [ -z "$NGINX_WARN_OUTPUT" ]; then
   alert_on_change nginx_warn ok "nginx config RECOVERED" "nginx -t is clean again."
 else
-  alert_on_change nginx_warn fail "nginx config has warnings" \
-    "nginx -t reported warnings. Likely a duplicate server_name or stale file in sites-enabled/ (never use .broken/.old/.bak rename — remove the symlink instead). Details: $(echo "$NGINX_WARN_OUTPUT" | head -3)"
+  # Build a rich multi-line body: warning lines + full nginx -t output +
+  # sites-enabled listing + fix hint. All inline so a 3am email is
+  # self-contained and you don't need to SSH in to know what's wrong.
+  NGINX_BODY="nginx -t reported warnings on $(hostname) at $(date '+%Y-%m-%d %H:%M:%S').
+
+--- Warning lines (what triggered this) ---
+$NGINX_WARN_OUTPUT
+
+--- Full nginx -t output ---
+$NGINX_FULL_OUTPUT
+
+--- /etc/nginx/sites-enabled/ contents ---
+$(ls -la /etc/nginx/sites-enabled/ 2>/dev/null | tail -n +2)
+
+--- Likely fix ---
+If you see 'conflicting server name', the same server_name+port is
+declared in two files. Check sites-enabled/ for stale .broken, .old,
+or .bak files — nginx loads every file in that directory regardless
+of extension. To disable a vhost, REMOVE the symlink (not rename it).
+
+If this auto-resolves on the next tick (in ~10 min) you'll get a
+'nginx config RECOVERED' email. If not, investigate soon."
+  alert_on_change nginx_warn fail "nginx config has warnings" "$NGINX_BODY"
 fi
 
 # ─── check 2: PM2 restart count jumped since last tick ───────────────────
