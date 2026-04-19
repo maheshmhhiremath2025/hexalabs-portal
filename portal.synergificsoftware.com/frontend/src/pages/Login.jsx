@@ -1,13 +1,87 @@
+// Premium fintech-style login inspired by the "ApexTrade" glassmorphism design.
+// Adapted for Synergific Cloud Portal — core login flow is unchanged from the
+// previous revision (POST /user/login, localStorage write, onLogin callback,
+// ?org=xxx public branding). Only visuals + copy changed.
+
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import apiCaller from '../services/apiCaller';
 import { useBranding } from '../contexts/BrandingContext';
 import {
-  FaEye, FaEyeSlash, FaCloud, FaDocker, FaAws, FaMicrosoft, FaGoogle,
-  FaServer, FaRobot, FaShieldAlt, FaCubes, FaWindows, FaChartLine,
-  FaDatabase, FaCertificate, FaLock,
+  FaEnvelope, FaLock, FaArrowRight, FaChartLine, FaShieldAlt,
+  FaBolt, FaGlobe, FaMicrochip, FaUserLock, FaChevronRight,
+  FaEye, FaEyeSlash, FaCertificate,
 } from 'react-icons/fa';
 
+// ─── Feature card (left showcase panel) ──────────────────────────────────
+function FeatureCard({ icon: Icon, title, desc, delay }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay, duration: 0.5 }}
+      className="group relative flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-blue-500/30 hover:bg-white/10 transition-all cursor-default"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+        <Icon size={18} />
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors uppercase tracking-wider">{title}</h3>
+        <p className="text-xs text-zinc-500 leading-relaxed mt-1">{desc}</p>
+      </div>
+      <FaChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-blue-400 w-3 h-3" />
+    </motion.div>
+  );
+}
+
+// ─── Stat box (bottom strip) ─────────────────────────────────────────────
+function StatBox({ label, value, delay }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.5 }}
+      className="space-y-1"
+    >
+      <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">{label}</div>
+      <div className="text-2xl font-bold text-white tracking-tight" style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{value}</div>
+    </motion.div>
+  );
+}
+
+// ─── Animated ambient background (mesh blobs + grid) ─────────────────────
+function CloudBackground() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+      <motion.div
+        animate={{ x: [0, 100, -50, 0], y: [0, -50, 100, 0], scale: [1, 1.2, 0.9, 1] }}
+        transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
+        className="absolute -top-1/4 -left-1/4 w-[80%] h-[80%] bg-blue-600/20 blur-[120px] rounded-full"
+      />
+      <motion.div
+        animate={{ x: [0, -80, 120, 0], y: [0, 120, -50, 0], scale: [1, 0.8, 1.1, 1] }}
+        transition={{ duration: 30, repeat: Infinity, ease: 'linear', delay: -5 }}
+        className="absolute -bottom-1/4 -right-1/4 w-[70%] h-[70%] bg-emerald-500/15 blur-[120px] rounded-full"
+      />
+      <motion.div
+        animate={{ x: [0, 50, -100, 0], y: [0, 100, -80, 0], scale: [1, 1.1, 0.9, 1] }}
+        transition={{ duration: 20, repeat: Infinity, ease: 'linear', delay: -10 }}
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-indigo-600/10 blur-[150px] rounded-full"
+      />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────
 const Login = ({ onLogin, apiRoutes }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,254 +91,288 @@ const Login = ({ onLogin, apiRoutes }) => {
   const { branding, fetchPublicBranding } = useBranding();
   const [searchParams] = useSearchParams();
 
-  // If ?org=xxx is in the URL, fetch that org's branding (public endpoint)
+  // ?org=xxx in URL → fetch org's public branding (unchanged)
   useEffect(() => {
     const orgParam = searchParams.get('org');
-    if (orgParam) {
-      fetchPublicBranding(orgParam);
-    }
+    if (orgParam) fetchPublicBranding(orgParam);
   }, [searchParams, fetchPublicBranding]);
 
+  // Login flow (unchanged from previous revision)
   const loginUser = async (e) => {
     e.preventDefault();
     try {
       setIsLoading(true);
       setLoginError(null);
       const response = await apiCaller.post(apiRoutes.loginApi, { email: username, password });
-
       if (response.status === 200) {
         const { email, AH1apq12slurt5, organization, uid } = response.data;
-        localStorage.setItem("email", email);
-        localStorage.setItem("AH1apq12slurt5", AH1apq12slurt5);
-        localStorage.setItem("organization", organization);
-        localStorage.setItem("uid", uid);
+        localStorage.setItem('email', email);
+        localStorage.setItem('AH1apq12slurt5', AH1apq12slurt5);
+        localStorage.setItem('organization', organization);
+        localStorage.setItem('uid', uid);
         onLogin();
       } else {
         setLoginError(`Login failed. ${response.data.message}`);
       }
     } catch (error) {
-      setLoginError(error.response?.data?.message || "Login failed. Please try again.");
+      setLoginError(error.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const companyName = branding.companyName || 'Synergific';
+  const logoUrl = branding.logoUrl || '/logo/synergificsoftware-logo.png';
+
   return (
-    <div className="min-h-screen flex bg-surface-50">
-      {/* Left panel — platform showcase */}
-      <div className="hidden lg:flex lg:w-[52%] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex-col justify-between px-12 py-10 relative overflow-hidden">
-        {/* Grid pattern */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-        {/* Gradient glow */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl" />
+    <div
+      className="min-h-screen bg-[#020617] overflow-hidden text-slate-200 selection:bg-blue-500/30"
+      style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}
+    >
+      <div className="flex min-h-screen w-full relative">
+        <CloudBackground />
 
-        <div className="relative z-10">
-          <img
-            src={branding.logoUrl || '/logo/synergificsoftware-logo.png'}
-            onError={(e) => { e.currentTarget.src = '/logo/synergificsoftware-logo.png'; }}
-            alt={branding.companyName || 'Synergific'}
-            className="h-10 object-contain"
-          />
-        </div>
+        {/* ── Left: Showcase (hidden on small screens) ──────────────────── */}
+        <section className="relative hidden w-1/2 flex-col justify-between p-12 xl:p-16 lg:flex border-r border-white/5 bg-slate-900/10 backdrop-blur-sm">
+          <div className="relative z-10 flex flex-col space-y-12">
+            {/* Logo + ISO badge */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-emerald-500 p-0.5 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+                  <div className="flex h-full w-full items-center justify-center rounded-[0.8rem] bg-[#020617] overflow-hidden">
+                    {logoUrl ? (
+                      <img
+                        src={logoUrl}
+                        alt={companyName}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        className="h-8 w-8 object-contain"
+                      />
+                    ) : (
+                      <FaChartLine className="h-7 w-7 text-blue-400" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col -space-y-1">
+                  <h1 className="text-2xl font-black tracking-tight text-white">
+                    {companyName}
+                  </h1>
+                  <span className="text-[10px] font-bold text-blue-400/80 tracking-[0.3em] uppercase"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    Cloud Portal
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-3xl shadow-2xl">
+                <FaShieldAlt className="text-emerald-400 w-3.5 h-3.5" />
+                <span className="text-[11px] font-bold text-slate-100 uppercase tracking-widest leading-none">
+                  ISO 9001 &middot; ISO 10004
+                </span>
+              </div>
+            </div>
 
-        <div className="relative z-10 flex-1 flex flex-col justify-center -mt-8">
-          {/* ISO Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/15 rounded-full text-[11px] text-blue-200 mb-6 w-fit">
-            <FaCertificate className="w-3 h-3 text-green-400" />
-            ISO 9001:2015 & ISO 10004:2018 Certified
-          </div>
+            {/* Intro */}
+            <div className="max-w-2xl">
+              <motion.h2
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                className="text-6xl xl:text-7xl font-black leading-[0.9] text-white tracking-tighter"
+              >
+                Every cloud.<br />
+                <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent italic">
+                  One portal.
+                </span>
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 1 }}
+                className="mt-8 text-slate-400 text-lg leading-relaxed max-w-lg font-medium"
+              >
+                {branding.loginBanner ||
+                  'Deploy cloud sandboxes, workspaces, and managed OpenShift clusters across five cloud providers — with cost guardrails, auto-cleanup, and enterprise security built in.'}
+              </motion.p>
+            </div>
 
-          {branding.loginBanner ? (
-            <h1 className="text-3xl font-bold tracking-tight leading-tight">
-              {branding.loginBanner}
-            </h1>
-          ) : (
-            <h1 className="text-3xl font-bold tracking-tight leading-tight">
-              One platform.<br />
-              <span style={{ color: branding.primaryColor }}>Every cloud lab.</span>
-            </h1>
-          )}
-          <p className="text-slate-400 text-sm leading-relaxed mt-4 max-w-md">
-            Deploy cloud sandboxes, workspaces, and managed OpenShift clusters across 5 cloud providers. 33+ pre-built lab images. Instant provisioning. Auto-cleanup.
-          </p>
-
-          {/* Offering grid */}
-          <div className="grid grid-cols-3 gap-2.5 mt-8">
-            <OfferingChip icon={FaAws} label="AWS Sandboxes" color="text-[#FF9900]" />
-            <OfferingChip icon={FaMicrosoft} label="Azure Labs" color="text-[#0078d4]" />
-            <OfferingChip icon={FaGoogle} label="GCP Projects" color="text-[#4285F4]" />
-            <OfferingChip icon={FaDatabase} label="OCI Sandboxes" color="text-[#F80000]" />
-            <OfferingChip icon={FaCubes} label="OpenShift (ROSA/ARO)" color="text-[#EE0000]" />
-            <OfferingChip icon={FaDocker} label="Workspaces" color="text-[#2496ED]" />
-            <OfferingChip icon={FaWindows} label="Windows Desktop" color="text-[#00BCF2]" />
-            <OfferingChip icon={FaShieldAlt} label="Cybersecurity Labs" color="text-emerald-400" />
-            <OfferingChip icon={FaRobot} label="AI Course Analyzer" color="text-violet-400" />
+            {/* Feature grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <FeatureCard icon={FaBolt}       title="Instant Provisioning" desc="Workspaces in seconds, VMs in minutes. No tickets, no waiting." delay={0.5} />
+              <FeatureCard icon={FaGlobe}      title="Multi-Cloud"          desc="AWS, Azure, GCP, OCI, and Red Hat OpenShift from one interface." delay={0.6} />
+              <FeatureCard icon={FaMicrochip}  title="Cost Guardrails"      desc="Quotas, idle auto-shutdown, expiry cleanup, budget caps — built in." delay={0.7} />
+              <FeatureCard icon={FaUserLock}   title="Enterprise Security"  desc="ISO 9001 & 10004 certified, SSL everywhere, hardened IAM per sandbox." delay={0.8} />
+            </div>
           </div>
 
           {/* Stats strip */}
-          <div className="flex items-center gap-6 mt-8 pt-6 border-t border-white/10">
-            <LoginStat value="5" label="Cloud providers" />
-            <LoginStat value="33+" label="Lab images" />
-            <LoginStat value="10s" label="Deploy time" />
-            <LoginStat value="500+" label="Active users" />
+          <div className="relative z-10 grid grid-cols-4 gap-8 bg-white/[0.02] backdrop-blur-2xl rounded-[2rem] p-8 border border-white/10 shadow-inner">
+            <StatBox label="Clouds"      value="5"     delay={0.9} />
+            <StatBox label="Lab Images"  value="33+"   delay={1.0} />
+            <StatBox label="Deploy Time" value="< 10s" delay={1.1} />
+            <StatBox label="Uptime"      value="99.9%" delay={1.2} />
           </div>
-        </div>
 
-        <div className="relative z-10 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500">
-            {branding.companyName && branding.companyName !== 'Synergific'
-              ? `Powered by ${branding.companyName}`
-              : 'Powered by Synergific Software'}
-          </span>
-          <div className="flex items-center gap-3 text-[10px] text-slate-600">
-            <span className="flex items-center gap-1"><FaCertificate className="text-green-500" /> ISO 9001</span>
-            <span className="flex items-center gap-1"><FaCertificate className="text-green-500" /> ISO 10004</span>
-            <span className="flex items-center gap-1"><FaLock className="text-slate-500" /> SSL</span>
+          {/* Footer */}
+          <div className="relative z-10 flex items-center justify-between border-t border-white/5 pt-6 text-slate-500 text-[10px]"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <p className="tracking-[0.2em] uppercase">Synergific Software Pvt Ltd</p>
+            <div className="flex items-center gap-6 font-bold uppercase tracking-[0.2em]">
+              <span className="text-emerald-500 flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
+                Live
+              </span>
+              <span className="text-blue-500 flex items-center gap-2">SSL Secure</span>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Right panel — sign in form */}
-      <div className="flex-1 flex flex-col bg-gray-50/50">
-        {/* Top bar — sign up link */}
-        <div className="flex justify-end px-8 py-5">
-          <span className="text-sm text-gray-500">
-            New here?{' '}
-            <Link to="/signup" className="text-blue-600 font-semibold hover:text-blue-700 transition-colors">Create account →</Link>
-          </span>
-        </div>
-
-        {/* Centered form */}
-        <div className="flex-1 flex items-center justify-center px-8 pb-12">
-          <div className="w-full max-w-sm">
-            {/* Mobile logo */}
-            <div className="lg:hidden text-center mb-10">
-              <img
-                src="/logo/logo.png"
-                onError={(e) => { e.currentTarget.src = '/logo/logo.png'; }}
-                alt={branding.companyName || 'Synergific'}
-                className="h-12 object-contain mx-auto"
-              />
-            </div>
-
-            {/* Greeting */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Welcome back</h2>
-              <p className="text-gray-500 text-sm mt-1.5">Enter your credentials to access your portal</p>
-            </div>
-
-            {/* Error */}
-            {loginError && (
-              <div className="mb-5 flex items-center gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-                <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-red-500 text-xs font-bold">!</span>
+        {/* ── Right: Sign-in form ───────────────────────────────────────── */}
+        <section className="flex w-full flex-col justify-center p-8 lg:w-1/2 lg:p-16 xl:p-24 relative">
+          <div className="relative z-10 mx-auto w-full max-w-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-8"
+            >
+              {/* Mobile logo (shows only when left panel is hidden) */}
+              <div className="lg:hidden flex items-center gap-3 mb-2">
+                <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-emerald-500 p-0.5">
+                  <div className="h-full w-full rounded-[0.6rem] bg-[#020617] flex items-center justify-center">
+                    <img src={logoUrl} alt={companyName} className="h-6 w-6 object-contain"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  </div>
                 </div>
-                {loginError}
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={loginUser} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="w-full px-4 py-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder-gray-400"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Password</label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    className="w-full px-4 py-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder-gray-400 pr-11"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
-                  </button>
+                <div>
+                  <div className="text-lg font-black text-white">{companyName}</div>
+                  <div className="text-[10px] font-bold text-blue-400/80 tracking-[0.25em] uppercase"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    Cloud Portal
+                  </div>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-white rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
-                style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.accentColor})` }}
-              >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Signing in...
-                  </>
-                ) : 'Sign in'}
-              </button>
-            </form>
-
-            {/* Trust signals */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <div className="flex items-center justify-center gap-5">
-                <TrustBadge icon={FaLock} label="256-bit SSL" />
-                <TrustBadge icon={FaCertificate} label="ISO Certified" />
-                <TrustBadge icon={FaServer} label="99.9% Uptime" />
+              {/* Heading */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-slate-800 to-slate-700 border border-white/10 flex items-center justify-center p-1 shadow-2xl">
+                    <div className="h-full w-full rounded-full bg-[#020617] flex items-center justify-center">
+                      <FaLock className="text-blue-500 h-4 w-4" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em]">Sign in</h3>
+                    <div className="h-0.5 w-8 bg-blue-500 mt-1 rounded-full" />
+                  </div>
+                </div>
+                <h3 className="text-5xl font-black text-white tracking-tighter leading-none">
+                  Welcome <span className="italic">back.</span>
+                </h3>
+                <p className="text-slate-400 font-medium">
+                  Access your cloud training portal.
+                </p>
               </div>
-            </div>
 
-            <p className="text-center text-[11px] text-gray-400 mt-6">
-              {branding.companyName || 'Synergific'} Cloud Portal
-            </p>
+              {/* Error */}
+              {loginError && (
+                <div className="flex items-center gap-2.5 p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">
+                  <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-red-400 text-xs font-bold">!</span>
+                  </div>
+                  {loginError}
+                </div>
+              )}
+
+              {/* Form */}
+              <form onSubmit={loginUser} className="space-y-5">
+                <div className="space-y-2 group">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest pl-1 group-focus-within:text-blue-400 transition-colors">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <FaEnvelope className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-400 transition-colors w-4 h-4" />
+                    <motion.input
+                      whileFocus={{ scale: 1.005, backgroundColor: 'rgba(255,255,255,0.05)' }}
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="you@company.com"
+                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-base font-medium shadow-2xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 group">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest pl-1 group-focus-within:text-blue-400 transition-colors">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <FaLock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-400 transition-colors w-4 h-4" />
+                    <motion.input
+                      whileFocus={{ scale: 1.005, backgroundColor: 'rgba(255,255,255,0.05)' }}
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      className="w-full h-14 bg-white/[0.03] border border-white/10 rounded-2xl pl-14 pr-12 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-base font-medium shadow-2xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-blue-400 transition-colors"
+                    >
+                      {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <motion.button
+                  type="submit"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  disabled={isLoading}
+                  className="relative group w-full h-14 overflow-hidden rounded-2xl bg-white text-black font-black text-base tracking-tight disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-[0_20px_50px_rgba(255,255,255,0.1)] hover:shadow-[0_20px_50px_rgba(255,255,255,0.2)]"
+                >
+                  {isLoading ? (
+                    <div className="h-5 w-5 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Sign in</span>
+                      <FaArrowRight className="translate-x-0 group-hover:translate-x-1.5 transition-transform w-4 h-4" />
+                    </>
+                  )}
+                </motion.button>
+              </form>
+
+              {/* Footer: signup + trust */}
+              <div className="pt-6 border-t border-white/5 space-y-4">
+                <p className="text-center text-xs text-slate-500">
+                  New here?{' '}
+                  <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-semibold transition-colors">
+                    Create account →
+                  </Link>
+                </p>
+                <div className="flex items-center justify-center gap-5 text-[10px] text-slate-600 font-semibold uppercase tracking-[0.15em]">
+                  <span className="flex items-center gap-1.5">
+                    <FaLock className="w-2.5 h-2.5 text-emerald-500" /> 256-bit SSL
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <FaCertificate className="w-2.5 h-2.5 text-emerald-500" /> ISO Certified
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" /> Live
+                  </span>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
 };
-
-function TrustBadge({ icon: Icon, label }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <Icon className="w-3 h-3 text-gray-400" />
-      <span className="text-[11px] text-gray-500 font-medium">{label}</span>
-    </div>
-  );
-}
-
-function OfferingChip({ icon: Icon, label, color }) {
-  return (
-    <div className="flex items-center gap-2.5 bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 hover:bg-white/10 transition-colors">
-      <Icon className={`w-3.5 h-3.5 ${color} flex-shrink-0`} />
-      <span className="text-xs font-medium text-slate-300 truncate">{label}</span>
-    </div>
-  );
-}
-
-function LoginStat({ value, label }) {
-  return (
-    <div>
-      <div className="text-lg font-bold text-white">{value}</div>
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</div>
-    </div>
-  );
-}
 
 export default Login;
