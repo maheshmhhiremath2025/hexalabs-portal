@@ -46,17 +46,36 @@ if [ "$SKIP_GIT" = "1" ]; then
   warn "SKIP_GIT=1 — not pulling latest"
 else
   log "Pulling latest from origin/$GIT_BRANCH..."
-  # Stash any uncommitted changes so the pull doesn't abort. Restore them after.
+  # IMPORTANT: this server has files edited directly on prod that aren't in git.
+  # We must NEVER use 'git reset --hard' here — it would wipe those edits.
+  # Strategy:
+  #   1. Fetch latest
+  #   2. Stash any local mods (preserves them, recoverable)
+  #   3. Try fast-forward merge (clean only)
+  #   4. Pop the stash back so live edits survive
+  #   5. If merge or stash-pop hits a conflict, abort and ask the human
+  git fetch origin "$GIT_BRANCH"
+
   STASH_REF=""
   if ! git diff --quiet || ! git diff --cached --quiet; then
     warn "Uncommitted changes detected — stashing before pull"
     git stash push -u -m "deploy.sh auto-stash $(date +%s)" >/dev/null
-    STASH_REF="$(git stash list | head -1 | cut -d: -f1)"
+    STASH_REF="$(git rev-parse stash@{0} 2>/dev/null || true)"
   fi
-  git fetch origin "$GIT_BRANCH"
-  git reset --hard "origin/$GIT_BRANCH"
+
+  if ! git merge --ff-only "origin/$GIT_BRANCH"; then
+    error "Fast-forward merge failed — server has commits not in origin/$GIT_BRANCH"
+    error "Resolve manually before deploying. To restore stashed edits: git stash pop"
+    exit 1
+  fi
+
   if [ -n "$STASH_REF" ]; then
-    warn "Stashed local changes are still in $STASH_REF — review with 'git stash list'"
+    log "Restoring stashed local edits..."
+    if ! git stash pop; then
+      error "Stash pop hit a conflict — your live edits overlap with the new commit"
+      error "Resolve conflicts manually. Stash is still at: $STASH_REF"
+      exit 1
+    fi
   fi
 fi
 
