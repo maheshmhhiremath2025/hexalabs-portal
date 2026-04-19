@@ -25,7 +25,7 @@ const BRAND = {
   headerGradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
   // Default support contact (visible in every email footer)
   supportEmail: 'itops@synergificsoftware.com',
-  portalUrl: 'https://portal.synergificsoftware.com',
+  portalUrl: 'https://getlabs.cloud',
 };
 
 const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
