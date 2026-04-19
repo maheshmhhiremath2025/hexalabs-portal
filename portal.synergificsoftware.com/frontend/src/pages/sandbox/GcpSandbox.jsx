@@ -1,6 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import apiCaller from '../../services/apiCaller';
 import { FaCloud, FaPlus, FaTrash, FaClock, FaSpinner } from 'react-icons/fa';
+
+// GCP project provisioning takes 1-3 min — same time-based phase pattern
+// used elsewhere in the portal.
+function gcpProgress(startedAt) {
+  if (!startedAt) return null;
+  const sec = (Date.now() - startedAt) / 1000;
+  const ESTIMATED = 90;
+  let label = 'Submitting request to Google Cloud...';
+  if (sec > 60) label = 'Finalizing IAM bindings...';
+  else if (sec > 30) label = 'Applying budget cap + org policies...';
+  else if (sec > 10) label = 'Creating GCP project...';
+  return { sec, pct: Math.min(95, Math.round((sec / ESTIMATED) * 100)), label };
+}
 
 export default function GcpSandbox({ userDetails }) {
   const [data, setData] = useState(null);
@@ -10,6 +23,16 @@ export default function GcpSandbox({ userDetails }) {
   const [deleting, setDeleting] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  // Tick every 1s while creating so the progress card updates
+  const [createStartedAt, setCreateStartedAt] = useState(null);
+  const [, setTick] = useState(0);
+  const tickRef = useRef(null);
+  useEffect(() => {
+    if (creating) tickRef.current = setInterval(() => setTick(t => t + 1), 1000);
+    else if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [creating]);
 
   const fetchData = async () => {
     try {
@@ -23,14 +46,14 @@ export default function GcpSandbox({ userDetails }) {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!projectName || projectName.length > 20) { setError('Project name must be 1-20 characters'); return; }
-    setCreating(true); setError(null); setSuccess(null);
+    setCreating(true); setCreateStartedAt(Date.now()); setError(null); setSuccess(null);
     try {
       const res = await apiCaller.post('/gcp-sandbox/', { projectName });
       setSuccess(`Sandbox ${res.data.projectId} created (TTL: ${res.data.ttlHours}h)`);
       setProjectName('');
       await fetchData();
     } catch (err) { setError(err.response?.data?.message || 'Creation failed'); }
-    finally { setCreating(false); }
+    finally { setCreating(false); setCreateStartedAt(null); }
   };
 
   const handleDelete = async (projectId) => {
@@ -106,6 +129,22 @@ export default function GcpSandbox({ userDetails }) {
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-2">Project will be auto-deleted after {data.sandboxTtlHours || 4} hours. Budget limit: ₹{data.budgetLimit || 500}.</p>
+
+          {/* Live create progress */}
+          {creating && (() => {
+            const p = gcpProgress(createStartedAt);
+            return (
+              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-semibold text-blue-800">{p.label}</span>
+                  <span className="text-xs text-blue-600 tabular-nums">{p.pct}% &middot; {Math.floor(p.sec)}s elapsed</span>
+                </div>
+                <div className="w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${p.pct}%` }} />
+                </div>
+              </div>
+            );
+          })()}
         </form>
       )}
 

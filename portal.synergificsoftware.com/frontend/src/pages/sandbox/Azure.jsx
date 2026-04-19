@@ -1,5 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import apiCaller from "../../services/apiCaller";
+
+// Azure resource group create takes 30s-2min — same time-based phase pattern
+// used elsewhere in the portal.
+function azProgress(startedAt) {
+  if (!startedAt) return null;
+  const sec = (Date.now() - startedAt) / 1000;
+  const ESTIMATED = 60;
+  let label = "Submitting request to Microsoft Azure...";
+  if (sec > 45) label = "Finalizing role assignments...";
+  else if (sec > 25) label = "Applying policy assignments + budget cap...";
+  else if (sec > 8)  label = "Creating Azure resource group...";
+  return { sec, pct: Math.min(95, Math.round((sec / ESTIMATED) * 100)), label };
+}
 
 const Azure = ({ apiRoutes }) => {
   const [userDetails, setUserDetails] = useState(null);
@@ -11,6 +24,16 @@ const Azure = ({ apiRoutes }) => {
   const [success, setSuccess] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deletedSandbox, setDeletedSandbox] = useState(null);
+
+  // Tick every 1s while the create POST is in flight
+  const [createStartedAt, setCreateStartedAt] = useState(null);
+  const [, setTick] = useState(0);
+  const tickRef = useRef(null);
+  useEffect(() => {
+    if (loading && createStartedAt) tickRef.current = setInterval(() => setTick(t => t + 1), 1000);
+    else if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [loading, createStartedAt]);
 
   useEffect(() => {
     fetchSandboxDetails();
@@ -48,6 +71,7 @@ const Azure = ({ apiRoutes }) => {
     const resourceGroupName = `${userIdPrefix}-${sandboxName}-sandbox`;
 
     setLoading(true);
+    setCreateStartedAt(Date.now());
     setError(null);
     setSuccess(null);
 
@@ -57,7 +81,7 @@ const Azure = ({ apiRoutes }) => {
         resourceGroupLocation: sandboxLocation,
       });
 
-      setSuccess("Request sent. Please wait and refresh.");
+      setSuccess(`Sandbox "${resourceGroupName}" created. It should appear in the list below shortly.`);
       setShowForm(false);
       setSandboxName("");
       setSandboxLocation("southindia");
@@ -66,6 +90,7 @@ const Azure = ({ apiRoutes }) => {
       setError("Error creating sandbox. Please try again.");
     } finally {
       setLoading(false);
+      setCreateStartedAt(null);
     }
   };
 
@@ -206,6 +231,22 @@ const Azure = ({ apiRoutes }) => {
             >
               {loading ? "Creating..." : "Create Sandbox"}
             </button>
+
+            {/* Live create progress (Azure resource group provisioning) */}
+            {loading && (() => {
+              const p = azProgress(createStartedAt);
+              return (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold text-blue-800">{p.label}</span>
+                    <span className="text-xs text-blue-600 tabular-nums">{p.pct}% &middot; {Math.floor(p.sec)}s elapsed</span>
+                  </div>
+                  <div className="w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+                    <div className="h-1.5 rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${p.pct}%` }} />
+                  </div>
+                </div>
+              );
+            })()}
           </form>
         )}
       </div>

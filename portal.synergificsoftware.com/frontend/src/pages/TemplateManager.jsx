@@ -1,7 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import apiCaller from '../services/apiCaller';
 import { containerApiRoutes } from '../services/apiRoutes';
 import { FaDocker, FaTrash, FaCopy, FaPlus, FaDownload, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa';
+
+// Phase text + estimated % for an in-flight container capture (1-5 min op).
+// We don't get mid-state info from the docker capture pipeline, so this is
+// time-based — same approach as the cluster pages.
+function captureProgress(startedAt) {
+  if (!startedAt) return null;
+  const sec = (Date.now() - startedAt) / 1000;
+  const ESTIMATED = 120; // 2 min average for capture
+  let label = 'Inspecting source container...';
+  if (sec > 90) label = 'Finalizing template registration...';
+  else if (sec > 45) label = 'Pushing image to registry...';
+  else if (sec > 15) label = 'Committing container as image...';
+  return { sec, pct: Math.min(95, Math.round((sec / ESTIMATED) * 100)), label };
+}
 
 export default function TemplateManager() {
   const [builtInImages, setBuiltInImages] = useState([]);
@@ -56,9 +70,24 @@ export default function TemplateManager() {
     } catch { setContainers([]); }
   };
 
+  // Capture progress — startedAt drives phase + % display
+  const [cloneStartedAt, setCloneStartedAt] = useState(null);
+  // Tick every 1s so the progress card updates without changing other state
+  const [, setTick] = useState(0);
+  const tickRef = useRef(null);
+  useEffect(() => {
+    if (cloning) {
+      tickRef.current = setInterval(() => setTick(t => t + 1), 1000);
+    } else if (tickRef.current) {
+      clearInterval(tickRef.current); tickRef.current = null;
+    }
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [cloning]);
+
   const handleClone = async () => {
     if (!cloneContainerId || !cloneTemplateName.trim()) return;
     setCloning(true);
+    setCloneStartedAt(Date.now());
     setError(null);
     setMsg(null);
     try {
@@ -76,6 +105,7 @@ export default function TemplateManager() {
       setError(err.response?.data?.message || 'Clone failed');
     } finally {
       setCloning(false);
+      setCloneStartedAt(null);
     }
   };
 
@@ -196,6 +226,23 @@ export default function TemplateManager() {
             </>
           )}
         </div>
+
+        {/* Live capture progress (shows while clone is in flight) */}
+        {cloning && (() => {
+          const p = captureProgress(cloneStartedAt);
+          return (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-semibold text-purple-800">{p.label}</span>
+                <span className="text-xs text-purple-600 tabular-nums">{p.pct}% &middot; {Math.floor(p.sec)}s elapsed</span>
+              </div>
+              <div className="w-full bg-purple-100 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-purple-500 transition-all duration-500" style={{ width: `${p.pct}%` }} />
+              </div>
+              <p className="text-[11px] text-purple-600 mt-1.5">First-time capture takes 1-3 minutes — image push to registry can take longer for big templates.</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Add custom template */}
