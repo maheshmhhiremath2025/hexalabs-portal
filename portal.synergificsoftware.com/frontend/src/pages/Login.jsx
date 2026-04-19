@@ -12,7 +12,20 @@ import {
   FaEnvelope, FaLock, FaArrowRight, FaChartLine, FaShieldAlt,
   FaBolt, FaGlobe, FaMicrochip, FaUserLock, FaChevronRight,
   FaEye, FaEyeSlash, FaCertificate,
+  FaAws, FaMicrosoft, FaGoogle, FaRedhat, FaCloud, FaDocker,
 } from 'react-icons/fa';
+
+// Cloud logo strip shown under the Sign in button. Subtle by default,
+// brightens individually on hover so users feel the interactivity. Uses
+// each vendor's own brand color for that "wow, all of them" moment.
+const SUPPORTED_CLOUDS = [
+  { icon: FaAws,       label: 'AWS',            color: '#FF9900' },
+  { icon: FaMicrosoft, label: 'Azure',          color: '#00BCF2' },
+  { icon: FaGoogle,    label: 'Google Cloud',   color: '#4285F4' },
+  { icon: FaCloud,     label: 'Oracle Cloud',   color: '#F80000' },
+  { icon: FaRedhat,    label: 'Red Hat OpenShift', color: '#EE0000' },
+  { icon: FaDocker,    label: 'Containers',     color: '#2496ED' },
+];
 
 // ─── Feature card (left showcase panel) ──────────────────────────────────
 function FeatureCard({ icon: Icon, title, desc, delay }) {
@@ -419,6 +432,26 @@ const Login = ({ onLogin, apiRoutes }) => {
                   )}
                 </motion.button>
               </form>
+
+              {/* Supported clouds strip — visual proof of multi-cloud reach */}
+              <div className="pt-2 space-y-3">
+                <div className="text-center text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em]"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  Deploy across
+                </div>
+                <div className="flex items-center justify-center gap-5">
+                  {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
+                    <motion.div
+                      key={label}
+                      whileHover={{ scale: 1.2, y: -2 }}
+                      title={label}
+                      className="opacity-50 hover:opacity-100 transition-opacity cursor-default"
+                    >
+                      <Icon className="w-5 h-5" style={{ color }} />
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
 
               {/* Footer: signup + trust */}
               <div className="pt-6 border-t border-white/5 space-y-4">
