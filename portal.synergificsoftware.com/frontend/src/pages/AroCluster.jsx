@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import apiCaller from '../services/apiCaller';
 import BulkEmailInput from '../components/BulkEmailInput';
 import {
@@ -43,6 +43,34 @@ function formatINR(amount) {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
 }
 
+// ARO clusters take ~35-50 min to provision. Same time-based estimate
+// pattern as ROSA — see RosaCluster.jsx for rationale.
+const ARO_PROVISION_MINUTES = 40;
+
+function elapsedMinutes(createdAt) {
+  if (!createdAt) return 0;
+  return Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 60000);
+}
+
+function estimateProgress(cluster) {
+  const s = (cluster.status || '').toLowerCase();
+  if (s === 'ready' || s === 'deleted') return 100;
+  if (s === 'failed') return 0;
+  const mins = elapsedMinutes(cluster.createdAt);
+  return Math.min(95, Math.round((mins / ARO_PROVISION_MINUTES) * 100));
+}
+
+function phaseLabel(cluster) {
+  const mins = elapsedMinutes(cluster.createdAt);
+  if ((cluster.status || '').toLowerCase() === 'failed') return 'Provisioning failed — check logs';
+  if ((cluster.status || '').toLowerCase() === 'ready') return 'Cluster ready';
+  if (mins < 2)  return 'Submitting request to Microsoft Azure...';
+  if (mins < 12) return 'Creating Azure resource group + networking...';
+  if (mins < 25) return 'Installing OpenShift control plane...';
+  if (mins < 35) return 'Bringing up worker nodes...';
+  return 'Finalizing cluster — almost there...';
+}
+
 export default function AroCluster() {
   // --- Create form state ---
   const [clusterName, setClusterName] = useState('');
@@ -71,19 +99,35 @@ export default function AroCluster() {
   const [deletingId, setDeletingId] = useState(null);
   const [removingStudent, setRemovingStudent] = useState(null);
 
+  // Auto-refresh while any cluster is provisioning so the progress bar updates
+  const pollRef = useRef(null);
+
   useEffect(() => {
     fetchClusters();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  const fetchClusters = async () => {
-    setLoading(true);
+  useEffect(() => {
+    const anyProvisioning = clusters.some(c =>
+      ['provisioning', 'scaling', 'deleting'].includes((c.status || '').toLowerCase())
+    );
+    if (anyProvisioning && !pollRef.current) {
+      pollRef.current = setInterval(() => fetchClusters({ silent: true }), 20000);
+    } else if (!anyProvisioning && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, [clusters]);
+
+  const fetchClusters = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const res = await apiCaller.get('/aro');
       setClusters(res.data || []);
     } catch {
-      setError('Failed to fetch ARO clusters.');
+      if (!silent) setError('Failed to fetch ARO clusters.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -386,6 +430,24 @@ export default function AroCluster() {
                         <FaSpinner className="animate-spin text-amber-500 w-3 h-3" />
                       )}
                     </div>
+                    {/* Live progress bar — only while provisioning. Time-based
+                        estimate (Azure ARO doesn't expose mid-state details). */}
+                    {(cluster.status || '').toLowerCase() === 'provisioning' && (() => {
+                      const pct = estimateProgress(cluster);
+                      const mins = Math.floor(elapsedMinutes(cluster.createdAt));
+                      return (
+                        <div className="mt-2.5 mb-1">
+                          <div className="flex items-center justify-between text-[11px] text-amber-700 mb-1">
+                            <span className="font-medium">{phaseLabel(cluster)}</span>
+                            <span className="tabular-nums">{pct}% &middot; {mins}m elapsed &middot; ~{Math.max(0, ARO_PROVISION_MINUTES - mins)}m left</span>
+                          </div>
+                          <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-1.5 rounded-full bg-amber-500 transition-all duration-500"
+                              style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500 flex-wrap">
                       <span>{cluster.region}</span>
                       <span>{cluster.workerNodes || 3} nodes</span>

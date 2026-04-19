@@ -14,18 +14,8 @@ router.get('/plans', handleGetPlans);
 router.post('/signup', handleSignup);
 router.post('/verify-payment', handleVerifyPayment);
 
-// Guided labs (public)
-router.get('/guided-labs', async (req, res) => {
-  const GuidedLab = require('../models/guidedLab');
-  const labs = await GuidedLab.find({ isActive: true }).sort({ sortOrder: 1 }).select('-steps');
-  res.json(labs);
-});
-router.get('/guided-labs/:slug', async (req, res) => {
-  const GuidedLab = require('../models/guidedLab');
-  const lab = await GuidedLab.findOne({ slug: req.params.slug, isActive: true });
-  if (!lab) return res.status(404).json({ message: 'Lab not found' });
-  res.json(lab);
-});
+// Guided labs feature removed 2026-04-19 — endpoints deleted, DB collection
+// preserved for possible future restore. Frontend no longer calls these.
 
 // Feedback (public, no auth)
 router.post('/feedback', handleSubmitFeedback);

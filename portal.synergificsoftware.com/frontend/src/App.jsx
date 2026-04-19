@@ -46,7 +46,6 @@ const GcpUsers             = lazy(() => import('./pages/sandbox/GcpUsers'))
 const OciSandbox           = lazy(() => import('./pages/sandbox/OciSandbox'))
 const Signup               = lazy(() => import('./pages/Signup'))
 const OrgLanding           = lazy(() => import('./pages/OrgLanding'))
-const GuidedLabDetail      = lazy(() => import('./pages/GuidedLabDetail'))
 const SelfServiceDashboard = lazy(() => import('./pages/SelfServiceDashboard'))
 const CourseCatalog        = lazy(() => import('./pages/CourseCatalog'))
 const CourseDetail         = lazy(() => import('./pages/CourseDetail'))
@@ -226,7 +225,6 @@ function AppInner() {
 
             {/* Self-service B2C */}
             <Route path="/my-labs" element={<PrivateRoute isLoggedIn={isLoggedIn}><SelfServiceDashboard /></PrivateRoute>} />
-            <Route path="/lab/:slug" element={<PrivateRoute isLoggedIn={isLoggedIn}><GuidedLabDetail /></PrivateRoute>} />
 
             {/* Student sandbox view — non-admin users see their admin-deployed sandboxes */}
             <Route path="/my-sandboxes" element={<PrivateRoute isLoggedIn={isLoggedIn}><RoleBasedRoute allowedRoles={['user', 'sandboxuser']} element={<MySandboxes />} /></PrivateRoute>} />

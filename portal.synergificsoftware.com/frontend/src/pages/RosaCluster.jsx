@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import apiCaller from '../services/apiCaller';
 import BulkEmailInput from '../components/BulkEmailInput';
 import {
@@ -39,6 +39,37 @@ function formatCountdown(expiresAt) {
   return `${h}h ${m}m remaining`;
 }
 
+// ROSA clusters take ~30-45 min to provision. Red Hat's SaaS doesn't expose
+// intermediate phases via a stable API, so we compute a time-based estimate:
+// linear 0→95% over 35 min, then jumps to 100% the moment the DB status
+// flips to Ready. "Fake but honest" — it tells the user the operation is
+// on track without pretending we know the exact state inside ROSA.
+const ROSA_PROVISION_MINUTES = 35;
+
+function elapsedMinutes(createdAt) {
+  if (!createdAt) return 0;
+  return Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 60000);
+}
+
+function estimateProgress(cluster) {
+  const s = (cluster.status || '').toLowerCase();
+  if (s === 'ready' || s === 'deleted') return 100;
+  if (s === 'failed') return 0;
+  const mins = elapsedMinutes(cluster.createdAt);
+  return Math.min(95, Math.round((mins / ROSA_PROVISION_MINUTES) * 100));
+}
+
+function phaseLabel(cluster) {
+  const mins = elapsedMinutes(cluster.createdAt);
+  if ((cluster.status || '').toLowerCase() === 'failed') return 'Provisioning failed — check logs';
+  if ((cluster.status || '').toLowerCase() === 'ready') return 'Cluster ready';
+  if (mins < 2)  return 'Submitting request to Red Hat...';
+  if (mins < 10) return 'Provisioning AWS resources (VPC, IAM, subnets)...';
+  if (mins < 20) return 'Installing OpenShift control plane...';
+  if (mins < 30) return 'Bringing up worker nodes...';
+  return 'Finalizing cluster — almost there...';
+}
+
 function formatINR(amount) {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
 }
@@ -71,19 +102,38 @@ export default function RosaCluster() {
   const [deletingId, setDeletingId] = useState(null);
   const [removingStudent, setRemovingStudent] = useState(null);
 
+  // Auto-refresh poll handle — runs while any cluster is provisioning so the
+  // progress bar updates without a manual refresh.
+  const pollRef = useRef(null);
+
   useEffect(() => {
     fetchClusters();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  const fetchClusters = async () => {
-    setLoading(true);
+  // Whenever the cluster list changes, decide if we need to keep polling.
+  useEffect(() => {
+    const anyProvisioning = clusters.some(c =>
+      ['provisioning', 'scaling', 'deleting'].includes((c.status || '').toLowerCase())
+    );
+    if (anyProvisioning && !pollRef.current) {
+      pollRef.current = setInterval(() => fetchClusters({ silent: true }), 20000);
+    } else if (!anyProvisioning && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, [clusters]);
+
+  // `silent` skips the loading spinner so the auto-refresh doesn't blink the UI
+  const fetchClusters = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const res = await apiCaller.get('/rosa');
       setClusters(res.data || []);
     } catch {
-      setError('Failed to fetch ROSA clusters.');
+      if (!silent) setError('Failed to fetch ROSA clusters.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -382,10 +432,28 @@ export default function RosaCluster() {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusStyle}`}>
                         {cluster.status || 'Unknown'}
                       </span>
-                      {cluster.status === 'Provisioning' && (
+                      {(cluster.status || '').toLowerCase() === 'provisioning' && (
                         <FaSpinner className="animate-spin text-amber-500 w-3 h-3" />
                       )}
                     </div>
+                    {/* Live progress bar — only while provisioning. Time-based
+                        estimate (no mid-state info from Red Hat). */}
+                    {(cluster.status || '').toLowerCase() === 'provisioning' && (() => {
+                      const pct = estimateProgress(cluster);
+                      const mins = Math.floor(elapsedMinutes(cluster.createdAt));
+                      return (
+                        <div className="mt-2.5 mb-1">
+                          <div className="flex items-center justify-between text-[11px] text-amber-700 mb-1">
+                            <span className="font-medium">{phaseLabel(cluster)}</span>
+                            <span className="tabular-nums">{pct}% &middot; {mins}m elapsed &middot; ~{Math.max(0, ROSA_PROVISION_MINUTES - mins)}m left</span>
+                          </div>
+                          <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-1.5 rounded-full bg-amber-500 transition-all duration-500"
+                              style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500 flex-wrap">
                       <span>{cluster.region}</span>
                       <span>{cluster.workerNodes || 3} nodes</span>

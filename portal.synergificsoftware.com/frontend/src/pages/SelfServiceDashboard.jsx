@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiCaller from '../services/apiCaller';
-import { FaPlay, FaPowerOff, FaTrash, FaExternalLinkAlt, FaDocker, FaCopy, FaCheck, FaRocket, FaCloud, FaAws, FaBook, FaBan, FaKey, FaClock, FaLock, FaEye, FaEyeSlash, FaStar, FaRegStar } from 'react-icons/fa';
+import { FaPlay, FaPowerOff, FaTrash, FaExternalLinkAlt, FaDocker, FaCopy, FaCheck, FaRocket, FaCloud, FaAws, FaBan, FaKey, FaClock, FaLock, FaEye, FaEyeSlash, FaStar, FaRegStar } from 'react-icons/fa';
 
 export default function SelfServiceDashboard() {
   const [data, setData] = useState(null);
@@ -15,7 +15,6 @@ export default function SelfServiceDashboard() {
   const [sandboxGoogleEmail, setSandboxGoogleEmail] = useState('');
   const [sandboxResult, setSandboxResult] = useState(null);
   const [sandboxes, setSandboxes] = useState([]);
-  const [guidedLabs, setGuidedLabs] = useState([]);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [feedbackModal, setFeedbackModal] = useState(null); // { trainingName, email }
@@ -33,7 +32,6 @@ export default function SelfServiceDashboard() {
     fetchDashboard();
     apiCaller.get('/containers/images').then(r => setImages(r.data)).catch(() => {});
     apiCaller.get('/selfservice/sandboxes').then(r => setSandboxes(r.data?.active || r.data || [])).catch(() => {});
-    apiCaller.get('/selfservice/guided-labs').then(r => setGuidedLabs(r.data)).catch(() => {});
   }, [fetchDashboard]);
 
   // Deploy progress: real-time status from /selfservice/deploy-status/:jobId
@@ -211,9 +209,6 @@ export default function SelfServiceDashboard() {
           </button>
           <button onClick={() => setTab('sandboxes')} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${tab === 'sandboxes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             <FaCloud className="w-3 h-3" /> Cloud Sandboxes
-          </button>
-          <button onClick={() => setTab('labs')} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${tab === 'labs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-            <FaBook className="w-3 h-3" /> Guided Labs
           </button>
         </div>
       )}
@@ -461,54 +456,7 @@ export default function SelfServiceDashboard() {
         </div>
       )}
 
-      {/* Guided Labs tab */}
-      {tab === 'labs' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Guided Labs</h3>
-            <p className="text-xs text-gray-500">Step-by-step hands-on labs. Each lab provisions a sandbox or workspace automatically.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {guidedLabs.map(lab => (
-              <a key={lab.slug} href={`/lab/${lab.slug}`}
-                className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all group" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{lab.icon || '📚'}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-800 group-hover:text-blue-700">{lab.title}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                        lab.difficulty === 'beginner' ? 'bg-green-50 text-green-700' :
-                        lab.difficulty === 'intermediate' ? 'bg-amber-50 text-amber-700' :
-                        'bg-red-50 text-red-700'
-                      }`}>{lab.difficulty}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{lab.description}</p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
-                      <span className="flex items-center gap-1"><FaClock className="w-2.5 h-2.5" />{lab.duration} min</span>
-                      <span className={`px-1.5 py-0.5 rounded-full font-semibold ${
-                        lab.cloud === 'azure' ? 'bg-blue-50 text-blue-600' :
-                        lab.cloud === 'aws' ? 'bg-amber-50 text-amber-600' :
-                        lab.cloud === 'gcp' ? 'bg-red-50 text-red-600' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>{lab.cloud}</span>
-                      <span>{lab.category}</span>
-                      {lab.minTier !== 'free' && <span className="flex items-center gap-0.5"><FaLock className="w-2 h-2" />{lab.minTier}+</span>}
-                    </div>
-                  </div>
-                </div>
-              </a>
-            ))}
-          </div>
-
-          {guidedLabs.length === 0 && (
-            <div className="text-center py-10 text-sm text-gray-400">No guided labs available yet.</div>
-          )}
-        </div>
-      )}
-
-      {/* Feedback Modal */}
+{/* Feedback Modal */}
       {feedbackModal && (
         <FeedbackModal
           trainingName={feedbackModal.trainingName}
