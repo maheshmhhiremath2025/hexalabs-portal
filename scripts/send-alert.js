@@ -10,9 +10,10 @@ const path = require('path');
 const fs = require('fs');
 
 const BACKEND_DIR = '/root/synergific-portal/dockerfiles/backend';
-require('dotenv').config({ path: path.join(BACKEND_DIR, '.env') });
-
-// Reuse backend's installed nodemailer so we don't duplicate the dependency.
+// Reuse backend's installed deps so we don't duplicate them in scripts/
+require(path.join(BACKEND_DIR, 'node_modules', 'dotenv')).config({
+  path: path.join(BACKEND_DIR, '.env'),
+});
 const nodemailer = require(path.join(BACKEND_DIR, 'node_modules', 'nodemailer'));
 
 const RECIPIENTS = [
