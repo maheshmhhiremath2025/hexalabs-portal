@@ -1,6 +1,7 @@
 const { logger } = require('./../plugins/logger');
 const User = require('./../models/user');
 const { setUser } = require('../services/auth');
+const { recordLoginFailure, recordLoginSuccess } = require('../middlewares/loginRateLimit');
 
 const moment = require('moment-timezone');
 
@@ -20,6 +21,7 @@ async function handleUserLogin(req, res) {
 
         const user = await User.findOne({ email });
         if (!user || !(await user.comparePassword(password))) {
+            recordLoginFailure(req);
             return res.status(400).json({ message: "Invalid Credentials" });
         }
 
@@ -54,6 +56,9 @@ async function handleUserLogin(req, res) {
                 userCode = "QtoA4s58yjXk27";
                 break;
         }
+
+        // Successful login — clear rate-limit counters for this IP + email
+        recordLoginSuccess(req);
 
         // Log login activity
         logger.info(`${email} logged in from ${req.ip}`);

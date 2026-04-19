@@ -1,6 +1,7 @@
 const express = require('express');
 const {handleUserLogin, handleUserLogout} = require('./../controllers/user')
 const { restrictToLoggedinUserOnly } = require('./../middlewares/auth');
+const { checkLoginRateLimit } = require('./../middlewares/loginRateLimit');
 const awsUser = require('./../models/aws');
 const SandboxUser = require('./../models/sandboxuser');
 const GcpSandboxUser = require('./../models/gcpSandboxUser');
@@ -11,7 +12,7 @@ const { createAwsSandbox, createAzureSandbox, createGcpSandbox } = require('./..
 
 const router = express.Router();
 
-router.post('/login', handleUserLogin);
+router.post('/login', checkLoginRateLimit, handleUserLogin);
 router.post('/logout', handleUserLogout);
 
 /**

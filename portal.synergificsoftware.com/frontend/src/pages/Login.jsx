@@ -142,7 +142,9 @@ const Login = ({ onLogin, apiRoutes }) => {
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Login flow (unchanged from previous revision)
+  // Login flow — same happy path as before, with explicit 429 handling so
+  // rate-limited users get a clear "try again in X min" message instead of
+  // a generic "Login failed".
   const loginUser = async (e) => {
     e.preventDefault();
     try {
@@ -160,7 +162,15 @@ const Login = ({ onLogin, apiRoutes }) => {
         setLoginError(`Login failed. ${response.data.message}`);
       }
     } catch (error) {
-      setLoginError(error.response?.data?.message || 'Login failed. Please try again.');
+      const status = error.response?.status;
+      // Backend returns 429 when login attempts exceed the limit. Its body
+      // already contains a human-readable message like "Too many login
+      // attempts. Try again in 10 minutes." — just surface it.
+      if (status === 429) {
+        setLoginError(error.response.data?.message || 'Too many login attempts. Please try again later.');
+      } else {
+        setLoginError(error.response?.data?.message || 'Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -252,9 +262,9 @@ const Login = ({ onLogin, apiRoutes }) => {
           {/* Stats strip */}
           <div className="relative z-10 grid grid-cols-4 gap-8 bg-white/[0.02] backdrop-blur-2xl rounded-[2rem] p-8 border border-white/10 shadow-inner">
             <StatBox label="Clouds"      value="5"     delay={0.9} />
-            <StatBox label="Lab Images"  value="33+"   delay={1.0} />
-            <StatBox label="Deploy Time" value="< 10s" delay={1.1} />
-            <StatBox label="Uptime"      value="99.9%" delay={1.2} />
+            <StatBox label="Lab Images"  value="103+"  delay={1.0} />
+            <StatBox label="Deploy Time" value="< 3s"  delay={1.1} />
+            <StatBox label="White Label" value="Ready" delay={1.2} />
           </div>
 
           {/* Footer */}
