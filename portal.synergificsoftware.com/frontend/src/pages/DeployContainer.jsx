@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiCaller from '../services/apiCaller';
-import { containerApiRoutes } from '../services/apiRoutes';
+import { containerApiRoutes, apiRoutes } from '../services/apiRoutes';
 import BulkEmailInput from '../components/BulkEmailInput';
 import { FaDocker, FaArrowDown, FaCloud, FaServer, FaPlay, FaPowerOff, FaTrash, FaExternalLinkAlt, FaCopy, FaCheck } from 'react-icons/fa';
 
@@ -57,12 +57,14 @@ export default function DeployContainer({ userDetails }) {
     return d.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm for datetime-local
   });
   const [result, setResult] = useState(null);
+  const [organizations, setOrganizations] = useState([]);
   const [containers, setContainers] = useState([]);
   const [showList, setShowList] = useState(false);
   const [listTraining, setListTraining] = useState('');
 
   useEffect(() => {
     apiCaller.get(containerApiRoutes.containerImages).then(r => setImages(r.data)).catch(() => {});
+    apiCaller.get(apiRoutes.userTagApi).then(r => setOrganizations(r.data.organization || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -168,8 +170,13 @@ export default function DeployContainer({ userDetails }) {
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Organization</label>
-            <input value={organization} onChange={e => setOrganization(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+            <select value={organization} onChange={e => setOrganization(e.target.value)}
+              className="w-full appearance-none px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white">
+              <option value="">Select organization...</option>
+              {organizations.map((org, i) => (
+                <option key={i} value={org}>{org}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -189,6 +196,20 @@ export default function DeployContainer({ userDetails }) {
                 );
               })}
             </select>
+            {(() => {
+              const sel = images.find(i => i.key === selectedImage);
+              if (!sel || (!sel.screenshotUrl && !sel.description)) return null;
+              return (
+                <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded-lg flex gap-2 items-start">
+                  {sel.screenshotUrl && (
+                    <img src={sel.screenshotUrl} alt={sel.label} loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      className="w-14 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                  )}
+                  <div className="text-[11px] text-gray-600 leading-snug">{sel.description || sel.os}</div>
+                </div>
+              );
+            })()}
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Resources</label>

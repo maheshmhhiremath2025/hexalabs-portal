@@ -36,25 +36,54 @@ export default function SelfServiceDashboard() {
     apiCaller.get('/selfservice/guided-labs').then(r => setGuidedLabs(r.data)).catch(() => {});
   }, [fetchDashboard]);
 
-  const [deployStatus, setDeployStatus] = useState(null); // 'pulling' | 'creating' | null
+  // Deploy progress: real-time status from /selfservice/deploy-status/:jobId
+  // shape: { phase, label, progress, elapsedSeconds, status, error?, result? }
+  const [deployProgress, setDeployProgress] = useState(null);
+  const deployPollRef = useRef(null);
+
+  // Cancel any in-flight poll on unmount so we don't leak interval timers
+  useEffect(() => () => { if (deployPollRef.current) clearInterval(deployPollRef.current); }, []);
 
   const handleDeploy = async () => {
-    setDeploying(true); setError(null); setSuccess(null); setDeployStatus('pulling');
-
-    // Show progress stages
-    const timer = setTimeout(() => setDeployStatus('creating'), 5000);
+    setDeploying(true); setError(null); setSuccess(null);
+    setDeployProgress({ phase: 'queued', label: 'Starting...', progress: 5, elapsedSeconds: 0 });
 
     try {
-      await apiCaller.post('/selfservice/deploy', { imageKey: selectedImage });
-      clearTimeout(timer);
-      setDeployStatus(null);
-      setSuccess('Workspace deployed! Click "Open" to access it.');
-      await fetchDashboard();
+      const res = await apiCaller.post('/selfservice/deploy-async', { imageKey: selectedImage });
+      const { jobId } = res.data;
+      if (!jobId) throw new Error('No job id returned');
+
+      // Poll every 1.2s until done or failed
+      deployPollRef.current = setInterval(async () => {
+        try {
+          const s = await apiCaller.get(`/selfservice/deploy-status/${jobId}`);
+          setDeployProgress(s.data);
+          if (s.data.status === 'done') {
+            clearInterval(deployPollRef.current); deployPollRef.current = null;
+            setSuccess('Workspace ready! Click "Open" to access it.');
+            await fetchDashboard();
+            // Hide the bar shortly so the user sees "100% Ready" briefly
+            setTimeout(() => setDeployProgress(null), 800);
+            setDeploying(false);
+          } else if (s.data.status === 'failed') {
+            clearInterval(deployPollRef.current); deployPollRef.current = null;
+            setError(s.data.error || 'Deploy failed');
+            setDeployProgress(null);
+            setDeploying(false);
+          }
+        } catch {
+          // Job lookup itself failed — stop polling and surface a generic error
+          clearInterval(deployPollRef.current); deployPollRef.current = null;
+          setError('Lost connection to deploy job');
+          setDeployProgress(null);
+          setDeploying(false);
+        }
+      }, 1200);
     } catch (err) {
-      clearTimeout(timer);
-      setDeployStatus(null);
       setError(err.response?.data?.message || 'Deploy failed');
-    } finally { setDeploying(false); }
+      setDeployProgress(null);
+      setDeploying(false);
+    }
   };
 
   const handleSandbox = async () => {
@@ -213,18 +242,28 @@ export default function SelfServiceDashboard() {
                 <FaRocket className="w-3 h-3" /> {deploying ? 'Deploying...' : 'Deploy'}
               </button>
             </div>
-            {/* Deploy progress */}
-            {deploying && (
+            {/* Deploy progress — real-time from backend job tracker */}
+            {deployProgress && (
               <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-blue-800">
-                    {deployStatus === 'pulling' ? 'Pulling image (first time may take 1-2 min)...' : 'Creating workspace...'}
+                    {deployProgress.label || 'Deploying workspace...'}
+                  </span>
+                  <span className="text-[11px] text-blue-600 tabular-nums">
+                    {deployProgress.progress}% &middot; {deployProgress.elapsedSeconds || 0}s
                   </span>
                 </div>
-                <div className="w-full bg-blue-100 rounded-full h-1.5">
-                  <div className={`h-1.5 rounded-full bg-blue-500 transition-all duration-1000 ${deployStatus === 'pulling' ? 'w-1/3' : 'w-2/3'}`} />
+                <div className="w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-1.5 rounded-full bg-blue-500 transition-all duration-500"
+                    style={{ width: `${deployProgress.progress || 0}%` }}
+                  />
                 </div>
-                <p className="text-[11px] text-blue-600">Cached images deploy in 2-3 seconds. New images need a one-time download.</p>
+                <p className="text-[11px] text-blue-600">
+                  {deployProgress.phase === 'pulling_image'
+                    ? 'First-time image download — usually 30s-2min. Subsequent deploys are instant.'
+                    : 'Cached images deploy in 2-3 seconds.'}
+                </p>
               </div>
             )}
           </div>

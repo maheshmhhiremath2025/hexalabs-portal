@@ -1,54 +1,70 @@
 import './App.css'
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Sidebar from './components/Sidebar'
-import Home from './pages/Home'
-import Dashboard from './pages/Dashboard'
 import Selector from './components/Selector'
-import VmDetails from './pages/vmDetails'
-import Login from './pages/Login'
 import PrivateRoute from './components/PrivateRoute'
-import { apiOpenRoutes, apiRoutes, superadminApiRoutes } from './services/apiRoutes'
-import BillingDetails from './pages/BillingDetails'
-import PermissionError from './pages/PermissionError'
-import ViewLogs from './pages/ViewLogs'
-import Ports from './pages/Ports'
-import Scheduler from './pages/Scheduler'
-import CreateVM from './pages/CreateVM'
-import AccessRestriction from './pages/AccessRestriction'
-import Controller from './pages/Controller'
-import Quota from './pages/Quota'
-import DeleteLogs from './pages/DeleteLogs'
-import DeleteTraining from './pages/DeleteTraining'
-import Azure from './pages/sandbox/Azure'
-import AzureUsers from './pages/sandbox/AzureUsers'
-import AwsSandbox from './pages/sandbox/AwsSandbox'
-import Ledger from './pages/Ledger'
-import Account from './pages/Account'
-import SupportPage from './pages/Support'
-import Chatbot from './components/Chatbot'
 import LabChatbot from './components/LabChatbot'
-import NotFound from './pages/NotFound'
-import CostAnalytics from './pages/CostAnalytics'
-import DeployContainer from './pages/DeployContainer'
-import Analytics from './pages/Analytics'
-import CostOptimization from './pages/CostOptimization'
-import DeployRDS from './pages/DeployRDS'
-import GcpSandbox from './pages/sandbox/GcpSandbox'
-import GcpUsers from './pages/sandbox/GcpUsers'
-import OciSandbox from './pages/sandbox/OciSandbox'
-import Signup from './pages/Signup'
-import GuidedLabDetail from './pages/GuidedLabDetail'
-import SelfServiceDashboard from './pages/SelfServiceDashboard'
-import CourseCatalog from './pages/CourseCatalog'
-import CourseDetail from './pages/CourseDetail'
-import B2BCourseAnalyses from './pages/b2b/B2BCourseAnalyses'
-import B2BCourseDetail from './pages/b2b/B2BCourseDetail'
-import MySandboxes from './pages/MySandboxes'
-import RosaCluster from './pages/RosaCluster'
-import AroCluster from './pages/AroCluster'
+import { apiOpenRoutes, apiRoutes, superadminApiRoutes } from './services/apiRoutes'
 import { BrandingProvider, useBranding } from './contexts/BrandingContext'
+
+// Eagerly-loaded auth-flow pages (small, on the critical path)
+import Login from './pages/Login'
+import Home from './pages/Home'
+import PermissionError from './pages/PermissionError'
+import NotFound from './pages/NotFound'
+
+// All other pages are lazy-loaded so the initial JS bundle stays small.
+// Each page becomes its own JS chunk fetched on first navigation.
+const Dashboard            = lazy(() => import('./pages/Dashboard'))
+const VmDetails            = lazy(() => import('./pages/vmDetails'))
+const BillingDetails       = lazy(() => import('./pages/BillingDetails'))
+const ViewLogs             = lazy(() => import('./pages/ViewLogs'))
+const Ports                = lazy(() => import('./pages/Ports'))
+const Scheduler            = lazy(() => import('./pages/Scheduler'))
+const CreateVM             = lazy(() => import('./pages/CreateVM'))
+const AccessRestriction    = lazy(() => import('./pages/AccessRestriction'))
+const Controller           = lazy(() => import('./pages/Controller'))
+const Quota                = lazy(() => import('./pages/Quota'))
+const DeleteLogs           = lazy(() => import('./pages/DeleteLogs'))
+const DeleteTraining       = lazy(() => import('./pages/DeleteTraining'))
+const Azure                = lazy(() => import('./pages/sandbox/Azure'))
+const AzureUsers           = lazy(() => import('./pages/sandbox/AzureUsers'))
+const AwsSandbox           = lazy(() => import('./pages/sandbox/AwsSandbox'))
+const Ledger               = lazy(() => import('./pages/Ledger'))
+const Account              = lazy(() => import('./pages/Account'))
+const SupportPage          = lazy(() => import('./pages/Support'))
+const CostAnalytics        = lazy(() => import('./pages/CostAnalytics'))
+const DeployContainer      = lazy(() => import('./pages/DeployContainer'))
+const TemplateManager      = lazy(() => import('./pages/TemplateManager'))
+const Analytics            = lazy(() => import('./pages/Analytics'))
+const CostOptimization     = lazy(() => import('./pages/CostOptimization'))
+const DeployRDS            = lazy(() => import('./pages/DeployRDS'))
+const GcpSandbox           = lazy(() => import('./pages/sandbox/GcpSandbox'))
+const GcpUsers             = lazy(() => import('./pages/sandbox/GcpUsers'))
+const OciSandbox           = lazy(() => import('./pages/sandbox/OciSandbox'))
+const Signup               = lazy(() => import('./pages/Signup'))
+const OrgLanding           = lazy(() => import('./pages/OrgLanding'))
+const GuidedLabDetail      = lazy(() => import('./pages/GuidedLabDetail'))
+const SelfServiceDashboard = lazy(() => import('./pages/SelfServiceDashboard'))
+const CourseCatalog        = lazy(() => import('./pages/CourseCatalog'))
+const CourseDetail         = lazy(() => import('./pages/CourseDetail'))
+const B2BCourseAnalyses    = lazy(() => import('./pages/b2b/B2BCourseAnalyses'))
+const B2BCourseDetail      = lazy(() => import('./pages/b2b/B2BCourseDetail'))
+const MySandboxes          = lazy(() => import('./pages/MySandboxes'))
+const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
+const AroCluster           = lazy(() => import('./pages/AroCluster'))
+
+// Tiny fallback shown while a lazy route's chunk is fetching.
+// Plain centered spinner — keeps perceived latency low without a layout shift.
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function AppInner() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("uid"));
@@ -102,9 +118,9 @@ function AppInner() {
       fetchBranding(details.organization);
     } else {
       resetBranding();
-      // Don't redirect if already on login or signup
+      // Don't redirect if already on login, signup, or a public org landing page
       const path = window.location.pathname;
-      if (path !== '/login' && path !== '/signup') {
+      if (path !== '/login' && path !== '/signup' && !path.startsWith('/welcome/')) {
         navigate("/login");
       }
     }
@@ -145,7 +161,7 @@ function AppInner() {
 
   const sidebarWidth = sidebarCollapsed ? 72 : 260;
   const { pathname } = useLocation();
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname.startsWith('/welcome/');
   const showChrome = isLoggedIn && !isAuthPage;
 
   return (
@@ -166,9 +182,11 @@ function AppInner() {
         {showChrome && <Navbar userDetails={userDetails} />}
 
         <main className={showChrome ? "px-6 py-5" : ""}>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/login" element={<Login onLogin={handleLogin} apiRoutes={apiRoutes} />} />
             <Route path="/signup" element={<Signup onLogin={handleLogin} />} />
+            <Route path="/welcome/:orgSlug" element={<OrgLanding />} />
 
             <Route path="/" element={<PrivateRoute isLoggedIn={isLoggedIn}><Home userDetails={userDetails} /></PrivateRoute>} />
             <Route path="/dashboard" element={<PrivateRoute isLoggedIn={isLoggedIn}><Dashboard apiOpenRoutes={apiOpenRoutes} userDetails={userDetails} /></PrivateRoute>} />
@@ -196,6 +214,7 @@ function AppInner() {
 
             <Route path='/createvm' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<CreateVM userDetails={userDetails} apiRoutes={apiRoutes} />} />} />
             <Route path='/containers' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployContainer userDetails={userDetails} />} />} />
+            <Route path='/templates' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TemplateManager />} />} />
             <Route path='/rds' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployRDS userDetails={userDetails} />} />} />
             <Route path='/overview' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<Controller superadminApiRoutes={superadminApiRoutes} />} />} />
 
@@ -224,6 +243,7 @@ function AppInner() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </main>
 
         {/* Idle timeout warning */}

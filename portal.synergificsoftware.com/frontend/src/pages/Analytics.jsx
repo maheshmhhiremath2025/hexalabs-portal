@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiCaller from '../services/apiCaller';
-import { FaServer, FaDocker, FaUsers, FaClock, FaExclamationTriangle, FaArrowDown } from 'react-icons/fa';
+import { FaServer, FaDocker, FaUsers, FaClock, FaExclamationTriangle, FaArrowDown, FaUserGraduate, FaSearch, FaDownload } from 'react-icons/fa';
 
 const formatINR = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 
@@ -23,6 +23,9 @@ export default function Analytics() {
   const [overview, setOverview] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [idle, setIdle] = useState(null);
+  const [students, setStudents] = useState(null);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentFilter, setStudentFilter] = useState({ trainingName: '', organization: '', search: '' });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
 
@@ -37,6 +40,54 @@ export default function Analytics() {
       setIdle(i.data);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  const fetchStudents = async () => {
+    setStudentsLoading(true);
+    try {
+      const params = {};
+      if (studentFilter.trainingName) params.trainingName = studentFilter.trainingName;
+      if (studentFilter.organization) params.organization = studentFilter.organization;
+      const r = await apiCaller.get('/admin/analytics/students', { params });
+      setStudents(r.data);
+    } catch { setStudents({ students: [], total: 0 }); }
+    finally { setStudentsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (tab === 'students' && !students) fetchStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const downloadStudentsCsv = () => {
+    if (!students?.students?.length) return;
+    const header = ['Email', 'Trainings', 'VMs', 'Workspaces', 'Total Hours', 'Total Cost (INR)', 'Last Active'];
+    const rows = filteredStudents.map(s => [
+      s.email,
+      s.trainings.join('; '),
+      s.vmInstances,
+      s.containerInstances,
+      s.totalHours,
+      s.totalCost,
+      s.lastSeen ? new Date(s.lastSeen).toISOString() : '',
+    ]);
+    const escape = v => { const x = String(v ?? ''); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+    const csv = [header, ...rows].map(r => r.map(escape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `students-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filteredStudents = (() => {
+    if (!students?.students) return [];
+    const q = studentFilter.search.trim().toLowerCase();
+    if (!q) return students.students;
+    return students.students.filter(s =>
+      s.email.toLowerCase().includes(q) ||
+      s.trainings.some(t => t.toLowerCase().includes(q))
+    );
+  })();
 
   if (loading) return (
     <div className="max-w-6xl mx-auto">
@@ -55,10 +106,10 @@ export default function Analytics() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {[['overview', 'Overview'], ['customers', 'Customers'], ['idle', 'Idle Risk']].map(([key, label]) => (
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit overflow-x-auto">
+        {[['overview', 'Overview'], ['customers', 'Customers'], ['students', 'Per Student'], ['idle', 'Idle Risk']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             {label}
           </button>
         ))}
@@ -161,6 +212,106 @@ export default function Analytics() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Per-Student Tab */}
+      {tab === 'students' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-3" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Training Name</label>
+              <input value={studentFilter.trainingName} onChange={e => setStudentFilter(f => ({ ...f, trainingName: e.target.value }))} placeholder="all trainings"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Organization</label>
+              <input value={studentFilter.organization} onChange={e => setStudentFilter(f => ({ ...f, organization: e.target.value }))} placeholder="all orgs"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Search</label>
+              <div className="relative">
+                <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                <input value={studentFilter.search} onChange={e => setStudentFilter(f => ({ ...f, search: e.target.value }))} placeholder="email or training"
+                  className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+              </div>
+            </div>
+            <button onClick={fetchStudents} disabled={studentsLoading}
+              className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {studentsLoading ? 'Loading...' : 'Apply'}
+            </button>
+            <button onClick={downloadStudentsCsv} disabled={!filteredStudents.length}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40">
+              <FaDownload className="w-3 h-3" /> CSV
+            </button>
+          </div>
+
+          {students && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Stat icon={FaUserGraduate} label="Students" value={students.total} sub={`${filteredStudents.length} shown`} color="bg-indigo-50 text-indigo-600" />
+                <Stat icon={FaServer} label="Total VMs" value={filteredStudents.reduce((s, x) => s + x.vmInstances, 0)} color="bg-blue-50 text-blue-600" />
+                <Stat icon={FaDocker} label="Total Workspaces" value={filteredStudents.reduce((s, x) => s + x.containerInstances, 0)} color="bg-cyan-50 text-cyan-600" />
+                <Stat icon={FaClock} label="Total Hours" value={`${filteredStudents.reduce((s, x) => s + x.totalHours, 0)}h`} color="bg-purple-50 text-purple-600" />
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                {filteredStudents.length === 0 ? (
+                  <div className="text-center py-12 text-sm text-gray-400">
+                    {studentsLoading ? 'Loading…' : 'No students match this filter.'}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-[13px]">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          {['Email', 'Trainings', 'VMs', 'Workspaces', 'Active', 'Hours', 'Cost', 'Last Active'].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredStudents.map(s => (
+                          <tr key={s.email} className="hover:bg-gray-50/50">
+                            <td className="px-4 py-2.5 font-medium text-gray-800 truncate max-w-[220px]" title={s.email}>{s.email}</td>
+                            <td className="px-4 py-2.5 text-gray-600">
+                              {s.trainings.length === 1 ? (
+                                <span className="text-xs">{s.trainings[0]}</span>
+                              ) : (
+                                <span className="text-xs" title={s.trainings.join(', ')}>{s.trainings[0]} <span className="text-gray-400">+{s.trainings.length - 1}</span></span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-600 tabular-nums">{s.vmInstances}</td>
+                            <td className="px-4 py-2.5 text-gray-600 tabular-nums">{s.containerInstances}</td>
+                            <td className="px-4 py-2.5">
+                              {s.totalRunning > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-green-600 text-xs font-semibold">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />{s.totalRunning} live
+                                </span>
+                              ) : (
+                                <span className="text-gray-300 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-600 tabular-nums">{s.totalHours}h</td>
+                            <td className="px-4 py-2.5 text-gray-600 tabular-nums">{formatINR(s.totalCost)}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {s.lastSeen ? (
+                                <span className={s.isStale ? 'text-amber-600' : 'text-gray-500'}>
+                                  {new Date(s.lastSeen).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                  {s.isStale && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700">stale</span>}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 

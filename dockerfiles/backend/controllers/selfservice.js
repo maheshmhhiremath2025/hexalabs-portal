@@ -667,8 +667,141 @@ async function handleSelfDelete(req, res) {
   }
 }
 
+// In-memory tracker for selfservice deploy jobs.
+// Each job moves through: queued → checking_quota → pulling_image → creating_container → starting → ready (or failed)
+// Cleaned up 5 minutes after completion. Single-process state — fine for a single backend node.
+const selfDeployJobs = new Map();
+
+const SELF_PHASES = [
+  { key: 'queued',             label: 'Queued',                 progress: 5  },
+  { key: 'checking_quota',     label: 'Checking your plan',     progress: 15 },
+  { key: 'pulling_image',      label: 'Preparing workspace image', progress: 35 },
+  { key: 'creating_container', label: 'Creating your workspace', progress: 65 },
+  { key: 'starting',           label: 'Starting workspace',     progress: 85 },
+  { key: 'ready',              label: 'Ready',                  progress: 100 },
+];
+
+function setPhase(job, key, extra = {}) {
+  const def = SELF_PHASES.find(p => p.key === key);
+  if (def) { job.phase = def.key; job.label = def.label; job.progress = def.progress; }
+  Object.assign(job, extra);
+  job.updatedAt = Date.now();
+}
+
+/**
+ * POST /selfservice/deploy-async
+ * Auth — kicks off a deploy in the background and returns a jobId immediately.
+ * Use GET /selfservice/deploy-status/:jobId to poll progress.
+ *
+ * Behavior is identical to handleSelfDeploy — same quota checks, same createContainer call,
+ * same welcome email — but the HTTP response returns in <100ms instead of after the
+ * container is built. Existing callers of POST /selfservice/deploy still work unchanged.
+ */
+async function handleSelfDeployAsync(req, res) {
+  const { imageKey = 'ubuntu-xfce' } = req.body;
+  const jobId = `self-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const job = {
+    jobId, status: 'running', startedAt: Date.now(), updatedAt: Date.now(),
+    phase: 'queued', label: 'Queued', progress: 5,
+    email: req.user.email, imageKey,
+  };
+  selfDeployJobs.set(jobId, job);
+  res.json({ jobId, message: 'Deployment started' });
+
+  (async () => {
+    try {
+      setPhase(job, 'checking_quota');
+      const sub = await Subscription.findOne({ email: req.user.email, status: 'active' });
+      if (!sub) throw new Error('No active subscription. Please purchase a plan.');
+      if (new Date(sub.expiresAt) < new Date()) {
+        sub.status = 'expired'; await sub.save();
+        throw new Error('Subscription expired. Please renew.');
+      }
+
+      const totalHours = sub.containerHoursTotal || sub.hoursTotal || 0;
+      const usedHours = sub.containerHoursUsed || sub.hoursUsed || 0;
+      if (usedHours >= totalHours) throw new Error('Container hours exhausted. Please upgrade your plan.');
+
+      const maxContainers = sub.maxContainers || sub.maxInstances || 1;
+      const activeCount = await Container.countDocuments({ email: req.user.email, isAlive: true, isRunning: true });
+      if (activeCount >= maxContainers) throw new Error(`Maximum ${maxContainers} simultaneous containers allowed on your plan.`);
+
+      setPhase(job, 'pulling_image');
+      // Best-effort pre-pull so the image is cached before createContainer runs.
+      // If it's already cached, this is a near-instant noop.
+      try {
+        const { prePullImage } = require('../services/containerService');
+        await prePullImage(imageKey);
+      } catch (e) {
+        logger.warn(`[self-deploy ${jobId}] pre-pull non-fatal failure: ${e.message}`);
+      }
+
+      setPhase(job, 'creating_container');
+      const trainingName = `self-${req.user.email.split('@')[0]}`;
+      const existingCount = await Container.countDocuments({ email: req.user.email });
+      const name = `${trainingName}-${existingCount + 1}`;
+
+      const result = await createContainer({
+        name, trainingName,
+        organization: req.user.organization,
+        email: req.user.email,
+        imageKey,
+        cpus: 2, memory: 4096,
+        allocatedHours: totalHours - usedHours,
+        rate: 0,
+        azureEquivalentRate: 25,
+        password: 'Welcome1234!',
+      });
+
+      setPhase(job, 'starting', { result });
+
+      // Send welcome email (non-blocking)
+      notifyInstanceReady({
+        email: req.user.email,
+        name, type: 'container',
+        accessUrl: result.accessUrl,
+        password: result.password,
+        organization: req.user.organization,
+        trainingName,
+      }).catch(() => {});
+
+      setPhase(job, 'ready', { status: 'done', result });
+    } catch (err) {
+      logger.error(`[self-deploy ${jobId}] failed: ${err.message}`);
+      job.status = 'failed';
+      job.error = err.message;
+      job.updatedAt = Date.now();
+    } finally {
+      // GC after 5 min
+      setTimeout(() => selfDeployJobs.delete(jobId), 5 * 60 * 1000);
+    }
+  })();
+}
+
+/**
+ * GET /selfservice/deploy-status/:jobId
+ * Auth — poll a self-deploy job. Only the owner can read their own jobs.
+ */
+async function handleSelfDeployStatus(req, res) {
+  const job = selfDeployJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'Job not found or expired' });
+  if (job.email !== req.user.email) return res.status(403).json({ message: 'Forbidden' });
+  res.json({
+    jobId: job.jobId,
+    status: job.status,            // running | done | failed
+    phase: job.phase,
+    label: job.label,
+    progress: job.progress,
+    elapsedSeconds: Math.round((Date.now() - job.startedAt) / 1000),
+    error: job.error || null,
+    result: job.status === 'done' ? job.result : null,
+  });
+}
+
 module.exports = {
   handleGetPlans, handleSignup, handleVerifyPayment,
   handleDashboard, handleGetSandboxes, handleSelfDeploy, handleSelfSandbox,
   handleSelfStop, handleSelfStart, handleSelfDelete,
+  handleSelfDeployAsync, handleSelfDeployStatus,
 };

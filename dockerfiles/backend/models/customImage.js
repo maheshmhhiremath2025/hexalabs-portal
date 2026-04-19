@@ -10,6 +10,7 @@ const customImageSchema = new mongoose.Schema({
   port: { type: Number, default: 3000 },                  // Internal port to expose
   protocol: { type: String, enum: ['http', 'https'], default: 'http' },
   envVars: [{ key: String, value: String }],              // Custom env vars
+  screenshotUrl: { type: String },                         // Optional preview image URL for the template card
   defaultUser: { type: String },                           // Default username for the image
   shmSize: { type: String, default: '512m' },
   // Access control

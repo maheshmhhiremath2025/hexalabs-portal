@@ -449,8 +449,8 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
       })()}
 
       {/* Stats + Actions bar */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-100 rounded-md">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
             <span className="text-xs font-semibold text-green-800">{running}</span>
@@ -471,7 +471,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
             <input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
@@ -579,6 +579,11 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         </div>
       )}
 
+      {/* VM Settings — superadmin only */}
+      {userDetails?.userType === 'superadmin' && aliveVms.length > 0 && (
+        <VmSettingsPanel trainingName={selectedTraining} vms={aliveVms} onUpdate={getLabsData} show={show} />
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -671,5 +676,123 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
 
 /* Note: Terminated rows intentionally show strikethrough names and red "Auto-deleted"
    badges as visual cues that these resources are gone and no longer costing money. */
+
+/* ===== VM Settings Panel (superadmin only) ===== */
+function VmSettingsPanel({ trainingName, vms, onUpdate, show }) {
+  const [open, setOpen] = useState(false);
+  const [scope, setScope] = useState('training'); // 'training' or specific vmName
+  const [autoShutdown, setAutoShutdown] = useState(vms[0]?.autoShutdown ?? true);
+  const [idleMinutes, setIdleMinutes] = useState(vms[0]?.idleMinutes || 15);
+  const [expiryDate, setExpiryDate] = useState(() => {
+    const exp = vms.find(v => v.expiresAt)?.expiresAt;
+    return exp ? new Date(exp).toISOString().slice(0, 16) : '';
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body = { autoShutdown, idleMinutes: parseInt(idleMinutes) || 15 };
+      if (expiryDate) body.expiresAt = new Date(expiryDate).toISOString();
+      else body.expiresAt = null;
+
+      if (scope === 'training') {
+        body.trainingName = trainingName;
+      } else {
+        body.vmName = scope;
+      }
+
+      await apiCaller.patch('/azure/vm-settings', body);
+      show(`Settings updated for ${scope === 'training' ? 'all VMs' : scope}`, 'success');
+      onUpdate();
+    } catch (err) {
+      show('Failed to update settings', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="mb-3">
+        <button onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <FaServer className="w-2.5 h-2.5" /> VM Settings
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 bg-white border border-gray-200 rounded-xl p-4 space-y-3" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-gray-800 flex items-center gap-2">
+          <FaServer className="w-3 h-3 text-blue-500" /> VM Settings
+        </h4>
+        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm">&times;</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        {/* Apply to */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Apply to</label>
+          <select value={scope} onChange={e => setScope(e.target.value)}
+            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+            <option value="training">All VMs in {trainingName}</option>
+            {vms.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+          </select>
+        </div>
+
+        {/* Auto Shutdown Toggle */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Auto Idle Shutdown</label>
+          <div className="flex items-center gap-2 mt-1">
+            <button onClick={() => setAutoShutdown(!autoShutdown)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${autoShutdown ? 'bg-green-500' : 'bg-gray-300'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${autoShutdown ? 'left-5' : 'left-0.5'}`} />
+            </button>
+            <span className={`text-xs font-medium ${autoShutdown ? 'text-green-700' : 'text-gray-500'}`}>
+              {autoShutdown ? 'ON' : 'OFF'}
+            </span>
+          </div>
+        </div>
+
+        {/* Idle Minutes */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Idle Timeout (minutes)</label>
+          <select value={idleMinutes} onChange={e => setIdleMinutes(+e.target.value)} disabled={!autoShutdown}
+            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-40">
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+            <option value={45}>45 min</option>
+            <option value={60}>1 hour</option>
+            <option value={90}>1.5 hours</option>
+            <option value={120}>2 hours</option>
+          </select>
+        </div>
+
+        {/* Expiry */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Lab Expiry</label>
+          <input type="datetime-local" value={expiryDate} onChange={e => setExpiryDate(e.target.value)}
+            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={handleSave} disabled={saving}
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+        {expiryDate && (
+          <button onClick={() => setExpiryDate('')}
+            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+            Remove Expiry
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default VmDetails;

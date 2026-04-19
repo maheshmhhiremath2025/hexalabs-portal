@@ -10,7 +10,7 @@ const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/d
  */
 async function handleCreateImage(req, res) {
   try {
-    const { name, image, description, category, os, port, protocol, envVars, defaultUser, shmSize, isPublic, allowedEmails, allowedTeams, defaultCpus, defaultMemory } = req.body;
+    const { name, image, description, category, os, port, protocol, envVars, defaultUser, shmSize, isPublic, allowedEmails, allowedTeams, defaultCpus, defaultMemory, screenshotUrl } = req.body;
 
     if (!name || !image) return res.status(400).json({ message: 'name and image required' });
 
@@ -23,6 +23,7 @@ async function handleCreateImage(req, res) {
       createdBy: req.user.email, organization: req.user.organization,
       isPublic: isPublic || false, allowedEmails: allowedEmails || [], allowedTeams: allowedTeams || [],
       defaultCpus: defaultCpus || 2, defaultMemory: defaultMemory || 4096,
+      screenshotUrl: screenshotUrl || undefined,
     });
 
     logger.info(`Custom image registered: ${name} (${image}) by ${req.user.email}`);
@@ -54,6 +55,7 @@ async function handleListImages(req, res) {
       category: img.category, os: img.os, port: img.port, protocol: img.protocol,
       isPublic: img.isPublic, isPulled: img.isPulled, createdBy: img.createdBy,
       defaultCpus: img.defaultCpus, defaultMemory: img.defaultMemory,
+      screenshotUrl: img.screenshotUrl || null,
     })));
   } catch (err) {
     res.status(500).json({ message: 'Failed to list images' });

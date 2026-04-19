@@ -5,6 +5,7 @@ const {
   handleGetPlans, handleSignup, handleVerifyPayment,
   handleDashboard, handleGetSandboxes, handleSelfDeploy, handleSelfSandbox,
   handleSelfStop, handleSelfStart, handleSelfDelete,
+  handleSelfDeployAsync, handleSelfDeployStatus,
 } = require('../controllers/selfservice');
 const { handleSubmitFeedback, handleCheckFeedback, handleGetTrainingRatings } = require('../controllers/feedback');
 
@@ -56,6 +57,8 @@ router.post('/chat', checkAuth, async (req, res) => {
 router.get('/dashboard', checkAuth, handleDashboard);
 router.get('/sandboxes', checkAuth, handleGetSandboxes);
 router.post('/deploy', checkAuth, handleSelfDeploy);
+router.post('/deploy-async', checkAuth, handleSelfDeployAsync);
+router.get('/deploy-status/:jobId', checkAuth, handleSelfDeployStatus);
 router.post('/sandbox', checkAuth, handleSelfSandbox);
 router.post('/stop', checkAuth, handleSelfStop);
 router.post('/start', checkAuth, handleSelfStart);

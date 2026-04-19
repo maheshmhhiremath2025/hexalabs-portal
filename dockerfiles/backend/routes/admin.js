@@ -29,7 +29,7 @@ const {
 const { handleDashboardFunction } = require("../controllers/Dashboard/handleDashboardFunction");
 const { handleGetQuota, handleIncreaseQuota } = require('../controllers/quota');
 const { handleGetMyUser } = require('../controllers/myuser');
-const { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics } = require('../controllers/analytics');
+const { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics, handleStudentAnalytics } = require('../controllers/analytics');
 const { handleScanOrphans, handleDeleteOrphan, handleRightSizing } = require('../controllers/costOptimization');
 const { handleAdminListFeedback, handleAdminFeedbackSummary } = require('../controllers/feedback');
 const {
@@ -127,6 +127,7 @@ router.get("/feedback", handleAdminListFeedback);
 router.get("/analytics/overview", handleAnalyticsOverview);
 router.get("/analytics/customers", handleCustomerAnalytics);
 router.get("/analytics/idle", handleIdleAnalytics);
+router.get("/analytics/students", handleStudentAnalytics);
 
 // Live Azure pricing (superadmin only)
 router.get("/pricing/live", async (req, res) => {

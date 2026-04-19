@@ -191,4 +191,107 @@ async function handleIdleAnalytics(req, res) {
   }
 }
 
-module.exports = { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics };
+/**
+ * GET /admin/analytics/students
+ * Per-student usage breakdown. Filterable by trainingName and/or organization.
+ * Returns one row per email aggregating VMs + containers.
+ */
+async function handleStudentAnalytics(req, res) {
+  try {
+    const { userType } = req.user || {};
+    if (userType !== 'superadmin' && userType !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    const match = { isAlive: true };
+    if (req.query.trainingName) match.trainingName = req.query.trainingName;
+    if (req.query.organization && userType !== 'admin') {
+      // superadmin can scope to any org; admin is implicitly scoped to their own
+      match.organization = req.query.organization;
+    }
+    if (userType === 'admin' && req.user.organization) {
+      match.organization = req.user.organization;
+    }
+
+    const aggrPipeline = [
+      { $match: match },
+      {
+        $group: {
+          _id: '$email',
+          trainings: { $addToSet: '$trainingName' },
+          instanceCount: { $sum: 1 },
+          runningCount: { $sum: { $cond: ['$isRunning', 1, 0] } },
+          totalDuration: { $sum: { $ifNull: ['$duration', 0] } },
+          totalCost: { $sum: { $multiply: [{ $divide: [{ $ifNull: ['$duration', 0] }, 3600] }, { $ifNull: ['$rate', 0] }] } },
+          firstSeen: { $min: '$createdAt' },
+          lastSeen: { $max: '$updatedAt' },
+        },
+      },
+    ];
+
+    const [vmRows, contRows] = await Promise.all([
+      VM.aggregate(aggrPipeline),
+      Container.aggregate(aggrPipeline),
+    ]);
+
+    // Merge by email
+    const byEmail = new Map();
+    const seed = (email) => {
+      if (!byEmail.has(email)) {
+        byEmail.set(email, {
+          email,
+          trainings: new Set(),
+          vmInstances: 0, vmRunning: 0, vmHours: 0, vmCost: 0,
+          containerInstances: 0, containerRunning: 0, containerHours: 0, containerCost: 0,
+          firstSeen: null, lastSeen: null,
+        });
+      }
+      return byEmail.get(email);
+    };
+
+    for (const r of vmRows) {
+      const row = seed(r._id);
+      (r.trainings || []).forEach(t => row.trainings.add(t));
+      row.vmInstances += r.instanceCount;
+      row.vmRunning += r.runningCount;
+      row.vmHours += Math.round((r.totalDuration || 0) / 3600);
+      row.vmCost += Math.round(r.totalCost || 0);
+      if (r.firstSeen && (!row.firstSeen || r.firstSeen < row.firstSeen)) row.firstSeen = r.firstSeen;
+      if (r.lastSeen && (!row.lastSeen || r.lastSeen > row.lastSeen)) row.lastSeen = r.lastSeen;
+    }
+    for (const r of contRows) {
+      const row = seed(r._id);
+      (r.trainings || []).forEach(t => row.trainings.add(t));
+      row.containerInstances += r.instanceCount;
+      row.containerRunning += r.runningCount;
+      row.containerHours += Math.round((r.totalDuration || 0) / 3600);
+      row.containerCost += Math.round(r.totalCost || 0);
+      if (r.firstSeen && (!row.firstSeen || r.firstSeen < row.firstSeen)) row.firstSeen = r.firstSeen;
+      if (r.lastSeen && (!row.lastSeen || r.lastSeen > row.lastSeen)) row.lastSeen = r.lastSeen;
+    }
+
+    const students = Array.from(byEmail.values())
+      .map(s => ({
+        ...s,
+        trainings: Array.from(s.trainings),
+        totalInstances: s.vmInstances + s.containerInstances,
+        totalRunning: s.vmRunning + s.containerRunning,
+        totalHours: s.vmHours + s.containerHours,
+        totalCost: s.vmCost + s.containerCost,
+        // Engagement signal: students with > 0 hours but no recent activity in 7 days
+        isStale: s.lastSeen && ((Date.now() - new Date(s.lastSeen).getTime()) > 7 * 24 * 3600 * 1000) && s.totalRunning === 0,
+      }))
+      .sort((a, b) => b.totalHours - a.totalHours);
+
+    res.json({
+      total: students.length,
+      filter: { trainingName: match.trainingName || null, organization: match.organization || null },
+      students,
+    });
+  } catch (err) {
+    logger.error(`Student analytics error: ${err.message}`);
+    res.status(500).json({ message: 'Failed to fetch student analytics' });
+  }
+}
+
+module.exports = { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics, handleStudentAnalytics };

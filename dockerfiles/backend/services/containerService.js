@@ -4,6 +4,7 @@ const Training = require('../models/training');
 const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 const { getDockerInstance, addContainerToHost, removeContainerFromHost, HOST_MODE } = require('./dockerHostManager');
+const DockerHost = require('../models/dockerHost');
 
 // Build HTTPS domain-based access URL for a container record
 function buildAccessUrl(container) {
@@ -92,6 +93,16 @@ const CONTAINER_IMAGES = {
     category: 'dev', vncPort: 8080, protocol: 'http',
     env: ['PASSWORD=password'],
   },
+  'claude-code': {
+    image: 'getlabs/lab-claude-code:1.0', label: 'VS Code + Claude Code CLI', os: 'VS Code + Claude AI',
+    category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
+    env: ['PASSWORD=password'],
+  },
+  'claude-code-thinknyx': {
+    image: 'getlabs/claude-code-thinknyx:1.0', label: 'VS Code + Claude Code (Thinknyx Pre-configured)', os: 'VS Code + Claude AI',
+    category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
+    env: ['PASSWORD=password'],
+  },
   'jupyter-scipy': {
     image: 'jupyter/scipy-notebook:latest', label: 'Jupyter Notebook (Python/Science)', os: 'Jupyter',
     category: 'dev', vncPort: 8888, protocol: 'http',
@@ -146,6 +157,15 @@ const CONTAINER_IMAGES = {
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab', runtime: 'sysbox-runc',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '256m',
+  },
+
+  // === SOC Analyst / SIEM Lab ===
+  'soc-analyst': {
+    image: 'getlabs/lab-soc-analyst:1.0',
+    label: 'SOC Analyst Lab — Wazuh, Elasticsearch, Kibana, Suricata',
+    os: 'Ubuntu 22.04', category: 'security', vncPort: 7681, protocol: 'http',
+    defaultUser: 'lab',
+    env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '1g',
   },
 
   // === Monitoring Lab ===
@@ -485,6 +505,14 @@ async function createContainer({
     await addContainerToHost(dockerHost._id, info.Id, name, memory);
   }
 
+  // Update Nginx upstream map for remote containers
+  if (dockerHost && dockerHost.publicIp && dockerHost.publicIp !== 'localhost') {
+    const { addUpstream } = require('./nginxUpstreamManager');
+    addUpstream(vncPort, dockerHost.publicIp).catch(err => {
+      logger.error(`Failed to update Nginx upstream for port ${vncPort}: ${err.message}`);
+    });
+  }
+
   // Update training mapping
   const existing = await Training.findOne({ name: trainingName, organization });
   if (existing) {
@@ -586,6 +614,13 @@ async function deleteContainer(containerId) {
     await removeContainerFromHost(doc.dockerHostId, containerId, doc.memory || 2048);
   }
   if (doc) {
+    // Remove Nginx upstream mapping if this was a remote container
+    if (doc.dockerHostIp && doc.dockerHostIp !== 'localhost') {
+      const { removeUpstream } = require('./nginxUpstreamManager');
+      removeUpstream(doc.vncPort).catch(err => {
+        logger.error(`Failed to remove Nginx upstream for port ${doc.vncPort}: ${err.message}`);
+      });
+    }
     doc.isAlive = false;
     doc.isRunning = false;
     doc.remarks = 'Deleted';
@@ -611,6 +646,8 @@ function getAvailableImages() {
     os: val.os,
     image: val.image,
     category: val.category || 'desktop',
+    description: val.description || null,
+    screenshotUrl: val.screenshotUrl || null,
   }));
 }
 

@@ -3,7 +3,9 @@
   "version": "3.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "Krishan",
   "license": "ISC",
@@ -46,5 +48,9 @@
     "react-day-picker": "^9.4.4",
     "react-toastify": "^10.0.4",
     "winston": "^3.13.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.0"
   }
 }
