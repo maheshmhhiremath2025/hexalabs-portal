@@ -390,10 +390,7 @@ export default function AroCluster() {
                       <span>{cluster.region}</span>
                       <span>{cluster.workerNodes || 3} nodes</span>
                       <span>v{cluster.version || '4.16'}</span>
-                      <span>INR {formatINR(clusterCostHr)}/hr</span>
-                      {cluster.totalCostInr != null && cluster.totalCostInr > 0 && (
-                        <span className="text-amber-600 font-medium">Running total: INR {formatINR(cluster.totalCostInr)}</span>
-                      )}
+                      {/* Pricing hidden — internal only, not for customer-facing demos */}
                       <span>{formatCountdown(cluster.expiresAt)}</span>
                       {students.length > 0 && (
                         <span className="flex items-center gap-1"><FaUsers className="w-3 h-3" /> {students.length} students</span>
