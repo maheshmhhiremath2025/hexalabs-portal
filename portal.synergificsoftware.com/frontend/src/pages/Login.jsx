@@ -290,7 +290,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5, duration: 0.8 }}
-                className="mt-10 flex items-center gap-4"
+                className="mt-10"
               >
                 <a
                   href="mailto:itops@synergificsoftware.com?subject=Demo%20request%20-%20Synergific%20Cloud%20Portal&body=Hi%20team%2C%0A%0AI%27d%20like%20to%20see%20a%20demo%20of%20Synergific%20Cloud%20Portal%20for%20our%20training%20delivery%20needs.%0A%0ACompany%3A%20%0AExpected%20batch%20size%3A%20%0APreferred%20time%3A%20%0A%0AThanks!"
@@ -299,37 +299,11 @@ const Login = ({ onLogin, apiRoutes }) => {
                   Book a demo
                   <FaArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                 </a>
-                <a
-                  href="#features"
-                  onClick={(e) => { e.preventDefault(); document.getElementById('features-grid')?.scrollIntoView({ behavior: 'smooth' }); }}
-                  className="text-slate-300 hover:text-white font-semibold text-sm tracking-tight transition-colors"
-                >
-                  See capabilities →
-                </a>
-              </motion.div>
-
-              {/* Social-proof placeholder — once a few customers give logo
-                  permission, replace the text with <img> tags. Until then,
-                  honest text: "trusted by training partners across India". */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.9, duration: 1 }}
-                className="mt-8 flex items-center gap-3 text-xs text-slate-500"
-              >
-                <div className="flex -space-x-1">
-                  {[0, 1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-6 w-6 rounded-full border-2 border-slate-900 bg-gradient-to-br from-blue-500/40 to-emerald-500/40 flex items-center justify-center text-[9px] font-bold text-white/70">
-                      {'SCPMK'[i]}
-                    </div>
-                  ))}
-                </div>
-                <span>Trusted by training partners running cloud certification batches across India.</span>
               </motion.div>
             </div>
 
             {/* Feature grid */}
-            <div id="features-grid" className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <FeatureCard icon={FaBolt}       title="Instant Provisioning" desc="Workspaces in seconds, VMs in minutes. No tickets, no waiting." delay={0.5} />
               <FeatureCard icon={FaGlobe}      title="Multi-Cloud"          desc="AWS, Azure, GCP, OCI, and Red Hat OpenShift from one interface." delay={0.6} />
               <FeatureCard icon={FaMicrochip}  title="Cost Guardrails"      desc="Quotas, idle auto-shutdown, expiry cleanup, budget caps — built in." delay={0.7} />
