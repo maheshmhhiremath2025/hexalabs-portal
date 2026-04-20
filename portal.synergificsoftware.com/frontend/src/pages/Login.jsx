@@ -308,8 +308,10 @@ const Login = ({ onLogin, apiRoutes }) => {
             </div>
           </div>
 
-          {/* Stats strip */}
-          <div className="relative z-10 grid grid-cols-4 gap-8 bg-white/[0.02] backdrop-blur-2xl rounded-[2rem] p-8 border border-white/10 shadow-inner">
+          {/* Stats strip — mt-10 ensures breathing room above so the card
+              doesn't touch the feature grid on shorter screens (justify-
+              between can collapse the gap when vertical space is tight). */}
+          <div className="relative z-10 grid grid-cols-4 gap-8 bg-white/[0.02] backdrop-blur-2xl rounded-[2rem] p-8 border border-white/10 shadow-inner mt-10">
             <StatBox label="Clouds"      value="5"     delay={0.9} />
             <StatBox label="Lab Images"  value="103+"  delay={1.0} />
             <StatBox label="Deploy Time" value="< 3s"  delay={1.1} />
@@ -317,7 +319,7 @@ const Login = ({ onLogin, apiRoutes }) => {
           </div>
 
           {/* Footer */}
-          <div className="relative z-10 flex items-center justify-between border-t border-white/5 pt-6 text-slate-500 text-[10px]"
+          <div className="relative z-10 flex items-center justify-between border-t border-white/5 pt-6 mt-6 text-slate-500 text-[10px]"
             style={{ fontFamily: "'JetBrains Mono', monospace" }}>
             <p className="tracking-[0.2em] uppercase">Synergific Software Pvt Ltd</p>
             <div className="flex items-center gap-6 font-bold uppercase tracking-[0.2em]">
