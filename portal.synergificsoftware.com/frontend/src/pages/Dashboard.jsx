@@ -108,7 +108,8 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
     // System health
     systemStatus: 'healthy',
     pendingActions: 0,
-    storageUsage: 0,
+    labDensity: 0,
+    storageEstimateGB: 0,
   });
 
   const [loading, setLoading] = useState(true);
@@ -146,7 +147,8 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
         completedTrainings: d.invoicePending || 0,
         systemStatus: 'healthy',
         pendingActions: (d.azureQuotaExceeded || 0) + (d.gcpQuotaExceeded || 0),
-        storageUsage: Math.min(95, Math.round(activeVMs * 3.5)), // rough estimate
+        labDensity: Math.min(95, Math.round(activeVMs * 3.5)), // relative load bar — not storage
+        storageEstimateGB: d.storage?.estimateGB || 0,
       });
 
       // Fetch AWS user count separately (lightweight)
@@ -300,14 +302,25 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
               <div className="h-full bg-emerald-500 rounded-full" style={{ width: '70%' }} />
             </div>
 
-            {/* Storage */}
+            {/* Lab density — relative platform load, NOT storage */}
             <div className="flex items-center justify-between mt-4">
-              <div className="text-xs text-gray-500">Storage usage</div>
-              <div className={`text-xs font-semibold ${data.storageUsage > 85 ? 'text-rose-600' : 'text-gray-900'}`}>{data.storageUsage}%</div>
+              <div className="text-xs text-gray-500" title="Active labs relative to notional platform capacity">Lab density</div>
+              <div className={`text-xs font-semibold ${data.labDensity > 85 ? 'text-rose-600' : 'text-gray-900'}`}>{data.labDensity}%</div>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${data.storageUsage > 85 ? 'bg-rose-500' : data.storageUsage > 70 ? 'bg-amber-500' : 'bg-blue-500'}`} style={{ width: `${data.storageUsage}%` }} />
+              <div className={`h-full rounded-full ${data.labDensity > 85 ? 'bg-rose-500' : data.labDensity > 70 ? 'bg-amber-500' : 'bg-blue-500'}`} style={{ width: `${data.labDensity}%` }} />
             </div>
+
+            {/* Storage allocated — rough Azure managed-disk footprint */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-xs text-gray-500" title="Estimated disk footprint — Windows VMs × 127GB + Linux × 30GB + templates × 40GB">Storage allocated</div>
+              <div className="text-xs font-semibold text-gray-900 tabular-nums">
+                {data.storageEstimateGB >= 1024
+                  ? `${(data.storageEstimateGB / 1024).toFixed(2)} TB`
+                  : `${data.storageEstimateGB} GB`}
+              </div>
+            </div>
+            <div className="text-[10px] text-gray-400 -mt-1">Estimate · Azure managed disks + template snapshots</div>
 
             {/* Quick metrics */}
             <div className="grid grid-cols-2 gap-3 pt-4 mt-4 border-t border-gray-100">

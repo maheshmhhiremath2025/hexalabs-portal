@@ -44,6 +44,21 @@ async function handleDashboardFunction(req, res) {
     // Ensure uniqueTrainingCount is properly initialized
     const uniqueTrainingCount = gcpTraining.length > 0 ? gcpTraining[0].uniqueTrainingCount : 0;
 
+    // Rough storage estimate — Azure managed-disk footprint for alive VMs plus
+    // captured template snapshots. Defaults: Windows OS disk 127 GiB,
+    // Linux 30 GiB, template snapshot 40 GiB. No Azure API calls; gives
+    // superadmin a realistic TB figure on the dashboard.
+    const osBuckets = await VM.aggregate([
+      { $match: { isAlive: true } },
+      { $group: { _id: { $toLower: { $ifNull: ['$os', 'linux'] } }, count: { $sum: 1 } } },
+    ]);
+    let windowsVms = 0, linuxVms = 0;
+    for (const b of osBuckets) {
+      if (String(b._id).startsWith('win')) windowsVms += b.count;
+      else linuxVms += b.count;
+    }
+    const storageEstimateGB = windowsVms * 127 + linuxVms * 30 + templates * 40;
+
     // Send the JSON response
     res.json({
       organization: organization,
@@ -55,7 +70,13 @@ async function handleDashboardFunction(req, res) {
       invoicePending: invoicePending,
       azureQuotaExceeded: azureQuotaExceeded,
       projects: projects,
-      gcpQuotaExceeded: gcpQuotaExceeded
+      gcpQuotaExceeded: gcpQuotaExceeded,
+      storage: {
+        estimateGB: storageEstimateGB,
+        windowsVms,
+        linuxVms,
+        templates,
+      },
     });
   } catch (error) {
     console.error('Error in handleDashboardFunction:', error);
