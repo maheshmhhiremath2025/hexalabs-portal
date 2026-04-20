@@ -140,7 +140,8 @@ function PowerScheduleTab({ pushToast }) {
   };
 
   const deleteSchedule = async (s) => {
-    if (!window.confirm(`Delete this ${s.action} schedule for ${new Date(s.date).toLocaleDateString()} ${s.time}?`)) return;
+    const label = (String(s.action || '').toLowerCase() === 'start' || String(s.action || '').toLowerCase() === 'power on') ? 'start' : 'stop';
+    if (!window.confirm(`Delete this ${label} schedule for ${new Date(s.date).toLocaleDateString()} ${s.time}?`)) return;
     try {
       await apiCaller.delete(apiRoutes.schedulesApi, {
         params: { scheduleId: s._id, trainingName: selectedTraining },
@@ -153,6 +154,7 @@ function PowerScheduleTab({ pushToast }) {
   const toggleVM = (v) => setSelectedVMs(arr => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const isStartAction = a => { const v = String(a || '').toLowerCase(); return v === 'start' || v === 'power on' || v === 'poweron'; };
   const sorted = [...schedules].sort((a, b) => new Date(a.date) - new Date(b.date));
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -321,10 +323,10 @@ function PowerScheduleTab({ pushToast }) {
                     <tr key={s._id} className="hover:bg-gray-50/50">
                       <td className="px-4 py-2.5">
                         <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          s.action === 'start' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                          isStartAction(s.action) ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                         }`}>
-                          {s.action === 'start' ? <FaPlay className="w-2.5 h-2.5" /> : <FaStop className="w-2.5 h-2.5" />}
-                          {s.action === 'start' ? 'Start' : 'Stop'}
+                          {isStartAction(s.action) ? <FaPlay className="w-2.5 h-2.5" /> : <FaStop className="w-2.5 h-2.5" />}
+                          {isStartAction(s.action) ? 'Start' : 'Stop'}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-700 tabular-nums text-xs">{fmtDate(s.date)}</td>
