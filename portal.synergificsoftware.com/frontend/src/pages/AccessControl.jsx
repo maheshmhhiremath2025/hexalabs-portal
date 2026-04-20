@@ -54,6 +54,8 @@ export default function AccessControl() {
   const [loadingList, setLoadingList] = useState(false);
   const [suggestions, setSuggestions] = useState({ emails: [], organizations: [], trainings: [] });
   const [showSuggest, setShowSuggest] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const pushToast = (msg, type = 'success') => setToast({ message: msg, type, id: Date.now() });
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
@@ -128,6 +130,11 @@ export default function AccessControl() {
 
   const fmtDays = (arr) => (arr || []).map(d => DAY_LABELS[d]?.label).join(', ') || '—';
   const fmtDate = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+  const totalPages = Math.max(1, Math.ceil(restrictedUsers.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedUsers = restrictedUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -286,7 +293,7 @@ export default function AccessControl() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {restrictedUsers.map(u => (
+                {pagedUsers.map(u => (
                   <tr key={u.email} className="hover:bg-gray-50/50">
                     <td className="px-4 py-2.5 font-medium text-gray-800 truncate max-w-[220px]" title={u.email}>{u.email}</td>
                     <td className="px-4 py-2.5 text-gray-600 text-xs">{u.organization || '—'}</td>
@@ -305,6 +312,31 @@ export default function AccessControl() {
                 ))}
               </tbody>
             </table>
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-600">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing <span className="font-semibold">{(safePage - 1) * pageSize + 1}</span>–
+                  <span className="font-semibold">{Math.min(safePage * pageSize, restrictedUsers.length)}</span>{' '}
+                  of <span className="font-semibold">{restrictedUsers.length}</span>
+                </span>
+                <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                  {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(1)} disabled={safePage === 1}
+                  className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">« First</button>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                  className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">‹ Prev</button>
+                <span className="px-2 py-1 font-semibold text-gray-700">Page {safePage} / {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+                  className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Next ›</button>
+                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}
+                  className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Last »</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
