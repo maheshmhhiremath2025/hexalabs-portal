@@ -244,19 +244,17 @@ router.post('/browser-access', async (req, res) => {
       });
     }
 
-    // For Linux VMs with xrdp installed, override to RDP so Guacamole
-    // opens the graphical desktop (XFCE) instead of a bare SSH terminal.
+    // For Linux VMs with xrdp installed, pass the xrdp flag so the
+    // Guacamole service picks RDP (security='rdp', port 3389) and opens
+    // the XFCE desktop instead of a bare SSH terminal.
     const VM = require('../models/vm');
     const vmDoc = await VM.findOne({ name: vmName }, 'hasXrdp').lean();
-    const osEffective = vmDoc?.hasXrdp ? 'windows' : os; // spoof so service picks RDP path
-    const portEffective = vmDoc?.hasXrdp ? '3389' : (vncPort || 6901);
 
     const result = await getVmAccessUrl({
-      vmName, publicIp, adminUsername, adminPassword,
-      os: osEffective,
+      vmName, publicIp, adminUsername, adminPassword, os,
       useVnc: useVnc || false,
-      vncPort: portEffective,
-      port: portEffective,
+      vncPort: vncPort || 6901,
+      xrdp: !!vmDoc?.hasXrdp,
     });
     res.json(result);
   } catch (err) {

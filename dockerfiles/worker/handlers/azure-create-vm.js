@@ -30,6 +30,7 @@ const handler = async (job) => {
         os: data.template.os,
         publicIp: createdVm.publicIpAddress,
         vmName: createdVm.vmName,
+        hasXrdp: !!data.hasXrdp,
       });
       logger.info(`Guacamole integration initiated for VM ${data.vmName}`, data.template.os);
     }
@@ -44,6 +45,7 @@ const handler = async (job) => {
       isRunning: true,
       guacamole: data.guacamole,
       kasmVnc: !!data.kasmVnc,
+      hasXrdp: !!data.hasXrdp,
       os: data.template.os,
       trainingName: trainingName,
       email: data.email,

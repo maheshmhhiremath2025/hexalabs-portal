@@ -1,229 +1,114 @@
-const mysql = require('mysql2');
-const { Client } = require('ssh2');
+// Guacamole registration — creates Guacamole connection(s) for a VM.
+//
+// Policy: for every VM, register ALWAYS-available access paths so the
+// customer never sees "connection not found" in Guacamole's sidebar.
+//
+//   Windows: one connection <vmName>            (RDP, NLA security)
+//   Linux  : one connection <vmName>            (SSH terminal — default)
+//            one connection <vmName>-desktop    (RDP via xrdp, security=rdp)
+//              *only if* data.hasXrdp === true (so existing templates
+//              without xrdp installed don't show a broken connection).
+//
+// "Open in browser" in the portal picks the right one based on vm.hasXrdp
+// (see routes/azure.js /azure/browser-access handler).
+
+const axios = require('axios');
+const { logger } = require('./../plugins/logger');
+
+const GUAC_URL = process.env.GUACAMOLE_URL || 'https://labs.synergificsoftware.com';
+const GUAC_USER = process.env.GUACAMOLE_ADMIN_USER || 'guacadmin';
+const GUAC_PASS = process.env.GUACAMOLE_ADMIN_PASS || 'guacadmin';
+
+async function getToken() {
+  const res = await axios.post(`${GUAC_URL}/api/tokens`,
+    `username=${encodeURIComponent(GUAC_USER)}&password=${encodeURIComponent(GUAC_PASS)}`,
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
+  return res.data.authToken;
+}
+
+function rdpParams({ publicIp, adminUsername, adminPassword, security = 'nla' }) {
+  return {
+    hostname: publicIp, port: '3389',
+    username: adminUsername, password: adminPassword,
+    security, 'ignore-cert': 'true',
+    'color-depth': '32',
+    'resize-method': 'display-update',
+    'enable-wallpaper': 'false',
+    'enable-theming': 'false',
+    'enable-font-smoothing': 'true',
+    'enable-full-window-drag': 'false',
+    'enable-desktop-composition': 'false',
+    'enable-menu-animations': 'false',
+    'disable-bitmap-caching': 'false',
+    'disable-offscreen-caching': 'false',
+    'disable-glyph-caching': 'false',
+    'enable-audio': 'false',
+    'enable-audio-input': 'false',
+    'enable-printing': 'false',
+    'enable-drive': 'false',
+    'timezone': 'Asia/Kolkata',
+  };
+}
+
+function sshParams({ publicIp, adminUsername, adminPassword }) {
+  return {
+    hostname: publicIp, port: '22',
+    username: adminUsername, password: adminPassword,
+    'color-scheme': 'gray-black',
+    'font-size': '14',
+    'font-name': 'monospace',
+    'scrollback': '2000',
+    'terminal-type': 'xterm-256color',
+    'timezone': 'Asia/Kolkata',
+  };
+}
+
+async function upsertConnection(token, name, protocol, parameters) {
+  const conns = (await axios.get(`${GUAC_URL}/api/session/data/mysql/connections?token=${token}`)).data;
+  let id = null;
+  for (const [cid, c] of Object.entries(conns)) {
+    if (c.name === name) { id = cid; break; }
+  }
+  const body = {
+    parentIdentifier: 'ROOT', name, protocol, parameters,
+    attributes: { 'max-connections': '5', 'max-connections-per-user': '5' },
+  };
+  if (id) {
+    await axios.put(`${GUAC_URL}/api/session/data/mysql/connections/${id}?token=${token}`,
+      { ...body, identifier: id });
+    logger.info(`Guac upserted ${name} (${protocol}) → ${id} (updated)`);
+    return id;
+  }
+  const res = await axios.post(`${GUAC_URL}/api/session/data/mysql/connections?token=${token}`, body);
+  logger.info(`Guac upserted ${name} (${protocol}) → ${res.data.identifier} (created)`);
+  return res.data.identifier;
+}
 
 const handler = async (job) => {
+  const { adminUsername, adminPassword, os, publicIp, vmName, hasXrdp } = job.data;
+  const isWindows = (os || '').toLowerCase().includes('windows');
+
   try {
-    const { adminUsername, adminPassword, os, publicIp, vmName } = job.data;
-      const publicIpAddress = publicIp
-      const machine_type = os
-    const staticUsername = adminUsername;
+    const token = await getToken();
 
-    // Additional parameters
-    const usernameParam = staticUsername;
-    const connectionProtocol = machine_type === 'Windows' ? 'rdp' : 'ssh';
-    const connectionHostname = publicIpAddress;
-    const connectionPort = machine_type === 'Windows' ? '3389' : '22';
-    const passwordParam = adminPassword;
-    const security = 'any';
-    const ignoreCert = 'true';
-    const colorDepth = 32;
-    const enableWallpaper = 'true';
+    if (isWindows) {
+      await upsertConnection(token, vmName, 'rdp',
+        rdpParams({ publicIp, adminUsername, adminPassword, security: 'nla' }));
+    } else {
+      await upsertConnection(token, vmName, 'ssh',
+        sshParams({ publicIp, adminUsername, adminPassword }));
+      if (hasXrdp) {
+        await upsertConnection(token, `${vmName}-desktop`, 'rdp',
+          rdpParams({ publicIp, adminUsername, adminPassword, security: 'rdp' }));
+      }
+    }
 
-    // Set up database server configuration
-    const dbServer = {
-        host: '127.0.0.1',
-        user: 'root',
-        password: 'asdf',
-        database: 'guacamole_db',
-        port: 3306
-    };
-
-    // Set up SSH tunnel configuration
-    const tunnelConfig = {
-        host: '74.224.126.48',
-        port: 22,
-        username: 'guacamole',
-        password: 'Welcome1234!'
-    };
-
-    // Set up port forwarding configuration
-    const forwardConfig = {
-        srcHost: '127.0.0.1',
-        srcPort: 3306,
-        dstHost: dbServer.host,
-        dstPort: dbServer.port
-    };
-
-    // Create an SSH client
-    const sshClient = new Client();
-
-    const SSHConnection = new Promise((resolve, reject) => {
-        sshClient.on('ready', () => {
-            sshClient.forwardOut(
-                forwardConfig.srcHost,
-                forwardConfig.srcPort,
-                forwardConfig.dstHost,
-                forwardConfig.dstPort,
-                (err, stream) => {
-                    if (err) {
-                        console.error('Error establishing SSH connection:', err);
-                        reject('Error establishing SSH connection');
-                        return;
-                    }
-
-                    const updatedDbServer = {
-                        ...dbServer,
-                        stream
-                    };
-
-                    const connection = mysql.createConnection(updatedDbServer);
-
-                    connection.connect((error) => {
-                        if (error) {
-                            console.error('Error connecting to MySQL:', error);
-                            reject('Error connecting to MySQL');
-                            return;
-                        }
-
-                        // Insert data into guacamole_entity table
-                        const insertQuery = 'INSERT INTO guacamole_entity (name, type) VALUES (?, "USER")';
-                        const values = [vmName];
-
-                        connection.query(insertQuery, values, (insertError, insertResults) => {
-                            // Even if the insert query fails, proceed to the SELECT query
-                            const selectQuery = 'SELECT entity_id FROM guacamole_entity WHERE name = ?';
-
-                            connection.query(selectQuery, [vmName], (selectError, selectResults) => {
-
-                                const entityId = selectResults[0]?.entity_id;
-
-                                // Proceed to the third query to insert data into guacamole_user
-
-                                const insertUserQuery = `
-                                INSERT INTO guacamole_user 
-                                (entity_id, password_hash, password_salt, password_date, disabled, expired, timezone, full_name, email_address) 
-                                VALUES (?, UNHEX(SHA2(?, 256)), NULL, NOW(), 0, 0, NULL, NULL, NULL)`;
-
-                                const userValues = [
-                                    entityId, // entity_id
-                                    adminPassword, // password_hash
-                                ];
-
-                                connection.query(insertUserQuery, userValues, (userInsertError, userInsertResults) => {
-                                   
-
-                                    const connectionName = `${vmName} (${connectionProtocol})`;
-                                    const insertConnectionQuery = `
-                                        INSERT INTO guacamole_connection (protocol, connection_name) 
-                                        VALUES (?, ?)
-                                    `;
-
-                                    const connectionValues = [connectionProtocol, connectionName];
-
-                                    connection.query(insertConnectionQuery, connectionValues, (connectionInsertError, connectionInsertResults) => {
-                                     
-                                        // Retrieve the connection_id
-                                     
-                                        const selectConnectionIdQuery = 'SELECT connection_id FROM guacamole_connection WHERE connection_name = ?';
-
-                                        connection.query(selectConnectionIdQuery, [connectionName], (selectConnectionIdError, selectConnectionIdResults) => {
-                                           
-
-                                            const connectionId = selectConnectionIdResults[0]?.connection_id;
-                                     
-                                            const insertConnectionParameterQuery = `
-                                                INSERT INTO guacamole_connection_parameter 
-                                                (connection_id, parameter_name, parameter_value) 
-                                                VALUES (?, 'hostname', ?), (?, 'port', ?), (?, 'username', ?), (?, 'password', ?), (?, 'security', ?), (?, 'ignore-cert', ?), (?, 'color-depth', ?), (?, 'enable-wallpaper', ?);
-                                            `;
-
-                                            const connectionParameterValues = [
-                                                connectionId, connectionHostname, connectionId, connectionPort,
-                                                connectionId, usernameParam, connectionId, passwordParam,
-                                                connectionId, security, connectionId, ignoreCert,
-                                                connectionId, colorDepth, connectionId, enableWallpaper
-                                            ];
-
-                                            connection.query(insertConnectionParameterQuery, connectionParameterValues, (connectionParameterInsertError, connectionParameterInsertResults) => {
-                            
-                                                // Proceed to the final query to insert data into guacamole_connection_permission
-                            
-                                                const insertConnectionPermissionQuery = `
-                                                    INSERT INTO guacamole_connection_permission 
-                                                    (entity_id, connection_id, permission) 
-                                                    VALUES (?, ?, 'READ');
-                                                `;
-
-                                                const connectionPermissionValues = [entityId, connectionId];
-
-                                                connection.query(insertConnectionPermissionQuery, connectionPermissionValues, (connectionPermissionInsertError, connectionPermissionInsertResults) => {
-        
-                                                    if (machine_type === "Linux") {
-                                                    
-                                                        const connectionName2 = `${vmName} (rdp)`;
-                                                        const insertConnectionQuery = `
-                                                            INSERT INTO guacamole_connection (protocol, connection_name) 
-                                                            VALUES (?, ?)
-                                                        `;
-                                                    
-                                                        const connectionValues = ["rdp", connectionName2];
-                                                    
-                                                        connection.query(insertConnectionQuery, connectionValues, (connectionInsertError, connectionInsertResults) => {
-                                                    
-                                                            // Retrieve the connection_id
-                                                    
-                                                            const selectConnectionIdQuery = 'SELECT connection_id FROM guacamole_connection WHERE connection_name = ?';
-                                                    
-                                                            connection.query(selectConnectionIdQuery, [connectionName2], (selectConnectionIdError, selectConnectionIdResults) => {
-                                                               
-                                                                const connectionId = selectConnectionIdResults[0]?.connection_id;
-                                                        
-                                                                const insertConnectionParameterQuery = `
-                                                                    INSERT INTO guacamole_connection_parameter 
-                                                                    (connection_id, parameter_name, parameter_value) 
-                                                                    VALUES (?, 'hostname', ?), (?, 'port', ?), (?, 'username', ?), (?, 'password', ?), (?, 'security', ?), (?, 'ignore-cert', ?), (?, 'color-depth', ?), (?, 'enable-wallpaper', ?);
-                                                                `;
-                                                    
-                                                                const connectionParameterValues = [
-                                                                    connectionId, connectionHostname, connectionId, "3389",
-                                                                    connectionId, usernameParam, connectionId, passwordParam,
-                                                                    connectionId, security, connectionId, ignoreCert,
-                                                                    connectionId, colorDepth, connectionId, enableWallpaper
-                                                                ];
-                                                    
-                                                                connection.query(insertConnectionParameterQuery, connectionParameterValues, (connectionParameterInsertError, connectionParameterInsertResults) => {
-                                                    
-                                                                    const insertConnectionPermissionQuery = `
-                                                                        INSERT INTO guacamole_connection_permission 
-                                                                        (entity_id, connection_id, permission) 
-                                                                        VALUES (?, ?, 'READ');
-                                                                    `;
-                                                    
-                                                                    const connectionPermissionValues = [entityId, connectionId];
-                                                    
-                                                                    connection.query(insertConnectionPermissionQuery, connectionPermissionValues, (connectionPermissionInsertError, connectionPermissionInsertResults) => {
-                                                                        connection.end();
-                                                                        resolve('Connection and insert completed successfully.');
-                                                                    });
-                                                                });
-                                                            });
-                                                        });
-                                                    }
-                                                    else {
-                                                        // Close the connection even if the condition is not met
-                                                        connection.end();
-                                                        resolve('Connection closed successfully.');
-                                                    }
-                                                    
-                                                });
-                                            });
-                                        });
-                                    });
-                                });
-                            });
-                        });
-                    });
-                });
-        }).connect(tunnelConfig);
-    });
-
-    return SSHConnection.catch((error) => {
-      console.error('Unhandled error during SSH or DB operations:', error);
-      return 'Operation completed with errors.';
-    });
+    logger.info(`Guacamole setup complete for ${vmName} (os=${os}, hasXrdp=${!!hasXrdp})`);
+    return `OK`;
   } catch (err) {
-    console.error('Unhandled error in handler:', err);
-    throw err;
+    logger.error(`Guacamole add error for ${vmName}: ${err.response?.data?.message || err.message}`);
+    return `Guacamole setup failed: ${err.message}`;
   }
 };
 

@@ -39,6 +39,13 @@ const templatesSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // When true, the captured image has xrdp + XFCE installed. Worker
+  // registers an extra <vmName>-desktop RDP connection in Guacamole
+  // and the "Open in browser" flow routes to it instead of plain SSH.
+  hasXrdp: {
+    type: Boolean,
+    default: false,
+  },
   creation: {
     type: creationSchema,
     required: true,

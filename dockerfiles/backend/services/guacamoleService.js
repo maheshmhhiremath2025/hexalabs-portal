@@ -11,56 +11,83 @@ const GUAC_PASS = process.env.GUACAMOLE_ADMIN_PASS || 'guacadmin';
 let authToken = null;
 let tokenExpiry = 0;
 
-async function getToken() {
-  if (authToken && Date.now() < tokenExpiry) return authToken;
+async function getToken(forceRefresh = false) {
+  if (!forceRefresh && authToken && Date.now() < tokenExpiry) return authToken;
+  // Always get a fresh token
+  authToken = null;
+  tokenExpiry = 0;
   const res = await axios.post(`${GUAC_API_URL}/api/tokens`,
-    `username=${GUAC_USER}&password=${GUAC_PASS}`,
+    `username=${encodeURIComponent(GUAC_USER)}&password=${encodeURIComponent(GUAC_PASS)}`,
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   authToken = res.data.authToken;
-  tokenExpiry = Date.now() + 10 * 60 * 1000;
+  tokenExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache (safer than 10)
   return authToken;
+}
+
+// Wrapper to auto-retry on 403 with fresh token
+async function guacApiCall(fn) {
+  try {
+    return await fn(await getToken());
+  } catch (err) {
+    if (err.response?.status === 403) {
+      logger.warn('Guacamole token expired — refreshing and retrying...');
+      return await fn(await getToken(true));
+    }
+    throw err;
+  }
 }
 
 /**
  * Performance-optimized RDP parameters for Windows VMs.
  * These reduce bandwidth by 50-70% and improve perceived speed.
  */
-function getRdpParams(publicIp, adminUsername, adminPassword, port) {
+function getRdpParams(publicIp, adminUsername, adminPassword, port, opts = {}) {
+  // xrdp (Linux desktop) doesn't support NLA out of the box — must use
+  // 'rdp' security. Windows servers always support NLA and prefer it.
+  const security = opts.xrdp ? 'rdp' : 'nla';
   return {
     // Connection
     hostname: publicIp,
     port: port || '3389',
     username: adminUsername,
     password: adminPassword,
-    security: 'any',
+    security,
     'ignore-cert': 'true',
 
-    // === PERFORMANCE TUNING ===
-    // Color depth: 16-bit instead of 32-bit — halves bandwidth
+    // === AGGRESSIVE PERFORMANCE TUNING ===
+
+    // Color depth: 16-bit — halves bandwidth vs 32-bit
     'color-depth': '16',
 
-    // Resize: reconnect is heavier but smoother than display-update
+    // Resize method: display-update avoids full reconnects
     'resize-method': 'display-update',
 
-    // Disable visual fluff — each one saves bandwidth
+    // Disable ALL visual effects — massive bandwidth savings
     'enable-wallpaper': 'false',
     'enable-theming': 'false',
-    'enable-font-smoothing': 'false',       // Big bandwidth saver
+    'enable-font-smoothing': 'false',
     'enable-full-window-drag': 'false',
-    'enable-desktop-composition': 'false',  // Disables Aero/transparency
+    'enable-desktop-composition': 'false',
     'enable-menu-animations': 'false',
-    'disable-bitmap-caching': 'false',      // Keep caching ON (false = don't disable)
 
-    // Compression: use JPEG for lossy areas (photos, videos)
+    // Bitmap caching — KEEP ON (reduces repeated pixel transfers)
+    'disable-bitmap-caching': 'false',
+    'disable-offscreen-caching': 'false',
+    'disable-glyph-caching': 'false',
+
+    // Disable unused features — reduces overhead
     'enable-drive': 'false',
     'enable-printing': 'false',
-    'enable-audio': 'false',                // Disable audio redirection
-
-    // WebSocket: force WebSocket for lower latency (no HTTP polling)
+    'enable-audio': 'false',
+    'enable-audio-input': 'false',
     'wol-send-packet': 'false',
 
-    // Clipboard
+    // Force RDP compression + performance flags
+    'create-recording-path': 'false',
+    'force-lossless': 'false',
+
+    // Clipboard — keep enabled
     'disable-copy': 'false',
     'disable-paste': 'false',
 
@@ -121,22 +148,20 @@ function getVncParams(publicIp, adminPassword, port) {
  * Create a Guacamole connection for a VM.
  * Auto-detects best protocol: VNC (KasmVNC) > RDP (Windows) > SSH (Linux fallback)
  */
-async function createVmConnection({ vmName, publicIp, adminUsername, adminPassword, os, port, useVnc = false, vncPort }) {
-  const token = await getToken();
+async function createVmConnection({ vmName, publicIp, adminUsername, adminPassword, os, port, useVnc = false, vncPort, xrdp = false }) {
   const isWindows = (os || '').toLowerCase().includes('windows');
 
   let protocol, parameters;
 
   if (useVnc && !isWindows) {
-    // KasmVNC — best performance for Linux GUI
     protocol = 'vnc';
     parameters = getVncParams(publicIp, adminPassword, vncPort || port || '5901');
-  } else if (isWindows) {
-    // RDP — only option for Windows, but heavily tuned
+  } else if (isWindows || xrdp) {
+    // Windows = native RDP (NLA). Linux with xrdp installed = RDP but
+    // security='rdp' (xrdp doesn't support NLA).
     protocol = 'rdp';
-    parameters = getRdpParams(publicIp, adminUsername, adminPassword, port);
+    parameters = getRdpParams(publicIp, adminUsername, adminPassword, port || (xrdp ? '3389' : undefined), { xrdp });
   } else {
-    // SSH — fallback for Linux without VNC
     protocol = 'ssh';
     parameters = getSshParams(publicIp, adminUsername, adminPassword, port);
   }
@@ -157,9 +182,21 @@ async function createVmConnection({ vmName, publicIp, adminUsername, adminPasswo
   };
 
   try {
+    // Use guacApiCall for auto-retry on 403
+    return await guacApiCall(async (token) => {
     // Check if connection already exists (reuse it)
     const existing = await findExistingConnection(token, vmName);
     if (existing) {
+      // Update connection parameters (IP may have changed after restart)
+      try {
+        await axios.put(
+          `${GUAC_API_URL}/api/session/data/mysql/connections/${existing}?token=${token}`,
+          { ...connection, identifier: existing }
+        );
+        logger.info(`Guacamole connection updated: ${vmName} (${protocol}) → ${existing}`);
+      } catch (updateErr) {
+        logger.warn(`Failed to update connection ${existing}: ${updateErr.message}`);
+      }
       const clientId = Buffer.from(`${existing}\0c\0mysql`).toString('base64');
       return {
         connectionId: existing,
@@ -183,6 +220,7 @@ async function createVmConnection({ vmName, publicIp, adminUsername, adminPasswo
     logger.info(`Guacamole connection created: ${vmName} (${protocol}) → ${connectionId}`);
 
     return { connectionId, accessUrl, protocol };
+    }); // close guacApiCall
   } catch (err) {
     logger.error(`Failed to create Guacamole connection for ${vmName}: ${err.response?.data?.message || err.message}`);
     throw err;
@@ -237,8 +275,8 @@ async function grantConnectionAccess(email, connectionId) {
   }
 }
 
-async function getVmAccessUrl({ vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort }) {
-  return createVmConnection({ vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort });
+async function getVmAccessUrl({ vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort, xrdp }) {
+  return createVmConnection({ vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort, xrdp });
 }
 
 /**
