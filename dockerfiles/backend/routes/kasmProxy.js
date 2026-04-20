@@ -86,7 +86,7 @@ router.use(createProxyMiddleware({
   },
   on: {
     proxyReq: (proxyReq, req) => {
-      const vmName = parseVmName(req.url);
+      const vmName = parseVmName(req.url) || parseVmName(req.originalUrl);
       const cached = vmName && upstreamCache.get(vmName);
       if (cached?.authHeader) proxyReq.setHeader('Authorization', cached.authHeader);
       // Force Connection:close ONLY for non-upgrade requests to avoid
