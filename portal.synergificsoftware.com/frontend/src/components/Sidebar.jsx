@@ -172,20 +172,6 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
             </Accordion>
           )}
 
-          {/* Maintenance — admin actions: networking, scheduling, access control,
-              destructive ops. Grouped to keep them out of the way. */}
-          {(userType === 'admin' || userType === 'superadmin') && (
-            <Accordion id="maintenance" icon={FaCog} label="Maintenance" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
-              <NavItem to="/vm/ports" icon={FaNetworkWired} label="Networking" collapsed={false} />
-              {userType === 'superadmin' && (
-                <>
-                  <NavItem to="/vm/quota" icon={FaQuota} label="Quotas" collapsed={false} />
-                  <NavItem to="/vm/deletelogs" icon={FaTrashAlt} label="Purge Logs" collapsed={false} />
-                  <NavItem to="/vm/deletetraining" icon={FaStopCircle} label="End Batch" collapsed={false} />
-                </>
-              )}
-            </Accordion>
-          )}
           </>
         )}
 
@@ -222,12 +208,24 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
           </Accordion>
         )}
 
-        {userType === 'superadmin' && (
+        {(userType === 'admin' || userType === 'superadmin') && (
           <Accordion id="admin" icon={FaShieldAlt} label="Administration" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
-            <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={false} />
-            <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={false} />
-            <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={false} />
-            <NavItem to="/overview" icon={FaSuperscript} label="Admin Center" collapsed={false} />
+            {userType === 'superadmin' && (
+              <>
+                <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={false} />
+                <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={false} />
+                <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={false} />
+              </>
+            )}
+            <NavItem to="/vm/ports" icon={FaNetworkWired} label="Networking" collapsed={false} />
+            {userType === 'superadmin' && (
+              <>
+                <NavItem to="/vm/quota" icon={FaQuota} label="Quotas" collapsed={false} />
+                <NavItem to="/overview" icon={FaSuperscript} label="Admin Center" collapsed={false} />
+                <NavItem to="/vm/deletelogs" icon={FaTrashAlt} label="Purge Logs" collapsed={false} />
+                <NavItem to="/vm/deletetraining" icon={FaStopCircle} label="End Batch" collapsed={false} />
+              </>
+            )}
           </Accordion>
         )}
         </>
