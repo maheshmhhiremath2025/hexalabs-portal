@@ -186,18 +186,63 @@ router.patch('/expiry', async (req, res) => {
   }
 });
 
-// Browser access for VMs via Guacamole
-// Supports: RDP (Windows), SSH (Linux), VNC (KasmVNC Linux)
+// Update auto-shutdown settings for VMs (superadmin only)
+router.patch('/vm-settings', async (req, res) => {
+  try {
+    if (req.user.userType !== 'superadmin') return res.status(403).json({ message: 'Superadmin only' });
+
+    const { vmName, trainingName, autoShutdown, idleMinutes, expiresAt } = req.body;
+    const VM = require('../models/vm');
+
+    const update = {};
+    if (autoShutdown !== undefined) update.autoShutdown = autoShutdown;
+    if (idleMinutes !== undefined) update.idleMinutes = idleMinutes;
+    if (expiresAt !== undefined) update.expiresAt = expiresAt ? new Date(expiresAt) : null;
+
+    if (Object.keys(update).length === 0) return res.status(400).json({ message: 'Nothing to update' });
+
+    let modified = 0;
+    if (vmName) {
+      const result = await VM.updateOne({ name: vmName }, { $set: update });
+      modified = result.modifiedCount;
+    } else if (trainingName) {
+      const result = await VM.updateMany({ trainingName }, { $set: update });
+      modified = result.modifiedCount;
+    } else {
+      return res.status(400).json({ message: 'vmName or trainingName required' });
+    }
+
+    const { logger } = require('../plugins/logger');
+    logger.info(`VM settings updated: ${vmName || trainingName} → ${JSON.stringify(update)} (${modified} modified)`);
+    res.json({ message: `Updated ${modified} VM(s)`, update });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update VM settings' });
+  }
+});
+
+// Browser access for VMs.
+//
+// Policy: all Linux VMs go DIRECTLY to KasmVNC on port 6901 — no
+// Guacamole hop. KasmVNC's own web UI handles clipboard sync, file
+// drag/drop, multi-viewer and avoids extra server load. Windows VMs
+// still route through Guacamole for RDP.
 router.post('/browser-access', async (req, res) => {
   try {
     const { vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort } = req.body;
     if (!vmName || !publicIp) return res.status(400).json({ message: 'vmName and publicIp required' });
 
-    // Auto-detect KasmVNC: if useVnc flag is set or VM has port 6901 in training ports
+    const osLc = String(os || '').toLowerCase();
+    const isLinux = osLc && !osLc.includes('windows');
+    const port = vncPort || 6901;
+
+    if (isLinux) {
+      return res.json({ accessUrl: `https://${publicIp}:${port}`, mode: 'kasmvnc-direct' });
+    }
+
     const result = await getVmAccessUrl({
       vmName, publicIp, adminUsername, adminPassword, os,
       useVnc: useVnc || false,
-      vncPort: vncPort || 6901,
+      vncPort: port,
     });
     res.json(result);
   } catch (err) {
