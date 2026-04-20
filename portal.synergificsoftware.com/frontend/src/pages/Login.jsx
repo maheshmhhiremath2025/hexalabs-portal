@@ -216,30 +216,27 @@ const Login = ({ onLogin, apiRoutes }) => {
           <div className="relative z-10 flex flex-col space-y-12">
             {/* Logo + ISO badge */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-emerald-500 p-0.5 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                  <div className="flex h-full w-full items-center justify-center rounded-[0.8rem] bg-[#020617] overflow-hidden">
-                    {logoUrl ? (
-                      <img
-                        src={logoUrl}
-                        alt={companyName}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        className="h-8 w-8 object-contain"
-                      />
-                    ) : (
-                      <FaChartLine className="h-7 w-7 text-blue-400" />
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col -space-y-1">
-                  <h1 className="text-2xl font-black tracking-tight text-white">
-                    {companyName}
-                  </h1>
-                  <span className="text-[10px] font-bold text-blue-400/80 tracking-[0.3em] uppercase"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    Cloud Portal
-                  </span>
-                </div>
+              {/* Brand: full logo image (replaces the word + icon-tile combo).
+                  Falls back to plain company name if the image 404s. */}
+              <div className="flex flex-col gap-1.5">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={companyName}
+                    onError={(e) => {
+                      // Image broke — replace with a text wordmark so the
+                      // header isn't empty.
+                      e.currentTarget.outerHTML = `<h1 class="text-2xl font-black tracking-tight text-white">${companyName}</h1>`;
+                    }}
+                    className="h-14 w-auto object-contain"
+                  />
+                ) : (
+                  <h1 className="text-2xl font-black tracking-tight text-white">{companyName}</h1>
+                )}
+                <span className="text-[10px] font-bold text-blue-400/80 tracking-[0.3em] uppercase pl-1"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  Cloud Portal
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 backdrop-blur-3xl shadow-2xl">
@@ -350,19 +347,16 @@ const Login = ({ onLogin, apiRoutes }) => {
               className="space-y-8"
             >
               {/* Mobile logo (shows only when left panel is hidden) */}
-              <div className="lg:hidden flex items-center gap-3 mb-2">
-                <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-emerald-500 p-0.5">
-                  <div className="h-full w-full rounded-[0.6rem] bg-[#020617] flex items-center justify-center">
-                    <img src={logoUrl} alt={companyName} className="h-6 w-6 object-contain"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  </div>
-                </div>
-                <div>
+              <div className="lg:hidden flex flex-col gap-1 mb-2">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={companyName} className="h-10 w-auto object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : (
                   <div className="text-lg font-black text-white">{companyName}</div>
-                  <div className="text-[10px] font-bold text-blue-400/80 tracking-[0.25em] uppercase"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    Cloud Portal
-                  </div>
+                )}
+                <div className="text-[10px] font-bold text-blue-400/80 tracking-[0.25em] uppercase pl-0.5"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  Cloud Portal
                 </div>
               </div>
 
