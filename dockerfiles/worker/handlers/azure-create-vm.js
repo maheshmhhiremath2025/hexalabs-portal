@@ -39,6 +39,7 @@ const handler = async (job) => {
       duration: 0,
       isRunning: true,
       guacamole: data.guacamole,
+      kasmVnc: !!data.kasmVnc,
       os: data.template.os,
       trainingName: trainingName,
       email: data.email,
