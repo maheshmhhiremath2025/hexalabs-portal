@@ -737,7 +737,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
               <button onClick={stopDeployTracking} className="text-xs text-blue-700 hover:underline">Hide</button>
             </div>
             <div className="text-xs text-blue-700 mb-2 tabular-nums">
-              {deployProgress.ready}/{deployProgress.expectedCount} ready &middot; {deployProgress.total} created &middot; {elapsedMin}m {elapsedSec}s elapsed{!deployProgress.finished && ` &middot; ~${Math.max(0, ESTIMATED_MIN - elapsedMin)}m left`}
+              {deployProgress.ready}/{deployProgress.expectedCount} ready · {deployProgress.total} created · {elapsedMin}m {elapsedSec}s elapsed{!deployProgress.finished && ` · ~${Math.max(0, ESTIMATED_MIN - elapsedMin)}m left`}
             </div>
             <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
               <div className={`h-2 rounded-full transition-all duration-500 ${deployProgress.finished ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
