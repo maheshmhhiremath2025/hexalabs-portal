@@ -33,7 +33,11 @@ const docker = new Docker({
 });
 
 const DEFAULT_IDLE_MINUTES = 30;
-const CPU_IDLE_THRESHOLD = 3; // percent — below this = idle
+// KasmVNC + window-manager + compositor daemons idle around 4-8% CPU
+// in workspace containers. Active user sessions spike to 20-40%+. 15%
+// sits cleanly between the two — below it = "nobody's driving",
+// above = "user is doing something". Tunable via env.
+const CPU_IDLE_THRESHOLD = Number(process.env.CONTAINER_CPU_IDLE_THRESHOLD) || 15;
 
 /**
  * Get current CPU usage % for a container via Docker stats (one-shot).
@@ -73,13 +77,14 @@ async function containerIdleShutdown() {
     if (containers.length === 0) return;
 
     const now = new Date();
+    const summary = { checked: containers.length, idleMarked: 0, stopped: 0, active: 0, unreachable: 0 };
 
     for (const c of containers) {
       const idleMinutes = c.idleMinutes || DEFAULT_IDLE_MINUTES;
 
       // Get current CPU
       const cpuPercent = await getContainerCpuPercent(c.containerId);
-      if (cpuPercent === null) continue; // can't read stats, skip
+      if (cpuPercent === null) { summary.unreachable++; continue; }
 
       if (cpuPercent < CPU_IDLE_THRESHOLD) {
         // CPU is below threshold. Check if it's BEEN idle long enough.
@@ -88,6 +93,7 @@ async function containerIdleShutdown() {
           // First time we see it idle — mark the start, don't stop yet
           c.idleSince = now;
           await c.save();
+          summary.idleMarked++;
           continue;
         }
 
@@ -95,6 +101,7 @@ async function containerIdleShutdown() {
         const idleDurationMins = idleDurationMs / 60000;
 
         if (idleDurationMins >= idleMinutes) {
+          summary.stopped++;
           // Container has been idle for longer than the threshold — stop it
           logger.info(`[container-idle] Stopping idle container ${c.name} (idle ${Math.round(idleDurationMins)}m, threshold ${idleMinutes}m, CPU ${cpuPercent.toFixed(1)}%)`);
 
@@ -141,12 +148,14 @@ async function containerIdleShutdown() {
         // else: idle but not long enough yet — keep waiting
       } else {
         // Container is active — reset idle timer
+        summary.active++;
         if (c.idleSince) {
           c.idleSince = null;
           await c.save();
         }
       }
     }
+    logger.info(`[container-idle] cycle: checked=${summary.checked} active=${summary.active} idleMarked=${summary.idleMarked} stopped=${summary.stopped} unreachable=${summary.unreachable} threshold=${CPU_IDLE_THRESHOLD}%`);
   } catch (err) {
     logger.error(`[container-idle] Fatal: ${err.message}`);
   }
