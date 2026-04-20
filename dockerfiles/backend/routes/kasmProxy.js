@@ -47,11 +47,21 @@ async function resolveUpstream(vmName) {
   return entry;
 }
 
-// HTTP-only middleware to warm the cache. This runs on every page/asset
-// request; the WS upgrade that follows uses the cached entry synchronously.
-router.use('/:vmName', async (req, res, next) => {
-  try { await resolveUpstream(req.params.vmName); } catch {}
-  next();
+// Warm cache on every HTTP request (must complete before proxy runs,
+// because the proxy's `router` function is sync). WS upgrades arrive
+// after the first HTTP load, so the cache is already hot by then.
+router.use((req, res, next) => {
+  const vmName = parseVmName(req.url) || parseVmName(req.originalUrl);
+  if (!vmName) return next();
+  resolveUpstream(vmName)
+    .then(entry => {
+      if (!entry) return res.status(404).send(`Unknown or stopped VM: ${vmName}`);
+      next();
+    })
+    .catch(err => {
+      logger.error(`[kasm-proxy] cache warm failed for ${vmName}: ${err.message}`);
+      next();
+    });
 });
 
 router.use(createProxyMiddleware({
