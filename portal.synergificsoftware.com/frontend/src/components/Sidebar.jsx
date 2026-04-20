@@ -208,26 +208,27 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
         )}
 
         {(userType === 'admin' || userType === 'superadmin') && (
-          <>
-            {!collapsed && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">B2B Sales</div>}
-            <NavItem to="/b2b/courses" icon={FaRobot} label="Course Analyses" collapsed={collapsed} />
+          <Accordion id="b2b" icon={FaRobot} label="B2B Sales" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
+            <NavItem to="/b2b/courses" icon={FaRobot} label="Course Analyses" collapsed={false} />
+          </Accordion>
+        )}
 
-            {!collapsed && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Finance</div>}
+        {(userType === 'admin' || userType === 'superadmin') && (
+          <Accordion id="finance" icon={FaFileInvoiceDollar} label="Finance" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
             {userType === 'superadmin' && (
-              <NavItem to="/costs" icon={FaChartLine} label="Cost Analytics" collapsed={collapsed} />
+              <NavItem to="/costs" icon={FaChartLine} label="Cost Analytics" collapsed={false} />
             )}
-            <NavItem to={userType === 'superadmin' ? '/ledger' : '/ledger/account'} icon={FaFileAlt} label="Invoices" collapsed={collapsed} />
-          </>
+            <NavItem to={userType === 'superadmin' ? '/ledger' : '/ledger/account'} icon={FaFileAlt} label="Invoices" collapsed={false} />
+          </Accordion>
         )}
 
         {userType === 'superadmin' && (
-          <>
-            {!collapsed && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Administration</div>}
-            <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={collapsed} />
-            <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={collapsed} />
-            <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={collapsed} />
-            <NavItem to="/overview" icon={FaSuperscript} label="Admin Center" collapsed={collapsed} />
-          </>
+          <Accordion id="admin" icon={FaShieldAlt} label="Administration" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
+            <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={false} />
+            <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={false} />
+            <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={false} />
+            <NavItem to="/overview" icon={FaSuperscript} label="Admin Center" collapsed={false} />
+          </Accordion>
         )}
         </>
         )}
