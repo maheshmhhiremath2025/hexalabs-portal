@@ -124,10 +124,27 @@ async function createVirtualMachine(vmName, vmTemplate) {
             };
         }
 
-        // Create the VM
-        const vmResponse = await computeClient.virtualMachines.beginCreateOrUpdate(resourceGroup, vmName, vmParameters);
-        const vmResult = await vmResponse.pollUntilDone();
-        
+        // Create the VM. Gallery images come in two flavours:
+        //   - Generalized: REQUIRES osProfile (username/password on deploy)
+        //   - Specialized: REJECTS osProfile (users baked into the image)
+        // We can't tell from imageId alone, so attempt with osProfile first
+        // and, if Azure rejects it for a specialized image, retry without.
+        let vmResult;
+        try {
+            const vmResponse = await computeClient.virtualMachines.beginCreateOrUpdate(resourceGroup, vmName, vmParameters);
+            vmResult = await vmResponse.pollUntilDone();
+        } catch (err) {
+            const msg = String(err?.message || err?.details?.message || '');
+            if (vmParameters.osProfile && /specialized image/i.test(msg)) {
+                console.log(`[vmcreate] ${vmName}: image is specialized, retrying without osProfile`);
+                delete vmParameters.osProfile;
+                const retryResponse = await computeClient.virtualMachines.beginCreateOrUpdate(resourceGroup, vmName, vmParameters);
+                vmResult = await retryResponse.pollUntilDone();
+            } else {
+                throw err;
+            }
+        }
+
         // Fetch the public IP address
         const vmPublicIpAddress = await getPublicIpAddress(resourceGroup, publicIpName);
 

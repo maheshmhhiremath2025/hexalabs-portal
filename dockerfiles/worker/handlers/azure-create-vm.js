@@ -13,6 +13,10 @@ const handler = async (job) => {
   try {
     // Step 1: Create VM using Azure function
     const createdVm = await createVirtualMachine(data.vmName, data.template);
+    if (!createdVm) {
+      logger.error(`VM ${data.vmName} creation FAILED in Azure — see preceding error`);
+      throw new Error(`Azure VM creation failed for ${data.vmName}`);
+    }
     logger.info(`VM ${data.vmName} created successfully in Azure`, createdVm);
 
     // Generate a clean training name

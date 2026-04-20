@@ -402,15 +402,35 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   const csvFileRef = useRef(null);
   const [csvUploadStatus, setCsvUploadStatus] = useState(null);
 
-  // Live deploy progress — set after a successful submit, polls Lab Console
-  // for VMs in the new training and renders a progress card. Cleared by the
-  // user via the "Hide" button or auto when all VMs are running.
-  const [deployProgress, setDeployProgress] = useState(null);
+  // Live deploy progress — persisted in localStorage so a page refresh
+  // doesn't drop the progress card. Max 2h lifetime; stale entries
+  // older than that are discarded on load.
+  const DEPLOY_PROGRESS_KEY = 'getlabs.deployProgress';
+  const DEPLOY_PROGRESS_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+  const [deployProgress, setDeployProgress] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DEPLOY_PROGRESS_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (!p?.startedAt || Date.now() - p.startedAt > DEPLOY_PROGRESS_MAX_AGE_MS) {
+        localStorage.removeItem(DEPLOY_PROGRESS_KEY);
+        return null;
+      }
+      return p;
+    } catch { return null; }
+  });
   const deployPollRef = useRef(null);
+
+  // Persist progress updates
+  useEffect(() => {
+    if (!deployProgress) { try { localStorage.removeItem(DEPLOY_PROGRESS_KEY); } catch {} return; }
+    try { localStorage.setItem(DEPLOY_PROGRESS_KEY, JSON.stringify(deployProgress)); } catch {}
+  }, [deployProgress]);
+
   useEffect(() => () => { if (deployPollRef.current) clearInterval(deployPollRef.current); }, []);
 
-  const startDeployTracking = useCallback((trainingName, expectedCount) => {
-    const startedAt = Date.now();
+  const startDeployTracking = useCallback((trainingName, expectedCount, startedAt = Date.now()) => {
     setDeployProgress({ trainingName, expectedCount, ready: 0, total: 0, startedAt, vms: [], finished: false });
     if (deployPollRef.current) clearInterval(deployPollRef.current);
     const tick = async () => {
@@ -427,6 +447,14 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     };
     tick();
     deployPollRef.current = setInterval(tick, 12000);
+  }, []);
+
+  // Resume polling after a refresh if we loaded progress from localStorage
+  useEffect(() => {
+    if (deployProgress && !deployProgress.finished && !deployPollRef.current) {
+      startDeployTracking(deployProgress.trainingName, deployProgress.expectedCount, deployProgress.startedAt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopDeployTracking = useCallback(() => {

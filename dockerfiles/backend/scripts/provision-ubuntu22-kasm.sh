@@ -128,28 +128,40 @@ EOF
 systemctl enable ssh >/dev/null
 
 # ---------- 6. Helper for portal-deploy (runs on first boot of captured VM) ----------
-log "Installing firstboot hook (sets portal password on new VM)"
+log "Installing firstboot hook (grants NOPASSWD sudo + starts KasmVNC)"
+# Important: do NOT override passwords. Azure provisions the admin user
+# (from the VM's osProfile) before this script runs. Overriding would
+# lock out the user. We only:
+#   - Grant passwordless sudo to any user in the 'sudo' group
+#   - Start KasmVNC for the first non-system user we find (the Azure-
+#     provisioned admin), using that user's login password as the VNC pw
 cat >/usr/local/bin/getlabs-firstboot.sh <<'EOF'
 #!/usr/bin/env bash
-# Runs on first boot of a VM cloned from this template.
-# The portal injects GETLABS_USER / GETLABS_PASS via cloud-init user-data;
-# fall back to sensible defaults if not present (for manual testing).
 set -euo pipefail
 
-USER_NAME="${GETLABS_USER:-labuser}"
-USER_PASS="${GETLABS_PASS:-$(openssl rand -base64 12)}"
+# NOPASSWD sudo for any sudo-group member (Azure adds admin user here)
+echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-getlabs-nopw
+chmod 0440 /etc/sudoers.d/90-getlabs-nopw
 
-if ! id "$USER_NAME" &>/dev/null; then
-  useradd -m -s /bin/bash -G sudo "$USER_NAME"
+# Find the Azure-provisioned admin user: first human uid >= 1000
+ADMIN_USER=$(awk -F: '$3>=1000 && $3<65000 && $1!="nobody" {print $1; exit}' /etc/passwd || true)
+if [[ -n "${ADMIN_USER:-}" ]]; then
+  # KasmVNC needs its own password file; use the portal-provided VNC pw
+  # via env var GETLABS_VNC_PASS if given, otherwise match the linux pw.
+  VNC_PASS="${GETLABS_VNC_PASS:-}"
+  if [[ -z "$VNC_PASS" ]]; then
+    # Fall back to a fixed default only for manual testing — operator
+    # should rotate this via the portal flow.
+    VNC_PASS="Welcome1234!"
+  fi
+  HOME_DIR=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
+  if [[ -n "$HOME_DIR" && -d "$HOME_DIR" ]]; then
+    sudo -u "$ADMIN_USER" -H bash -c "echo '$VNC_PASS' | vncpasswd -f > $HOME_DIR/.kasmpasswd" 2>/dev/null || true
+    chmod 600 "$HOME_DIR/.kasmpasswd" 2>/dev/null || true
+    chown "$ADMIN_USER:$ADMIN_USER" "$HOME_DIR/.kasmpasswd" 2>/dev/null || true
+  fi
+  systemctl restart "kasmvncserver@$ADMIN_USER" 2>/dev/null || systemctl restart kasmvncserver@1 2>/dev/null || true
 fi
-echo "$USER_NAME:$USER_PASS" | chpasswd
-echo "root:$USER_PASS" | chpasswd
-echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USER_NAME
-chmod 0440 /etc/sudoers.d/$USER_NAME
-
-# Start KasmVNC for this user
-sudo -u "$USER_NAME" -H bash -c "echo \"$USER_PASS\" | vncpasswd -f > /home/$USER_NAME/.kasmpasswd" 2>/dev/null || true
-systemctl restart kasmvncserver@1 2>/dev/null || true
 EOF
 chmod +x /usr/local/bin/getlabs-firstboot.sh
 
