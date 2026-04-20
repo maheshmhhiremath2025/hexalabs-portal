@@ -56,13 +56,11 @@ router.use('/:vmName', createProxyMiddleware({
   ws: true,
   changeOrigin: true,
   secure: false,        // Kasm uses a self-signed cert by default
-  // KasmVNC's websockify occasionally emits bytes after the
-  // Connection: close header (non-strict HTTP). Node 22's default
-  // parser rejects this with "Parse Error: Data after Connection: close".
-  // Relaxing the parser just for this upstream keeps it happy.
-  selfHandleResponse: false,
+  // KasmVNC's websockify emits non-strict HTTP framing that Node 22's
+  // parser rejects. Combined with the `--insecure-http-parser` node
+  // flag on PM2, this keeps the connection alive.
   proxyTimeout: 60000,
-  agent: new (require('https').Agent)({ keepAlive: false, rejectUnauthorized: false }),
+  timeout: 60000,
   pathRewrite: (path, req) => {
     // Strip /kasm/<vmName> prefix so KasmVNC sees the raw path
     const prefix = `/kasm/${req.params.vmName}`;
