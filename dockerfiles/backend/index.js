@@ -56,6 +56,7 @@ const b2bCoursesRoute = require('./routes/b2bCourses')
 const ociSandboxRoute = require('./routes/ociSandbox')
 const rosaRoute = require('./routes/rosa')
 const aroRoute = require('./routes/aro')
+const kasmProxyRoute = require('./routes/kasmProxy')
 
 const { restrictToLoggedinUserOnly, checkAuth } = require('./middlewares/auth');
 const { azureSandbox } = require('./automations/azureSandbox');
@@ -68,6 +69,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// KasmVNC reverse-proxy — MUST be mounted before express.json() so
+// request bodies (especially WebSocket upgrades) flow through untouched.
+app.use('/kasm', kasmProxyRoute);
 
 //middlewares
 app.use(express.json());

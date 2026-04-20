@@ -108,12 +108,14 @@ async function handleGetMachines(req,res){
          }));
 
          // For VMs whose template has KasmVNC baked in, synthesise a
-         // browser-access URL (https://<publicIp>:6901) so the Lab Console
-         // "Open in browser" button works without Guacamole.
+         // browser-access URL through the portal domain (handled by the
+         // /kasm reverse-proxy). IP-based URLs get blocked by many
+         // corporate firewalls, hence the domain route.
+         const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
          const vmList = (Array.isArray(vm) ? vm : []).map(v => {
            const obj = typeof v.toObject === 'function' ? v.toObject() : v;
-           if (obj.kasmVnc && obj.publicIp && !obj.accessUrl) {
-             obj.accessUrl = `https://${obj.publicIp}:6901`;
+           if (obj.kasmVnc && obj.name && !obj.accessUrl) {
+             obj.accessUrl = `${apiBase}/kasm/${obj.name}/`;
            }
            return obj;
          });
