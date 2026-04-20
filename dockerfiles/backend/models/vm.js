@@ -29,6 +29,7 @@ const vmSchema = new mongoose.Schema({
   quota: { type: quotaSchema, required: true },
   remarks: { type: String, default: 'Alive' },
   kasmVnc: { type: Boolean, default: false },              // KasmVNC installed (fast browser access)
+  hasXrdp: { type: Boolean, default: false },              // xrdp+xfce installed — prefer RDP desktop over SSH for Linux
   autoShutdown: { type: Boolean, default: false },        // Auto-stop when idle
   idleMinutes: { type: Number, default: 15 },              // Minutes of idle before shutdown
   lastActivityAt: { type: Date, default: Date.now },       // Last known activity timestamp

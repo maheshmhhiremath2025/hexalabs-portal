@@ -244,12 +244,19 @@ router.post('/browser-access', async (req, res) => {
       });
     }
 
-    const port = vncPort || 6901;
+    // For Linux VMs with xrdp installed, override to RDP so Guacamole
+    // opens the graphical desktop (XFCE) instead of a bare SSH terminal.
+    const VM = require('../models/vm');
+    const vmDoc = await VM.findOne({ name: vmName }, 'hasXrdp').lean();
+    const osEffective = vmDoc?.hasXrdp ? 'windows' : os; // spoof so service picks RDP path
+    const portEffective = vmDoc?.hasXrdp ? '3389' : (vncPort || 6901);
 
     const result = await getVmAccessUrl({
-      vmName, publicIp, adminUsername, adminPassword, os,
+      vmName, publicIp, adminUsername, adminPassword,
+      os: osEffective,
       useVnc: useVnc || false,
-      vncPort: port,
+      vncPort: portEffective,
+      port: portEffective,
     });
     res.json(result);
   } catch (err) {
