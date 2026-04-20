@@ -231,16 +231,11 @@ router.post('/browser-access', async (req, res) => {
     const { vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort } = req.body;
     if (!vmName || !publicIp) return res.status(400).json({ message: 'vmName and publicIp required' });
 
-    const osLc = String(os || '').toLowerCase();
-    const isLinux = osLc && !osLc.includes('windows');
-
-    if (isLinux) {
-      // Route through the portal's domain so corporate firewalls that
-      // block raw public IPs can still reach the lab. The /kasm proxy
-      // looks up the VM's IP server-side on every request and injects
-      // HTTP Basic auth, so the browser doesn't get prompted.
-      // ?password=… &autoconnect=1 tells Kasm noVNC to skip its own
-      // Connect button too, giving a true one-click flow.
+    // Only route to the Kasm proxy when the caller explicitly asked
+    // (useVnc=true, set by vmDetails.jsx when the VM's kasmVnc flag is
+    // true). Otherwise fall through to Guacamole — Windows always does,
+    // and Linux VMs without KasmVNC installed need Guacamole too.
+    if (useVnc) {
       const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
       const pw = encodeURIComponent(adminPassword || 'Welcome1234!');
       return res.json({
