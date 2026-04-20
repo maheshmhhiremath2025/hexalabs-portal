@@ -25,12 +25,47 @@ async function handleUserLogin(req, res) {
             return res.status(400).json({ message: "Invalid Credentials" });
         }
 
-        // Check login time restrictions if they exist
+        // ─── Hard access expiry (batches with a fixed end date) ───────
+        if (user.accessExpiresAt && new Date(user.accessExpiresAt) < new Date()) {
+            recordLoginFailure(req);
+            logger.warn(`${email} tried to log in after access expired (${user.accessExpiresAt})`);
+            return res.status(403).json({ message: "Your access has expired. Contact your administrator." });
+        }
+
+        // ─── Login-time window (supports overnight windows crossing midnight) ─
+        //   same-day window: start <= stop (e.g. 09:00-17:00)
+        //   overnight window: start > stop  (e.g. 18:45-01:15)
+        // For the weekday check we track "which day the session belongs to":
+        // a login at Tue 00:30 during a Mon-started window counts as Monday.
+        let effectiveDay = moment().tz("Asia/Kolkata").day();  // 0=Sun..6=Sat
         if (user.loginStart && user.loginStop) {
-            const currentISTTime = moment().tz("Asia/Kolkata").format("HH:mm");
-            if (currentISTTime < user.loginStart || currentISTTime > user.loginStop) {
-                logger.warn(`${email} attempted to log in outside allowed hours from ${req.ip}`);
-                return res.status(403).json({ message: "Trying to log in outside allowed time" });
+            const nowIst = moment().tz("Asia/Kolkata");
+            const cur = nowIst.format("HH:mm");
+            const start = user.loginStart;
+            const stop  = user.loginStop;
+            let inWindow = false;
+            if (start <= stop) {
+                inWindow = cur >= start && cur <= stop;
+            } else {
+                // Overnight: allowed if (cur >= start) OR (cur <= stop)
+                if (cur >= start) { inWindow = true; }
+                else if (cur <= stop) { inWindow = true; effectiveDay = nowIst.clone().subtract(1, "day").day(); }
+            }
+            if (!inWindow) {
+                recordLoginFailure(req);
+                logger.warn(`${email} attempted to log in outside allowed hours (${start}-${stop}) from ${req.ip}`);
+                return res.status(403).json({ message: `Login is only allowed between ${start} and ${stop} IST.` });
+            }
+        }
+
+        // ─── Weekday restriction (array of 0-6, JS Date.getDay format) ────────
+        if (Array.isArray(user.allowedWeekdays) && user.allowedWeekdays.length > 0) {
+            if (!user.allowedWeekdays.includes(effectiveDay)) {
+                recordLoginFailure(req);
+                const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                const allowed = user.allowedWeekdays.map(d => dayNames[d]).join(", ");
+                logger.warn(`${email} attempted to log in on ${dayNames[effectiveDay]} (allowed: ${allowed}) from ${req.ip}`);
+                return res.status(403).json({ message: `Access is only allowed on: ${allowed}.` });
             }
         }
 

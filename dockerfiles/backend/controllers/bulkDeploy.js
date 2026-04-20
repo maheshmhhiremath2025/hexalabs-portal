@@ -22,7 +22,19 @@ async function handleBulkDeploy(req, res) {
     return res.status(403).json({ message: 'Admin access required' });
   }
 
-  const { templateSlug, emails, ttlHours, dailyCapHours = 12, totalCapHours = 0 } = req.body;
+  const {
+    templateSlug, emails, ttlHours,
+    dailyCapHours = 12, totalCapHours = 0,
+    // Schedule restrictions applied to each User record created in this batch.
+    // Passing these makes the portal-login gate enforce hours + weekdays +
+    // hard expiry automatically — the student hits 403 if they try to log in
+    // outside the window.
+    loginStart,           // "HH:mm" IST (e.g. "18:45")
+    loginStop,            // "HH:mm" IST (e.g. "01:15") — can cross midnight
+    allowedWeekdays,      // array of 0-6 (0=Sun, 6=Sat). Example: [1,2,3,4,5] for weekdays
+    accessExpiresAt,      // ISO date string — login blocked after this
+    skipWelcomeEmails,    // boolean — skip per-student welcome when addresses are dummies
+  } = req.body;
 
   if (!templateSlug) {
     return res.status(400).json({ message: 'templateSlug is required' });
@@ -229,29 +241,52 @@ async function handleBulkDeploy(req, res) {
         expiresAt: expiresAt.toISOString(),
       });
 
-      // Auto-create portal login
+      // Auto-create portal login — now applies batch-level schedule fields
+      // (loginStart/loginStop/allowedWeekdays/accessExpiresAt) if caller
+      // provided them. Existing users get upgraded to match this batch too,
+      // so re-deploying a batch refreshes the schedule on the User record.
+      const scheduleFields = {};
+      if (loginStart)               scheduleFields.loginStart = loginStart;
+      if (loginStop)                scheduleFields.loginStop = loginStop;
+      if (Array.isArray(allowedWeekdays) && allowedWeekdays.length) {
+        scheduleFields.allowedWeekdays = allowedWeekdays;
+      }
+      if (accessExpiresAt)          scheduleFields.accessExpiresAt = new Date(accessExpiresAt);
+
       const existingUser = await User.findOne({ email });
       if (!existingUser) {
-        await User.create({ email, name: email, password: 'Welcome1234!', userType: 'sandboxuser', organization: template.name });
+        await User.create({
+          email, name: email, password: 'Welcome1234!',
+          userType: 'sandboxuser', organization: template.name,
+          ...scheduleFields,
+        });
+      } else if (Object.keys(scheduleFields).length) {
+        // Refresh schedule on the existing user so batch changes apply.
+        Object.assign(existingUser, scheduleFields);
+        await existingUser.save();
       }
 
-      // Per-student welcome email ONLY for real addresses. Dummies
-      // (hyperv@g.com style) are skipped — the consolidated roster email
-      // sent after the loop covers them for the org admin + ops team.
-      isLikelyDeliverable(email).then(deliverable => {
-        if (!deliverable) {
-          logger.info(`[bulk-deploy] skipping welcome email to ${email} (not deliverable)`);
-          return;
-        }
-        return notifySandboxWelcomeEmail({
-          email, cloud: 'aws', portalPassword: 'Welcome1234!',
-          sandboxUsername: awsResult.username, sandboxPassword: awsResult.password,
-          sandboxAccessUrl: awsResult.accessUrl,
-          region: template.sandboxConfig?.region || 'ap-south-1',
-          expiresAt, templateName: template.name,
-          allowedServices: template.allowedServices, blockedServices: template.blockedServices,
-        });
-      }).catch(e => logger.error(`Welcome email failed for ${email}: ${e.message}`));
+      // Per-student welcome email: skipped entirely if the caller explicitly
+      // set skipWelcomeEmails=true (the dummy-email batch case). Otherwise
+      // check MX deliverability like before.
+      if (skipWelcomeEmails) {
+        logger.info(`[bulk-deploy] skipWelcomeEmails=true — skipping individual email to ${email}`);
+      } else {
+        isLikelyDeliverable(email).then(deliverable => {
+          if (!deliverable) {
+            logger.info(`[bulk-deploy] skipping welcome email to ${email} (not deliverable)`);
+            return;
+          }
+          return notifySandboxWelcomeEmail({
+            email, cloud: 'aws', portalPassword: 'Welcome1234!',
+            sandboxUsername: awsResult.username, sandboxPassword: awsResult.password,
+            sandboxAccessUrl: awsResult.accessUrl,
+            region: template.sandboxConfig?.region || 'ap-south-1',
+            expiresAt, templateName: template.name,
+            allowedServices: template.allowedServices, blockedServices: template.blockedServices,
+          });
+        }).catch(e => logger.error(`Welcome email failed for ${email}: ${e.message}`));
+      }
 
       logger.info(`[bulk-deploy] Sandbox created for ${email} (template: ${template.slug})`);
     } catch (err) {
