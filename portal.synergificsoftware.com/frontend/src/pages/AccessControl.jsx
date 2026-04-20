@@ -1,14 +1,21 @@
-// AccessControl — superadmin page to set login restrictions (time window,
-// weekdays, hard expiry) on users, either per-email or per-org/training.
-// Complements (does not replace) /vm/scheduler which handles VM power
-// schedules. Separation of concerns: this page = "WHO can log in WHEN".
+// AccessControl — unified superadmin control panel for access + power.
+// Tab 1 "Login Access": login-time window, weekdays, hard expiry (per
+//   email / organization / training).  Login gate runs portal-wide so
+//   this covers VM / RDS / ROSA / ARO / sandbox / workspace users.
+// Tab 2 "Power Schedule": start/stop VMs on a schedule for a training
+//   (wraps the existing Scheduler component — the working /vm/scheduler
+//   experience, just embedded here so both live in one place).
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import apiCaller from '../services/apiCaller';
+import { apiRoutes } from '../services/apiRoutes';
 import {
   FaShieldAlt, FaClock, FaCalendarAlt, FaUserClock, FaBuilding, FaEnvelope,
   FaGraduationCap, FaCheck, FaTimes, FaSpinner, FaTrashAlt, FaInfoCircle,
+  FaPowerOff, FaChevronDown,
 } from 'react-icons/fa';
+
+const Scheduler = lazy(() => import('./Scheduler'));
 
 const DAY_LABELS = [
   { v: 0, label: 'Sun' },
@@ -40,7 +47,71 @@ function Toast({ toast, onClose }) {
   );
 }
 
+function PowerScheduleTab() {
+  const [trainings, setTrainings] = useState([]);
+  const [selectedTraining, setSelectedTraining] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await apiCaller.get('/admin/organization');
+        const orgs = r.data?.organization || [];
+        const all = [];
+        for (const org of orgs) {
+          try {
+            const t = await apiCaller.get(`${apiRoutes.trainingNameApi}?organization=${encodeURIComponent(org)}`);
+            (t.data?.trainingNames || []).forEach(n => all.push({ org, name: n }));
+          } catch { /* skip bad org */ }
+        }
+        setTrainings(all);
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  if (loading) {
+    return <div className="py-12 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+          <FaGraduationCap className="w-3 h-3 text-blue-400" /> Training batch
+        </label>
+        <div className="relative">
+          <select value={selectedTraining} onChange={e => setSelectedTraining(e.target.value)}
+            className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white">
+            <option value="">Select a training…</option>
+            {trainings.map(t => (
+              <option key={`${t.org}::${t.name}`} value={t.name}>{t.name} — {t.org}</option>
+            ))}
+          </select>
+          <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+        </div>
+        {trainings.length === 0 && (
+          <p className="text-[12px] text-gray-400 mt-2">No trainings found.</p>
+        )}
+      </div>
+
+      {selectedTraining ? (
+        <Suspense fallback={<div className="py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>}>
+          <Scheduler selectedTraining={selectedTraining} apiRoutes={apiRoutes} />
+        </Suspense>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl py-14 text-center">
+          <FaPowerOff className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-gray-700">Pick a training batch</p>
+          <p className="text-xs text-gray-400 mt-1">Once selected, its VM start/stop schedule will load here.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AccessControl() {
+  const [activeTab, setActiveTab] = useState('login');
   const [scope, setScope] = useState('email');
   const [target, setTarget] = useState('');
   const [loginStart, setLoginStart] = useState('');
@@ -146,11 +217,31 @@ export default function AccessControl() {
           <FaShieldAlt className="text-blue-500" /> Access Control
         </h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Set login-time windows, allowed weekdays, and hard access expiry for users.
-          Applies portal-wide — once rules are set, the portal login gate enforces them for VMs, sandboxes, workspaces, RDS, ROSA, and ARO.
+          Unified control — login gating for all resources and VM power schedules for batches.
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-gray-200">
+        {[
+          { v: 'login', label: 'Login Access',    icon: FaShieldAlt, hint: 'Who can log in, when' },
+          { v: 'power', label: 'Power Schedule',  icon: FaPowerOff,  hint: 'VM start/stop for a batch' },
+        ].map(t => (
+          <button key={t.v} onClick={() => setActiveTab(t.v)}
+            className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === t.v ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <t.icon className="w-3.5 h-3.5" />
+            {t.label}
+            <span className="text-[11px] text-gray-400 font-normal hidden md:inline">· {t.hint}</span>
+            {activeTab === t.v && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'power' && <PowerScheduleTab />}
+
+      {activeTab === 'login' && <>
       {/* Form card */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <div>
@@ -340,6 +431,7 @@ export default function AccessControl() {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
