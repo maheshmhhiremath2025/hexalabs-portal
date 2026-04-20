@@ -31,6 +31,14 @@ const templatesSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  // When true, the captured image has KasmVNC on port 6901 (HTTPS). The
+  // VM deploy worker will open 6901 in the NSG and the portal's
+  // "Open in browser" will point at https://<publicIp>:6901 directly —
+  // no Guacamole hop required.
+  kasmVnc: {
+    type: Boolean,
+    default: false,
+  },
   creation: {
     type: creationSchema,
     required: true,

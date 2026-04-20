@@ -107,7 +107,17 @@ async function handleGetMachines(req,res){
            extendedCount: c.extendedCount,
          }));
 
-         const allInstances = [...(Array.isArray(vm) ? vm : []), ...normalizedContainers];
+         // For VMs whose template has KasmVNC baked in, synthesise a
+         // browser-access URL (https://<publicIp>:6901) so the Lab Console
+         // "Open in browser" button works without Guacamole.
+         const vmList = (Array.isArray(vm) ? vm : []).map(v => {
+           const obj = typeof v.toObject === 'function' ? v.toObject() : v;
+           if (obj.kasmVnc && obj.publicIp && !obj.accessUrl) {
+             obj.accessUrl = `https://${obj.publicIp}:6901`;
+           }
+           return obj;
+         });
+         const allInstances = [...vmList, ...normalizedContainers];
 
          if(allInstances.length === 0)
             return res.status(200).json({message: "You don't have any instances"})

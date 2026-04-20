@@ -15,11 +15,11 @@ async function handleCreateMachines(req, res) {
 
     try {
         // Find the template
-        const templateData = await Templates.findOne({ name: templateName }, 'name creation rate -_id');
+        const templateData = await Templates.findOne({ name: templateName }, 'name creation rate kasmVnc -_id');
         if (!templateData)
             return res.status(404).json({ message: "Template not found" });
 
-        const { name, rate, creation: template } = templateData;
+        const { name, rate, creation: template, kasmVnc: templateKasmVnc } = templateData;
         const currentVmCount = await VM.countDocuments({ trainingName: trainingName });
 
         // Loop through VM creation requests
@@ -33,6 +33,7 @@ async function handleCreateMachines(req, res) {
                 rate: rate,
                 templateName: name,
                 template: template,
+                kasmVnc: !!templateKasmVnc,
                 guacamole: guacamole,
                 autoShutdown: autoShutdown,
                 idleMinutes: idleMinutes,

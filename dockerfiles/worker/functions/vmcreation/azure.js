@@ -90,7 +90,7 @@ async function createVirtualMachine(vmName, vmTemplate) {
             priority: 'Spot',
             evictionPolicy: 'Deallocate',
             billingProfile: {
-                maxPrice: 2.0
+                maxPrice: -1
             }
         };
 
@@ -112,8 +112,16 @@ async function createVirtualMachine(vmName, vmTemplate) {
 
         if (licence !== "none") {
             vmParameters.licenseType = licence;
-             // Add OS profile for official images (customized marketplace images)
-            
+        }
+
+        // Always add osProfile for generalized gallery images
+        // (required by Azure — generalized images lose their user accounts)
+        if (!official || imageId?.includes('/galleries/')) {
+            vmParameters.osProfile = {
+                computerName: vmName.slice(0, 15),
+                adminUsername: adminUsername,
+                adminPassword: adminPassword,
+            };
         }
 
         // Create the VM
@@ -170,6 +178,20 @@ async function createNSGAndAssociate (vmName, resourceGroup, location, nicName, 
                 sourcePortRange: '*',
                 sourceAddressPrefix: '*',
                 destinationPortRange: '3389',
+                destinationAddressPrefix: '*'
+            },
+            // KasmVNC HTTPS — always open so templates with KasmVNC baked
+            // in (e.g. ubuntu-22-kasm-root) work out of the box. Harmless
+            // when nothing is listening; closed-TCP is not a security issue.
+            {
+                name: 'allow-6901-kasm',
+                priority: 1002,
+                direction: 'Inbound',
+                access: 'Allow',
+                protocol: 'Tcp',
+                sourcePortRange: '*',
+                sourceAddressPrefix: '*',
+                destinationPortRange: '6901',
                 destinationAddressPrefix: '*'
             }
         ]
