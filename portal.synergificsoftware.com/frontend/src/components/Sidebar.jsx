@@ -165,6 +165,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
             <Accordion id="deploy" icon={FaRocket} label="Deploy" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
               <NavItem to="/createvm" icon={FaLaptop} label="Deploy VM" collapsed={false} />
               <NavItem to="/containers" icon={FaDocker} label="Deploy Workspace" collapsed={false} />
+              <NavItem to="/templates" icon={FaCubes} label="Workspace Templates" collapsed={false} />
               <NavItem to="/rds" icon={FaWindows} label="Windows Desktop" collapsed={false} />
               <NavItem to="/rosa" icon={FaRedhat} label="ROSA Clusters" collapsed={false} />
               <NavItem to="/aro" icon={FaCloud} label="ARO Clusters" collapsed={false} />
@@ -226,6 +227,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
             {!collapsed && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Administration</div>}
             <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={collapsed} />
             <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={collapsed} />
+            <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={collapsed} />
             <NavItem to="/overview" icon={FaSuperscript} label="Admin Center" collapsed={collapsed} />
           </>
         )}

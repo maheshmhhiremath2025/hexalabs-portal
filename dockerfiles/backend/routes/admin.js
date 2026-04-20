@@ -30,6 +30,7 @@ const { handleDashboardFunction } = require("../controllers/Dashboard/handleDash
 const { handleGetQuota, handleIncreaseQuota } = require('../controllers/quota');
 const { handleGetMyUser } = require('../controllers/myuser');
 const { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics, handleStudentAnalytics } = require('../controllers/analytics');
+const { handleUpdateUserSchedule, handleListRestrictedUsers, handleScheduleSuggestions } = require('../controllers/accessControl');
 const { handleScanOrphans, handleDeleteOrphan, handleRightSizing } = require('../controllers/costOptimization');
 const { handleAdminListFeedback, handleAdminFeedbackSummary } = require('../controllers/feedback');
 const {
@@ -128,6 +129,11 @@ router.get("/analytics/overview", handleAnalyticsOverview);
 router.get("/analytics/customers", handleCustomerAnalytics);
 router.get("/analytics/idle", handleIdleAnalytics);
 router.get("/analytics/students", handleStudentAnalytics);
+
+// Access control — per-user login restrictions (superadmin only)
+router.patch("/user-schedule", handleUpdateUserSchedule);
+router.get("/user-schedule/list", handleListRestrictedUsers);
+router.get("/user-schedule/suggestions", handleScheduleSuggestions);
 
 // Live Azure pricing (superadmin only)
 router.get("/pricing/live", async (req, res) => {

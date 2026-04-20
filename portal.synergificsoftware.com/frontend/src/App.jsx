@@ -54,6 +54,7 @@ const B2BCourseDetail      = lazy(() => import('./pages/b2b/B2BCourseDetail'))
 const MySandboxes          = lazy(() => import('./pages/MySandboxes'))
 const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
 const AroCluster           = lazy(() => import('./pages/AroCluster'))
+const AccessControl        = lazy(() => import('./pages/AccessControl'))
 
 // Tiny fallback shown while a lazy route's chunk is fetching.
 // Plain centered spinner — keeps perceived latency low without a layout shift.
@@ -234,6 +235,7 @@ function AppInner() {
             <Route path='/templates' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TemplateManager />} />} />
             <Route path='/rds' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployRDS userDetails={userDetails} />} />} />
             <Route path='/overview' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<Controller superadminApiRoutes={superadminApiRoutes} />} />} />
+            <Route path='/admin/access-control' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<AccessControl />} />} />
 
             <Route path="/costs" element={<RoleBasedRoute allowedRoles={["superadmin"]} element={<CostAnalytics />} />} />
             <Route path="/analytics" element={<RoleBasedRoute allowedRoles={["superadmin"]} element={<Analytics />} />} />
