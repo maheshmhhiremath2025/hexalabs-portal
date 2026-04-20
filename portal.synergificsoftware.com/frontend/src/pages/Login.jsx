@@ -8,6 +8,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import apiCaller from '../services/apiCaller';
 import { useBranding } from '../contexts/BrandingContext';
+import DemoRequestModal from '../components/DemoRequestModal';
 import {
   FaEnvelope, FaLock, FaArrowRight, FaChartLine, FaShieldAlt,
   FaBolt, FaGlobe, FaMicrochip, FaUserLock, FaChevronRight,
@@ -122,6 +123,7 @@ const Login = ({ onLogin, apiRoutes }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const { branding, fetchPublicBranding } = useBranding();
   const [searchParams] = useSearchParams();
   const emailRef = useRef(null);
@@ -340,13 +342,14 @@ const Login = ({ onLogin, apiRoutes }) => {
               'Create account' for B2C self-service signups. Both absolute
               so they don't push the centered form. */}
           <div className="absolute top-5 right-5 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
-            <a
-              href="mailto:itops@synergificsoftware.com?subject=Demo%20request%20-%20Synergific%20Cloud%20Portal&body=Hi%20team%2C%0A%0AI%27d%20like%20to%20see%20a%20demo%20of%20Synergific%20Cloud%20Portal%20for%20our%20training%20delivery%20needs.%0A%0ACompany%3A%20%0AExpected%20batch%20size%3A%20%0APreferred%20time%3A%20%0A%0AThanks!"
+            <button
+              type="button"
+              onClick={() => setDemoOpen(true)}
               className="group hidden md:inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-blue-200 hover:text-white border border-blue-500/30 hover:border-blue-400/60 bg-blue-500/10 hover:bg-blue-500/20 rounded-full backdrop-blur-xl transition-all"
             >
               <span>Book demo</span>
               <FaArrowRight className="w-3 h-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
-            </a>
+            </button>
             <Link
               to="/signup"
               className="group inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-blue-500/50 bg-white/[0.03] hover:bg-white/[0.08] rounded-full backdrop-blur-xl transition-all"
@@ -543,6 +546,9 @@ const Login = ({ onLogin, apiRoutes }) => {
           </div>
         </section>
       </div>
+
+      {/* Demo request modal — opens from the 'Book demo' pill */}
+      <DemoRequestModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </div>
   );
 };

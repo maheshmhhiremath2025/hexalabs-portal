@@ -546,6 +546,89 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// ─── Demo request emails (from public /open/demo-request form) ──────────
+//
+// Two emails per submission:
+//   1. Confirmation to the requester — "thanks, we'll be in touch".
+//   2. Notification to internal ops (vinay + itops) with full details.
+//
+// Both use the unified email template so a demo request reads like any
+// other official Synergific email.
+
+async function notifyDemoRequestConfirmation({ name, email, company, demoDate, preferredTiming }) {
+  const subject = `We received your demo request — Synergific Cloud Portal`;
+
+  const sections = [
+    info('What happens next',
+      `<strong>Within 24 business hours</strong> our team will email you to confirm the date + timing and send a calendar invite with a meeting link. If you asked for a date that is already full we'll suggest the nearest slot.`,
+      'blue'),
+    credentials('Your request summary', [
+      { label: 'Name',          value: name },
+      { label: 'Email',         value: email, mono: true },
+      { label: 'Company',       value: company },
+      ...(demoDate        ? [{ label: 'Preferred date', value: demoDate }] : []),
+      ...(preferredTiming ? [{ label: 'Preferred time', value: preferredTiming }] : []),
+    ]),
+    info('Prepare for the demo',
+      `Think about: how many students per batch, which certifications you deliver, any cloud-provider preferences (AWS / Azure / GCP / OCI), and whether you need white-label branding. We'll tailor the walkthrough to your actual workflow.`,
+      'gray'),
+  ];
+
+  const { html, text } = renderEmail({
+    title: 'Demo request received',
+    badge: 'DEMO',
+    intro: `Hi ${name.split(' ')[0] || 'there'},<br><br>Thanks for requesting a demo of Synergific Cloud Portal. We've got your details and one of our team will reach out shortly.`,
+    sections,
+  });
+
+  await sendEmail(email, subject, html, text);
+}
+
+async function notifyDemoRequestOps({ name, email, company, demoDate, preferredTiming, ipAddress, userAgent }) {
+  const subject = `[Synergific Ops] New demo request — ${company} (${name})`;
+  const to = joinEmails(INTERNAL_CC);  // vinay + itops
+
+  // Plain-text body — easy to forward / paste into CRM
+  const text = [
+    `New demo request from the public login page.`,
+    '',
+    `Name:             ${name}`,
+    `Email:            ${email}`,
+    `Company:          ${company}`,
+    `Preferred date:   ${demoDate || '—'}`,
+    `Preferred time:   ${preferredTiming || '—'}`,
+    `IP:               ${ipAddress || '—'}`,
+    `User-Agent:       ${userAgent || '—'}`,
+    `Submitted at:     ${new Date().toISOString()}`,
+    '',
+    `Reply-to link:    mailto:${email}?subject=Re%3A%20Your%20Synergific%20demo%20request`,
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:680px;margin:0 auto;">
+      <div style="background:#11192a;padding:18px 22px;border-radius:6px 6px 0 0;">
+        <div style="color:#fff;font-size:15px;font-weight:600;">[Ops] New demo request</div>
+        <div style="color:#93c5fd;font-size:12px;margin-top:3px;">${company} · ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 6px 6px;padding:18px 22px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;width:140px;">Name</td><td style="color:#111;font-weight:600;">${name}</td></tr>
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Email</td><td style="color:#111;font-family:monospace;"><a href="mailto:${email}" style="color:#2563eb;">${email}</a></td></tr>
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Company</td><td style="color:#111;">${company}</td></tr>
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Preferred date</td><td style="color:#111;">${demoDate || '—'}</td></tr>
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Preferred time</td><td style="color:#111;">${preferredTiming || '—'}</td></tr>
+          <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">IP / UA</td><td style="color:#6b7280;font-size:11px;">${ipAddress || '—'}  ·  ${(userAgent || '').slice(0, 80)}</td></tr>
+        </table>
+        <div style="margin-top:16px;">
+          <a href="mailto:${email}?subject=Re%3A%20Your%20Synergific%20demo%20request" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">Reply to ${name.split(' ')[0]}</a>
+        </div>
+        <p style="color:#9ca3af;font-size:11px;margin:16px 0 0;">Stored in DemoRequest collection. Update status from the admin panel once you've reached out.</p>
+      </div>
+    </div>`;
+
+  await sendEmail(to, subject, html, text, { cc: '' });  // no extra CC — TO already has both internal addresses
+}
+
 module.exports = {
   sendEmail,
   notifyInstanceReady,
@@ -560,4 +643,7 @@ module.exports = {
   notifySandboxBulkSummary,
   isLikelyDeliverable,
   getOrgAdminEmails,
+  // new in 2026-04-20 demo-request flow:
+  notifyDemoRequestConfirmation,
+  notifyDemoRequestOps,
 };
