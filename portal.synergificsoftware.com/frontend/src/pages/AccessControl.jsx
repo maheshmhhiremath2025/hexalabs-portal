@@ -2,20 +2,17 @@
 // Tab 1 "Login Access": login-time window, weekdays, hard expiry (per
 //   email / organization / training).  Login gate runs portal-wide so
 //   this covers VM / RDS / ROSA / ARO / sandbox / workspace users.
-// Tab 2 "Power Schedule": start/stop VMs on a schedule for a training
-//   (wraps the existing Scheduler component — the working /vm/scheduler
-//   experience, just embedded here so both live in one place).
+// Tab 2 "Power Schedule": create start/stop schedules for VMs of a
+//   training batch — shares the same API as /vm/scheduler.
 
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import apiCaller from '../services/apiCaller';
 import { apiRoutes } from '../services/apiRoutes';
 import {
   FaShieldAlt, FaClock, FaCalendarAlt, FaUserClock, FaBuilding, FaEnvelope,
   FaGraduationCap, FaCheck, FaTimes, FaSpinner, FaTrashAlt, FaInfoCircle,
-  FaPowerOff, FaChevronDown,
+  FaPowerOff, FaChevronDown, FaPlay, FaStop, FaPlus, FaServer,
 } from 'react-icons/fa';
-
-const Scheduler = lazy(() => import('./Scheduler'));
 
 const DAY_LABELS = [
   { v: 0, label: 'Sun' },
@@ -47,13 +44,26 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function PowerScheduleTab() {
+function PowerScheduleTab({ pushToast }) {
   const [orgs, setOrgs] = useState([]);
   const [loadingOrgs, setLoadingOrgs] = useState(true);
   const [selectedOrg, setSelectedOrg] = useState('');
   const [trainings, setTrainings] = useState([]);
   const [loadingTrainings, setLoadingTrainings] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState('');
+
+  // schedule form + list
+  const [action, setAction] = useState('start');             // 'start' | 'stop'
+  const [date, setDate] = useState('');                      // yyyy-mm-dd
+  const [time, setTime] = useState('');                      // HH:mm
+  const [scopeAll, setScopeAll] = useState(true);            // all VMs vs specific
+  const [vmNames, setVmNames] = useState([]);
+  const [selectedVMs, setSelectedVMs] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     (async () => {
@@ -78,49 +88,295 @@ function PowerScheduleTab() {
     })();
   }, [selectedOrg]);
 
+  const fetchSchedules = useCallback(async (name) => {
+    if (!name) return;
+    setLoadingSchedules(true);
+    try {
+      const r = await apiCaller.get(`${apiRoutes.schedulesApi}?trainingName=${encodeURIComponent(name)}`);
+      setSchedules(r.data?.schedules || []);
+    } catch { pushToast('Failed to load schedules', 'error'); }
+    finally { setLoadingSchedules(false); }
+  }, [pushToast]);
+
+  const fetchVmNames = useCallback(async (name) => {
+    if (!name) return;
+    try {
+      const r = await apiCaller.get(`${apiRoutes.vmNamesApi}?trainingName=${encodeURIComponent(name)}`);
+      setVmNames(r.data?.vmNames || r.data?.vms || []);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    setSchedules([]); setVmNames([]); setSelectedVMs([]); setPage(1);
+    if (selectedTraining) { fetchSchedules(selectedTraining); fetchVmNames(selectedTraining); }
+  }, [selectedTraining, fetchSchedules, fetchVmNames]);
+
+  const addSchedule = async () => {
+    if (!selectedTraining) { pushToast('Pick a training first', 'error'); return; }
+    if (!date || !time) { pushToast('Pick a date and time', 'error'); return; }
+    if (!scopeAll && selectedVMs.length === 0) { pushToast('Pick at least one VM, or switch to "All VMs"', 'error'); return; }
+    setSubmitting(true);
+    try {
+      await apiCaller.post(apiRoutes.schedulesApi, {
+        trainingName: selectedTraining,
+        data: {
+          schedules: [{
+            date, time, action,
+            entireTraining: scopeAll,
+            targetVMs: scopeAll ? [] : selectedVMs,
+          }],
+          restrictLogin: { restrictUserLogin: false },
+        },
+      });
+      pushToast(`${action === 'start' ? 'Start' : 'Stop'} schedule added for ${date} ${time}`);
+      setDate(''); setTime(''); setSelectedVMs([]); setScopeAll(true);
+      fetchSchedules(selectedTraining);
+    } catch (err) {
+      pushToast(err.response?.data?.message || 'Failed to add schedule', 'error');
+    } finally { setSubmitting(false); }
+  };
+
+  const deleteSchedule = async (s) => {
+    if (!window.confirm(`Delete this ${s.action} schedule for ${new Date(s.date).toLocaleDateString()} ${s.time}?`)) return;
+    try {
+      await apiCaller.delete(apiRoutes.schedulesApi, {
+        params: { scheduleId: s._id, trainingName: selectedTraining },
+      });
+      pushToast('Schedule deleted');
+      fetchSchedules(selectedTraining);
+    } catch (err) { pushToast(err.response?.data?.message || 'Delete failed', 'error'); }
+  };
+
+  const toggleVM = (v) => setSelectedVMs(arr => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
+
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const sorted = [...schedules].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   return (
-    <div className="space-y-5">
-      <div className="bg-white border border-gray-200 rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-            <FaBuilding className="w-3 h-3 text-blue-400" /> Organization
-          </label>
-          <div className="relative">
-            <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} disabled={loadingOrgs}
-              className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50">
-              <option value="">{loadingOrgs ? 'Loading organizations…' : 'Select organization…'}</option>
-              {orgs.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+    <div className="space-y-6">
+      {/* Target picker card */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+              <FaBuilding className="w-3 h-3 text-blue-400" /> Organization
+            </label>
+            <div className="relative">
+              <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} disabled={loadingOrgs}
+                className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50">
+                <option value="">{loadingOrgs ? 'Loading…' : 'Select organization'}</option>
+                {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+              <FaGraduationCap className="w-3 h-3 text-blue-400" /> Training batch
+            </label>
+            <div className="relative">
+              <select value={selectedTraining} onChange={e => setSelectedTraining(e.target.value)} disabled={!selectedOrg || loadingTrainings}
+                className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50 disabled:text-gray-400">
+                <option value="">
+                  {!selectedOrg ? 'Pick organization first' : loadingTrainings ? 'Loading…' : trainings.length === 0 ? 'No trainings' : 'Select training'}
+                </option>
+                {trainings.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-            <FaGraduationCap className="w-3 h-3 text-blue-400" /> Training batch
-          </label>
-          <div className="relative">
-            <select value={selectedTraining} onChange={e => setSelectedTraining(e.target.value)} disabled={!selectedOrg || loadingTrainings}
-              className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="">
-                {!selectedOrg ? 'Pick organization first' : loadingTrainings ? 'Loading trainings…' : trainings.length === 0 ? 'No trainings in this org' : 'Select training…'}
-              </option>
-              {trainings.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-          </div>
-        </div>
+        {selectedTraining && (
+          <>
+            {/* Action (Start | Stop) */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-2">Action</label>
+              <div className="grid grid-cols-2 gap-2 max-w-md">
+                {[
+                  { v: 'start', label: 'Start VMs', icon: FaPlay, color: 'green' },
+                  { v: 'stop',  label: 'Stop VMs',  icon: FaStop, color: 'red'   },
+                ].map(a => (
+                  <button key={a.v} type="button" onClick={() => setAction(a.v)}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-lg border transition-all ${
+                      action === a.v
+                        ? a.color === 'green'
+                          ? 'bg-green-50 border-green-300 text-green-700 font-semibold'
+                          : 'bg-red-50 border-red-300 text-red-700 font-semibold'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}>
+                    <a.icon className={`w-3 h-3 ${action === a.v ? (a.color === 'green' ? 'text-green-600' : 'text-red-600') : 'text-gray-400'}`} />
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date + Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                  <FaCalendarAlt className="w-3 h-3 text-blue-400" /> Date
+                </label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} min={new Date().toISOString().slice(0, 10)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                  <FaClock className="w-3 h-3 text-blue-400" /> Time (IST)
+                </label>
+                <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+              </div>
+            </div>
+
+            {/* Scope */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                <FaServer className="w-3 h-3 text-blue-400" /> Target VMs
+              </label>
+              <div className="grid grid-cols-2 gap-2 max-w-md mb-3">
+                {[
+                  { v: true,  label: 'All VMs in training' },
+                  { v: false, label: 'Specific VMs'        },
+                ].map(s => (
+                  <button key={String(s.v)} type="button" onClick={() => setScopeAll(s.v)}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-all ${
+                      scopeAll === s.v
+                        ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {!scopeAll && (
+                <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50/40">
+                  {vmNames.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">No VMs found for this training.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                      {vmNames.map(v => (
+                        <label key={v} className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-white cursor-pointer">
+                          <input type="checkbox" checked={selectedVMs.includes(v)} onChange={() => toggleVM(v)}
+                            className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300 focus:ring-blue-500" />
+                          <span className="truncate text-gray-700" title={v}>{v}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={addSchedule} disabled={submitting}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {submitting ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaPlus className="w-3 h-3" />}
+                Add schedule
+              </button>
+            </div>
+
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <FaInfoCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-amber-800 leading-relaxed">
+                Schedules run at the configured IST time. Start wakes the VMs; Stop deallocates them to save cost.
+                For login-time gating (who can access, when), switch to the <span className="font-semibold">Login Access</span> tab.
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
-      {selectedTraining ? (
-        <Suspense fallback={<div className="py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>}>
-          <Scheduler selectedTraining={selectedTraining} apiRoutes={apiRoutes} />
-        </Suspense>
-      ) : (
+      {/* Upcoming schedules */}
+      {selectedTraining && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800">Schedules for <span className="text-blue-600">{selectedTraining}</span> ({schedules.length})</h3>
+            <button onClick={() => fetchSchedules(selectedTraining)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Refresh</button>
+          </div>
+          {loadingSchedules ? (
+            <div className="py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
+          ) : schedules.length === 0 ? (
+            <div className="py-10 text-center text-sm text-gray-400">No schedules yet. Add one above.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-[13px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    {['Action', 'Date', 'Time (IST)', 'Target VMs', 'Status', ''].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paged.map(s => (
+                    <tr key={s._id} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                          s.action === 'start' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {s.action === 'start' ? <FaPlay className="w-2.5 h-2.5" /> : <FaStop className="w-2.5 h-2.5" />}
+                          {s.action === 'start' ? 'Start' : 'Stop'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-700 tabular-nums text-xs">{fmtDate(s.date)}</td>
+                      <td className="px-4 py-2.5 text-gray-700 tabular-nums text-xs">{s.time}</td>
+                      <td className="px-4 py-2.5 text-gray-600 text-xs truncate max-w-[260px]" title={(s.targetVMs || []).join(', ')}>
+                        {s.scope === 'entire' ? 'All VMs' : (s.targetVMs || []).join(', ') || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className={`inline-block px-2 py-0.5 rounded-full font-medium ${
+                          s.status === 'done'    ? 'bg-gray-100 text-gray-600' :
+                          s.status === 'failed'  ? 'bg-red-50 text-red-700'    :
+                                                   'bg-blue-50 text-blue-700'
+                        }`}>{s.status || 'pending'}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => deleteSchedule(s)} title="Delete schedule"
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md">
+                          <FaTrashAlt className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-600">
+                <div className="flex items-center gap-3">
+                  <span>Showing <span className="font-semibold">{(safePage - 1) * pageSize + 1}</span>–<span className="font-semibold">{Math.min(safePage * pageSize, sorted.length)}</span> of <span className="font-semibold">{sorted.length}</span></span>
+                  <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    className="px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(1)} disabled={safePage === 1}
+                    className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">« First</button>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                    className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">‹ Prev</button>
+                  <span className="px-2 py-1 font-semibold text-gray-700">Page {safePage} / {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+                    className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Next ›</button>
+                  <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}
+                    className="px-2 py-1 rounded-md border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Last »</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!selectedTraining && (
         <div className="bg-white border border-gray-200 rounded-xl py-14 text-center">
           <FaPowerOff className="w-8 h-8 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-semibold text-gray-700">Pick an organization and training</p>
-          <p className="text-xs text-gray-400 mt-1">VM start/stop schedule will load here once a training is selected.</p>
+          <p className="text-xs text-gray-400 mt-1">VM start/stop schedules will appear here once a training is selected.</p>
         </div>
       )}
     </div>
@@ -256,7 +512,7 @@ export default function AccessControl() {
         ))}
       </div>
 
-      {activeTab === 'power' && <PowerScheduleTab />}
+      {activeTab === 'power' && <PowerScheduleTab pushToast={pushToast} />}
 
       {activeTab === 'login' && <>
       {/* Form card */}
