@@ -48,51 +48,68 @@ function Toast({ toast, onClose }) {
 }
 
 function PowerScheduleTab() {
+  const [orgs, setOrgs] = useState([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(true);
+  const [selectedOrg, setSelectedOrg] = useState('');
   const [trainings, setTrainings] = useState([]);
+  const [loadingTrainings, setLoadingTrainings] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState('');
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
         const r = await apiCaller.get('/admin/organization');
-        const orgs = r.data?.organization || [];
-        const all = [];
-        for (const org of orgs) {
-          try {
-            const t = await apiCaller.get(`${apiRoutes.trainingNameApi}?organization=${encodeURIComponent(org)}`);
-            (t.data?.trainingNames || []).forEach(n => all.push({ org, name: n }));
-          } catch { /* skip bad org */ }
-        }
-        setTrainings(all);
+        setOrgs(r.data?.organization || []);
       } catch { /* silent */ }
-      finally { setLoading(false); }
+      finally { setLoadingOrgs(false); }
     })();
   }, []);
 
-  if (loading) {
-    return <div className="py-12 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>;
-  }
+  useEffect(() => {
+    if (!selectedOrg) { setTrainings([]); setSelectedTraining(''); return; }
+    setLoadingTrainings(true);
+    setSelectedTraining('');
+    (async () => {
+      try {
+        const r = await apiCaller.get(`${apiRoutes.trainingNameApi}?organization=${encodeURIComponent(selectedOrg)}`);
+        setTrainings(r.data?.trainingNames || []);
+      } catch { /* silent */ }
+      finally { setLoadingTrainings(false); }
+    })();
+  }, [selectedOrg]);
 
   return (
     <div className="space-y-5">
-      <div className="bg-white border border-gray-200 rounded-xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-          <FaGraduationCap className="w-3 h-3 text-blue-400" /> Training batch
-        </label>
-        <div className="relative">
-          <select value={selectedTraining} onChange={e => setSelectedTraining(e.target.value)}
-            className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white">
-            <option value="">Select a training…</option>
-            {trainings.map(t => (
-              <option key={`${t.org}::${t.name}`} value={t.name}>{t.name} — {t.org}</option>
-            ))}
-          </select>
-          <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+      <div className="bg-white border border-gray-200 rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+            <FaBuilding className="w-3 h-3 text-blue-400" /> Organization
+          </label>
+          <div className="relative">
+            <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} disabled={loadingOrgs}
+              className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50">
+              <option value="">{loadingOrgs ? 'Loading organizations…' : 'Select organization…'}</option>
+              {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+          </div>
         </div>
-        {trainings.length === 0 && (
-          <p className="text-[12px] text-gray-400 mt-2">No trainings found.</p>
-        )}
+
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+            <FaGraduationCap className="w-3 h-3 text-blue-400" /> Training batch
+          </label>
+          <div className="relative">
+            <select value={selectedTraining} onChange={e => setSelectedTraining(e.target.value)} disabled={!selectedOrg || loadingTrainings}
+              className="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white disabled:bg-gray-50 disabled:text-gray-400">
+              <option value="">
+                {!selectedOrg ? 'Pick organization first' : loadingTrainings ? 'Loading trainings…' : trainings.length === 0 ? 'No trainings in this org' : 'Select training…'}
+              </option>
+              {trainings.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
       </div>
 
       {selectedTraining ? (
@@ -102,8 +119,8 @@ function PowerScheduleTab() {
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl py-14 text-center">
           <FaPowerOff className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-gray-700">Pick a training batch</p>
-          <p className="text-xs text-gray-400 mt-1">Once selected, its VM start/stop schedule will load here.</p>
+          <p className="text-sm font-semibold text-gray-700">Pick an organization and training</p>
+          <p className="text-xs text-gray-400 mt-1">VM start/stop schedule will load here once a training is selected.</p>
         </div>
       )}
     </div>
