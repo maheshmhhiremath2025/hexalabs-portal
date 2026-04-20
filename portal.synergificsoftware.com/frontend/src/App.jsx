@@ -22,9 +22,7 @@ const VmDetails            = lazy(() => import('./pages/vmDetails'))
 const BillingDetails       = lazy(() => import('./pages/BillingDetails'))
 const ViewLogs             = lazy(() => import('./pages/ViewLogs'))
 const Ports                = lazy(() => import('./pages/Ports'))
-const Scheduler            = lazy(() => import('./pages/Scheduler'))
 const CreateVM             = lazy(() => import('./pages/CreateVM'))
-const AccessRestriction    = lazy(() => import('./pages/AccessRestriction'))
 const Controller           = lazy(() => import('./pages/Controller'))
 const Quota                = lazy(() => import('./pages/Quota'))
 const DeleteLogs           = lazy(() => import('./pages/DeleteLogs'))
@@ -214,8 +212,6 @@ function AppInner() {
               <Route path='billing' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<BillingDetails selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />} />
               <Route path='logs' element={<ViewLogs selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />
               <Route path='ports' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<Ports selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />} />
-              <Route path='scheduler' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<Scheduler selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />} />
-              <Route path='restriction' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AccessRestriction selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />} />
               <Route path='quota' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<Quota selectedTraining={selectedTraining} superadminApiRoutes={superadminApiRoutes} />} />} />
               <Route path='deletelogs' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<DeleteLogs selectedTraining={selectedTraining} superadminApiRoutes={superadminApiRoutes} />} />} />
               <Route path='deletetraining' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<DeleteTraining selectedTraining={selectedTraining} apiRoutes={apiRoutes} />} />} />

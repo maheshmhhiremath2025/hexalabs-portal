@@ -5,7 +5,7 @@ import {
   FaRupeeSign, FaAws, FaMicrosoft, FaGoogle, FaPencilAlt, FaSave, FaPlus,
   FaTrash, FaRocket, FaFilePdf, FaShieldAlt, FaClock, FaUsers, FaFlag,
   FaChevronDown, FaChevronRight, FaTrashAlt, FaCubes, FaServer, FaMemory, FaHdd,
-  FaDocker, FaHammer, FaLock, FaUnlock,
+  FaDocker, FaHammer, FaLock, FaUnlock, FaChartLine,
 } from 'react-icons/fa';
 import apiCaller from '../../services/apiCaller';
 import { b2bCourseApiRoutes } from '../../services/b2bApiRoutes';
@@ -521,6 +521,20 @@ export default function B2BCourseDetail() {
         </div>
       )}
 
+      {/* Cost Simulator */}
+      <CostSimulator
+        basePerSeatInr={doc.cost?.perSeatInr || 0}
+        baseTotalInr={doc.cost?.totalInr || 0}
+        baseSeats={doc.seats || 1}
+        baseTotalHours={currentAnalysis?.totalHours || 0}
+        baseTtlHours={doc.requestedTtlHours || 4}
+        breakdown={doc.cost?.breakdown || []}
+        marginPercent={doc.cost?.marginPercent || 40}
+        baselineSeatInr={doc.cost?.baselineSeatInr || 20}
+        isContainerLab={currentAnalysis?.recommendedDeployment === 'container_lab'}
+        containerRate={currentAnalysis?.containerLab?.resourcesPerSeat ? 0.68 : 0}
+      />
+
       {currentAnalysis?.recommendedDeployment !== 'container_lab' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Feasibility */}
@@ -1035,6 +1049,159 @@ function ModuleRow({ module: mod }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ----------------------- Cost Simulator (What-If) ----------------------- */
+
+function CostSimulator({ basePerSeatInr, baseTotalInr, baseSeats, baseTotalHours, baseTtlHours, breakdown, marginPercent, baselineSeatInr, isContainerLab, containerRate }) {
+  const [simSeats, setSimSeats] = useState(baseSeats);
+  const [simTotalHours, setSimTotalHours] = useState(baseTotalHours);
+  const [simTtlHours, setSimTtlHours] = useState(baseTtlHours);
+  const [open, setOpen] = useState(false);
+
+  // Recalculate cost based on changed parameters
+  const hourRatio = baseTotalHours > 0 ? simTotalHours / baseTotalHours : 1;
+
+  let simPerSeat, simTotal;
+  if (isContainerLab) {
+    // Container: rate per hour × total hours
+    simPerSeat = Math.ceil((containerRate || 0.68) * simTotalHours);
+    simTotal = simPerSeat * simSeats;
+  } else {
+    // Cloud sandbox: scale the per-seat cost proportionally to hours
+    simPerSeat = Math.ceil(basePerSeatInr * hourRatio);
+    simTotal = simPerSeat * simSeats;
+  }
+
+  // TTL impact: more cleanup cycles = slightly more overhead cost
+  const baseSessions = baseTotalHours / Math.max(baseTtlHours, 1);
+  const simSessions = simTotalHours / Math.max(simTtlHours, 1);
+  const sessionOverhead = Math.ceil((simSessions - baseSessions) * 5); // ₹5 per extra session overhead
+  const adjustedPerSeat = Math.max(simPerSeat + sessionOverhead, simPerSeat);
+  const adjustedTotal = adjustedPerSeat * simSeats;
+
+  const changed = simSeats !== baseSeats || simTotalHours !== baseTotalHours || simTtlHours !== baseTtlHours;
+
+  return (
+    <Card
+      title={<span className="flex items-center gap-2"><FaChartLine className="text-indigo-500" /> Cost Simulator</span>}
+      subtitle="Adjust seats, lab hours, and cleanup TTL to see instant cost impact"
+      right={
+        <button onClick={() => setOpen(!open)} className="text-xs text-indigo-600 hover:underline">
+          {open ? 'Collapse' : 'Expand'}
+        </button>
+      }
+    >
+      {open && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Seats slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Seats</label>
+                <span className="text-sm font-bold text-surface-900">{simSeats}</span>
+              </div>
+              <input type="range" min={1} max={500} value={simSeats} onChange={e => setSimSeats(+e.target.value)}
+                className="w-full accent-indigo-600" />
+              <div className="flex justify-between text-[10px] text-surface-400 mt-1"><span>1</span><span>500</span></div>
+              <input type="number" min={1} max={999} value={simSeats} onChange={e => setSimSeats(Math.max(1, +e.target.value))}
+                className="w-full mt-2 px-3 py-1.5 text-sm border border-surface-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            </div>
+
+            {/* Total hours slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Total Lab Hours</label>
+                <span className="text-sm font-bold text-surface-900">{simTotalHours}h</span>
+              </div>
+              <input type="range" min={1} max={500} value={simTotalHours} onChange={e => setSimTotalHours(+e.target.value)}
+                className="w-full accent-indigo-600" />
+              <div className="flex justify-between text-[10px] text-surface-400 mt-1"><span>1h</span><span>500h</span></div>
+              <input type="number" min={1} max={999} value={simTotalHours} onChange={e => setSimTotalHours(Math.max(1, +e.target.value))}
+                className="w-full mt-2 px-3 py-1.5 text-sm border border-surface-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            </div>
+
+            {/* TTL selector */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Cleanup TTL</label>
+                <span className="text-sm font-bold text-surface-900">{simTtlHours}h</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 mt-1">
+                {[2, 4, 8, 12, 24, 48, 72, 96].map(h => (
+                  <button key={h} onClick={() => setSimTtlHours(h)}
+                    className={`px-2 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                      simTtlHours === h ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-surface-700 border-surface-200 hover:border-indigo-400'
+                    }`}>
+                    {h}h
+                  </button>
+                ))}
+              </div>
+              <input type="number" min={1} max={999} value={simTtlHours} onChange={e => setSimTtlHours(Math.max(1, +e.target.value))}
+                className="w-full mt-2 px-3 py-1.5 text-sm border border-surface-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            </div>
+          </div>
+
+          {/* Results comparison */}
+          <div className={`rounded-xl p-5 border-2 ${changed ? 'border-indigo-200 bg-gradient-to-r from-indigo-50 to-cyan-50' : 'border-surface-200 bg-surface-50'}`}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Per Seat</div>
+                <div className="text-lg font-bold text-surface-900 mt-1">
+                  <FaRupeeSign className="inline text-xs" />{formatInr(adjustedPerSeat)}
+                </div>
+                {changed && basePerSeatInr > 0 && (
+                  <div className="text-[11px] text-surface-400 line-through mt-0.5">
+                    <FaRupeeSign className="inline text-[9px]" />{formatInr(basePerSeatInr)}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Total Quote</div>
+                <div className="text-lg font-bold text-indigo-700 mt-1">
+                  <FaRupeeSign className="inline text-xs" />{formatInr(adjustedTotal)}
+                </div>
+                {changed && baseTotalInr > 0 && (
+                  <div className="text-[11px] text-surface-400 line-through mt-0.5">
+                    <FaRupeeSign className="inline text-[9px]" />{formatInr(baseTotalInr)}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Sessions/Student</div>
+                <div className="text-lg font-bold text-surface-900 mt-1">{Math.ceil(simSessions)}</div>
+                <div className="text-[11px] text-surface-500 mt-0.5">{simTotalHours}h / {simTtlHours}h TTL</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Daily Schedule</div>
+                <div className="text-lg font-bold text-surface-900 mt-1">
+                  {simTtlHours <= 24 ? `${Math.floor(24/simTtlHours)} sessions/day` : `${Math.ceil(simTtlHours/24)}d per session`}
+                </div>
+                <div className="text-[11px] text-surface-500 mt-0.5">{Math.ceil(simTotalHours / (simTtlHours <= 8 ? simTtlHours * 2 : simTtlHours))} working days</div>
+              </div>
+            </div>
+
+            {changed && (
+              <div className="mt-4 pt-3 border-t border-indigo-200/50 flex items-center justify-between">
+                <div className="text-xs text-surface-600">
+                  {adjustedTotal > baseTotalInr
+                    ? <span className="text-rose-600 font-medium">+<FaRupeeSign className="inline text-[9px]" />{formatInr(adjustedTotal - baseTotalInr)} vs original</span>
+                    : adjustedTotal < baseTotalInr
+                    ? <span className="text-emerald-600 font-medium">-<FaRupeeSign className="inline text-[9px]" />{formatInr(baseTotalInr - adjustedTotal)} vs original ({Math.round((1 - adjustedTotal/baseTotalInr) * 100)}% savings)</span>
+                    : <span className="text-surface-500">Same as original</span>
+                  }
+                </div>
+                <button onClick={() => { setSimSeats(baseSeats); setSimTotalHours(baseTotalHours); setSimTtlHours(baseTtlHours); }}
+                  className="text-xs text-indigo-600 hover:underline">
+                  Reset to original
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

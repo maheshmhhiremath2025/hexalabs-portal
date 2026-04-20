@@ -177,8 +177,6 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
           {(userType === 'admin' || userType === 'superadmin') && (
             <Accordion id="maintenance" icon={FaCog} label="Maintenance" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
               <NavItem to="/vm/ports" icon={FaNetworkWired} label="Networking" collapsed={false} />
-              <NavItem to="/vm/scheduler" icon={FaClock} label="Operations" collapsed={false} />
-              <NavItem to="/vm/restriction" icon={FaShieldAlt} label="Training Hours (legacy)" collapsed={false} />
               {userType === 'superadmin' && (
                 <>
                   <NavItem to="/vm/quota" icon={FaQuota} label="Quotas" collapsed={false} />

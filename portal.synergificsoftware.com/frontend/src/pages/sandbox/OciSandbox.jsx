@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import apiCaller from '../../services/apiCaller';
-import { FaDatabase, FaTrash, FaSpinner, FaRocket, FaDownload, FaExclamationTriangle } from 'react-icons/fa';
+import { FaDatabase, FaTrash, FaSpinner, FaRocket, FaDownload, FaExclamationTriangle, FaChartBar, FaPlay, FaPowerOff } from 'react-icons/fa';
 import BulkEmailInput from '../../components/BulkEmailInput';
 
 const TTL_OPTIONS = [
@@ -356,6 +356,9 @@ export default function OciSandbox() {
                 </div>
             )}
 
+            {/* OAC Shared Instance Manager */}
+            <OacInstanceManager />
+
             {/* Users table */}
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                 <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
@@ -437,6 +440,153 @@ export default function OciSandbox() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+function OacInstanceManager() {
+    const [instances, setInstances] = useState([]);
+    const [batchName, setBatchName] = useState('');
+    const [ocpus, setOcpus] = useState(2);
+    const [provisioning, setProvisioning] = useState(false);
+    const [msg, setMsg] = useState(null);
+    const pollRef = useRef(null);
+
+    const fetchInstances = useCallback(async () => {
+        try {
+            const res = await apiCaller.get('/oci-sandbox/oac-instances');
+            setInstances(res.data || []);
+        } catch {}
+    }, []);
+
+    useEffect(() => {
+        fetchInstances();
+    }, []);
+
+    // Poll while any instance is provisioning/destroying
+    useEffect(() => {
+        const hasPending = instances.some(i => i.status === 'provisioning' || i.status === 'destroying');
+        if (hasPending && !pollRef.current) {
+            pollRef.current = setInterval(fetchInstances, 15000);
+        } else if (!hasPending && pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+        }
+        return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    }, [instances, fetchInstances]);
+
+    const handleProvision = async () => {
+        if (!batchName.trim()) return;
+        setProvisioning(true);
+        setMsg(null);
+        try {
+            const res = await apiCaller.post('/oci-sandbox/oac-provision', { batchName: batchName.trim(), ocpus });
+            setMsg(res.data.message);
+            setBatchName('');
+            fetchInstances();
+        } catch (err) {
+            setMsg(err.response?.data?.message || 'Failed to provision');
+        } finally {
+            setProvisioning(false);
+        }
+    };
+
+    const handleDestroy = async (name) => {
+        if (!window.confirm(`Destroy OAC instance "${name}"? This will delete the Analytics Cloud instance and compartment.`)) return;
+        setMsg(null);
+        try {
+            await apiCaller.delete(`/oci-sandbox/oac-instance/${name}`);
+            setMsg(`Destroying "${name}"...`);
+            fetchInstances();
+        } catch (err) {
+            setMsg(err.response?.data?.message || 'Failed to destroy');
+        }
+    };
+
+    const statusBadge = (status) => {
+        const styles = {
+            active: 'bg-green-50 text-green-700',
+            provisioning: 'bg-yellow-50 text-yellow-700',
+            destroying: 'bg-orange-50 text-orange-700',
+            destroyed: 'bg-gray-100 text-gray-500',
+            failed: 'bg-red-50 text-red-600',
+            'destroy-failed': 'bg-red-50 text-red-600',
+        };
+        return (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${styles[status] || 'bg-gray-100 text-gray-500'}`}>
+                {(status === 'provisioning' || status === 'destroying') && <FaSpinner className="w-2.5 h-2.5 animate-spin" />}
+                {status}
+            </span>
+        );
+    };
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <FaChartBar className="text-orange-500 w-3.5 h-3.5" /> Oracle Analytics Cloud — Shared Instances
+            </h3>
+            <p className="text-xs text-gray-500">Provision a shared OAC instance per training batch. Students access it via their OCI sandbox credentials.</p>
+
+            {msg && <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">{msg}</div>}
+
+            <div className="flex items-end gap-3 flex-wrap">
+                <div>
+                    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Batch Name</label>
+                    <input value={batchName} onChange={e => setBatchName(e.target.value)} placeholder="e.g. client-apr-2026"
+                        className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-56" />
+                </div>
+                <div>
+                    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">OCPUs</label>
+                    <select value={ocpus} onChange={e => setOcpus(Number(e.target.value))}
+                        className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400">
+                        <option value={2}>2 OCPUs (~$2.15/hr)</option>
+                        <option value={4}>4 OCPUs (~$4.30/hr)</option>
+                        <option value={8}>8 OCPUs (~$8.60/hr)</option>
+                    </select>
+                </div>
+                <button onClick={handleProvision} disabled={provisioning || !batchName.trim()}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors">
+                    {provisioning ? <FaSpinner className="animate-spin" /> : <FaPlay className="w-3 h-3" />}
+                    {provisioning ? 'Provisioning...' : 'Provision OAC'}
+                </button>
+            </div>
+
+            {instances.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="min-w-full text-[13px]">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Batch</th>
+                                <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">OCPUs</th>
+                                <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">OAC URL</th>
+                                <th className="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {instances.filter(i => i.status !== 'destroyed').map(inst => (
+                                <tr key={inst.batchName} className="hover:bg-gray-50/50">
+                                    <td className="px-4 py-2.5 font-medium text-gray-800">{inst.batchName}</td>
+                                    <td className="px-4 py-2.5">{statusBadge(inst.status)}</td>
+                                    <td className="px-4 py-2.5 text-gray-600">{inst.ocpus}</td>
+                                    <td className="px-4 py-2.5">
+                                        {inst.oacUrl ? <a href={inst.oacUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">{inst.oacUrl}</a> : <span className="text-gray-400 text-xs">-</span>}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        {(inst.status === 'active' || inst.status === 'failed' || inst.status === 'destroy-failed') && (
+                                            <button onClick={() => handleDestroy(inst.batchName)}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Destroy">
+                                                <FaPowerOff className="w-3 h-3" />
+                                            </button>
+                                        )}
+                                        {inst.status === 'destroying' && <FaSpinner className="w-3 h-3 animate-spin text-gray-400 inline" />}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }

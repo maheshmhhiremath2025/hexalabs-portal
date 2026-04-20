@@ -631,7 +631,7 @@ export default function AccessControl() {
           <FaInfoCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-amber-800 leading-relaxed">
             Restrictions are enforced at the login gate. Already-logged-in users keep their session until auto-logout (5 min idle) or browser refresh — so rules don't interrupt mid-session.
-            For VM power schedules (start/stop the infrastructure itself), use the existing <span className="font-semibold">Operations</span> page instead.
+            To start/stop VMs on a schedule, use the <span className="font-semibold">Power Schedule</span> tab above.
           </p>
         </div>
       </div>
