@@ -231,7 +231,7 @@ function AppInner() {
             <Route path='/templates' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TemplateManager />} />} />
             <Route path='/rds' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployRDS userDetails={userDetails} />} />} />
             <Route path='/overview' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<Controller superadminApiRoutes={superadminApiRoutes} />} />} />
-            <Route path='/admin/access-control' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<AccessControl />} />} />
+            <Route path='/admin/access-control' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AccessControl />} />} />
 
             <Route path="/costs" element={<RoleBasedRoute allowedRoles={["superadmin"]} element={<CostAnalytics />} />} />
             <Route path="/analytics" element={<RoleBasedRoute allowedRoles={["superadmin"]} element={<Analytics />} />} />

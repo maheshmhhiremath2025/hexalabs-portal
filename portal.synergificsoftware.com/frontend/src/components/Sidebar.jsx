@@ -214,9 +214,9 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
               <>
                 <NavItem to="/analytics" icon={FaChartBar} label="Usage Analytics" collapsed={false} />
                 <NavItem to="/optimize" icon={FaCut} label="Cost Optimization" collapsed={false} />
-                <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={false} />
               </>
             )}
+            <NavItem to="/admin/access-control" icon={FaShieldAlt} label="Access Control" collapsed={false} />
             <NavItem to="/vm/ports" icon={FaNetworkWired} label="Networking" collapsed={false} />
             {userType === 'superadmin' && (
               <>

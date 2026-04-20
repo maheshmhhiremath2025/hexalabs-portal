@@ -102,7 +102,10 @@ function PowerScheduleTab({ pushToast }) {
     if (!name) return;
     try {
       const r = await apiCaller.get(`${apiRoutes.vmNamesApi}?trainingName=${encodeURIComponent(name)}`);
-      setVmNames(r.data?.vmNames || r.data?.vms || []);
+      // Backend response can be: array of strings, array of {vmName}|{name}, or {vmList:[...]}
+      const raw = Array.isArray(r?.data) ? r.data : (r?.data?.vmList || r?.data?.vmNames || r?.data?.vms || []);
+      const names = raw.map(v => typeof v === 'string' ? v : (v.vmName || v.name)).filter(Boolean);
+      setVmNames(names);
     } catch { /* silent */ }
   }, []);
 

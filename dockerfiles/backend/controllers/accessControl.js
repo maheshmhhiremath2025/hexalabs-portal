@@ -10,8 +10,9 @@
 const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 
-function isSuperadmin(req) {
-  return req.user?.userType === 'superadmin';
+function canManageAccess(req) {
+  const t = req.user?.userType;
+  return t === 'admin' || t === 'superadmin';
 }
 
 function buildFilter(scope, target) {
@@ -48,7 +49,7 @@ function validateWeekdays(arr) {
  */
 async function handleUpdateUserSchedule(req, res) {
   try {
-    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required' });
+    if (!canManageAccess(req)) return res.status(403).json({ message: 'Admin access required' });
 
     const { scope, target, loginStart, loginStop, allowedWeekdays, accessExpiresAt, clearAll } = req.body || {};
     const filter = buildFilter(scope, target);
@@ -116,7 +117,7 @@ async function handleUpdateUserSchedule(req, res) {
  */
 async function handleListRestrictedUsers(req, res) {
   try {
-    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required' });
+    if (!canManageAccess(req)) return res.status(403).json({ message: 'Admin access required' });
 
     const users = await User.find({
       $or: [
@@ -147,7 +148,7 @@ async function handleListRestrictedUsers(req, res) {
  */
 async function handleScheduleSuggestions(req, res) {
   try {
-    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required' });
+    if (!canManageAccess(req)) return res.status(403).json({ message: 'Admin access required' });
     const q = String(req.query.q || '').trim();
     if (!q || q.length < 2) return res.json({ emails: [], organizations: [], trainings: [] });
 
