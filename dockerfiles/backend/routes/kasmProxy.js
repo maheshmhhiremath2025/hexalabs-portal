@@ -70,9 +70,15 @@ router.use('/:vmName', createProxyMiddleware({
     proxyReq: (proxyReq, req) => {
       // Inject the VM's Kasm Basic-auth so the browser doesn't get prompted
       if (req._kasmAuthHeader) proxyReq.setHeader('Authorization', req._kasmAuthHeader);
-      // Force Connection: close so Kasm's websockify response framing
-      // parses cleanly on Node 22 (the keep-alive path emits trailing bytes)
-      proxyReq.setHeader('Connection', 'close');
+      // Force Connection: close ONLY for regular HTTP (non-upgrade).
+      // WebSocket upgrades need Connection: Upgrade to reach Kasm's
+      // /websockify endpoint — that's what makes the desktop actually
+      // connect. Stripping it here would leave the UI stuck at
+      // "Connecting...".
+      const upgrade = (req.headers.upgrade || '').toLowerCase();
+      if (upgrade !== 'websocket') {
+        proxyReq.setHeader('Connection', 'close');
+      }
     },
     proxyReqWs: (proxyReq, req) => {
       // WebSocket upgrade also needs the auth header (noVNC upgrades after load)
