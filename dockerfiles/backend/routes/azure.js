@@ -237,9 +237,16 @@ router.post('/browser-access', async (req, res) => {
     if (isLinux) {
       // Route through the portal's domain so corporate firewalls that
       // block raw public IPs can still reach the lab. The /kasm proxy
-      // looks up the VM's IP server-side on every request.
+      // looks up the VM's IP server-side on every request and injects
+      // HTTP Basic auth, so the browser doesn't get prompted.
+      // ?password=… &autoconnect=1 tells Kasm noVNC to skip its own
+      // Connect button too, giving a true one-click flow.
       const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
-      return res.json({ accessUrl: `${apiBase}/kasm/${vmName}/`, mode: 'kasmvnc-proxy' });
+      const pw = encodeURIComponent(adminPassword || 'Welcome1234!');
+      return res.json({
+        accessUrl: `${apiBase}/kasm/${vmName}/?password=${pw}&autoconnect=1`,
+        mode: 'kasmvnc-proxy',
+      });
     }
 
     const port = vncPort || 6901;

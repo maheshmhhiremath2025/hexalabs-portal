@@ -23,25 +23,30 @@ const router = express.Router();
 
 // Cheap in-memory cache so we don't hit Mongo on every asset request.
 // KasmVNC's web UI pulls dozens of static files on first load.
-const upstreamCache = new Map();  // vmName -> { ip, expiresAt }
+const upstreamCache = new Map();  // vmName -> { ip, authHeader, expiresAt }
 const CACHE_TTL_MS = 30 * 1000;
 
 async function resolveUpstream(vmName) {
   const cached = upstreamCache.get(vmName);
-  if (cached && cached.expiresAt > Date.now()) return cached.ip;
-  const vm = await VM.findOne({ name: vmName, isAlive: true }, 'publicIp').lean();
+  if (cached && cached.expiresAt > Date.now()) return cached;
+  const vm = await VM.findOne({ name: vmName, isAlive: true }, 'publicIp adminUsername adminPass').lean();
   if (!vm?.publicIp) return null;
-  upstreamCache.set(vmName, { ip: vm.publicIp, expiresAt: Date.now() + CACHE_TTL_MS });
-  return vm.publicIp;
+  const authHeader = vm.adminUsername && vm.adminPass
+    ? 'Basic ' + Buffer.from(`${vm.adminUsername}:${vm.adminPass}`).toString('base64')
+    : null;
+  const entry = { ip: vm.publicIp, authHeader, expiresAt: Date.now() + CACHE_TTL_MS };
+  upstreamCache.set(vmName, entry);
+  return entry;
 }
 
 router.use('/:vmName', async (req, res, next) => {
   const { vmName } = req.params;
-  const ip = await resolveUpstream(vmName);
-  if (!ip) {
+  const upstream = await resolveUpstream(vmName);
+  if (!upstream) {
     return res.status(404).send(`Unknown or stopped VM: ${vmName}`);
   }
-  req._kasmUpstream = `https://${ip}:6901`;
+  req._kasmUpstream = `https://${upstream.ip}:6901`;
+  req._kasmAuthHeader = upstream.authHeader;
   next();
 });
 
@@ -57,6 +62,14 @@ router.use('/:vmName', createProxyMiddleware({
     return path.startsWith(prefix) ? path.slice(prefix.length) || '/' : path;
   },
   on: {
+    proxyReq: (proxyReq, req) => {
+      // Inject the VM's Kasm Basic-auth so the browser doesn't get prompted
+      if (req._kasmAuthHeader) proxyReq.setHeader('Authorization', req._kasmAuthHeader);
+    },
+    proxyReqWs: (proxyReq, req) => {
+      // WebSocket upgrade also needs the auth header (noVNC upgrades after load)
+      if (req._kasmAuthHeader) proxyReq.setHeader('Authorization', req._kasmAuthHeader);
+    },
     error: (err, req, res) => {
       logger.error(`[kasm-proxy] ${req.params?.vmName}: ${err.message}`);
       if (res && !res.headersSent) {

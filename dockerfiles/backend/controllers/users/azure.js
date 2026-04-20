@@ -110,12 +110,15 @@ async function handleGetMachines(req,res){
          // For VMs whose template has KasmVNC baked in, synthesise a
          // browser-access URL through the portal domain (handled by the
          // /kasm reverse-proxy). IP-based URLs get blocked by many
-         // corporate firewalls, hence the domain route.
+         // corporate firewalls, hence the domain route. ?password=… &
+         // autoconnect=1 skips the noVNC Connect button for a true
+         // one-click login.
          const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
          const vmList = (Array.isArray(vm) ? vm : []).map(v => {
            const obj = typeof v.toObject === 'function' ? v.toObject() : v;
            if (obj.kasmVnc && obj.name && !obj.accessUrl) {
-             obj.accessUrl = `${apiBase}/kasm/${obj.name}/`;
+             const pw = encodeURIComponent(obj.adminPass || 'Welcome1234!');
+             obj.accessUrl = `${apiBase}/kasm/${obj.name}/?password=${pw}&autoconnect=1`;
            }
            return obj;
          });
