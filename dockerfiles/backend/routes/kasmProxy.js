@@ -51,7 +51,7 @@ async function resolveUpstream(vmName) {
 // because the proxy's `router` function is sync). WS upgrades arrive
 // after the first HTTP load, so the cache is already hot by then.
 router.use((req, res, next) => {
-  const vmName = parseVmName(req.url) || parseVmName(req.originalUrl);
+  const vmName = parseVmName(req.originalUrl || req.url);
   if (!vmName) return next();
   resolveUpstream(vmName)
     .then(entry => {
@@ -71,7 +71,7 @@ router.use(createProxyMiddleware({
   secure: false,        // Kasm uses a self-signed cert by default
   // Upstream chosen per-request based on the VM name parsed from the URL
   router: (req) => {
-    const vmName = parseVmName(req.url);
+    const vmName = parseVmName(req.originalUrl || req.url);
     const cached = vmName && upstreamCache.get(vmName);
     if (!cached) return 'https://127.0.0.1:1';  // forces a fast error
     return `https://${cached.ip}:6901`;
@@ -86,7 +86,7 @@ router.use(createProxyMiddleware({
   },
   on: {
     proxyReq: (proxyReq, req) => {
-      const vmName = parseVmName(req.url) || parseVmName(req.originalUrl);
+      const vmName = parseVmName(req.originalUrl || req.url);
       const cached = vmName && upstreamCache.get(vmName);
       if (cached?.authHeader) proxyReq.setHeader('Authorization', cached.authHeader);
       // Force Connection:close ONLY for non-upgrade requests to avoid
