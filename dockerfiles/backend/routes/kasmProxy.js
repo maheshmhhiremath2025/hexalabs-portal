@@ -70,6 +70,9 @@ router.use('/:vmName', createProxyMiddleware({
     proxyReq: (proxyReq, req) => {
       // Inject the VM's Kasm Basic-auth so the browser doesn't get prompted
       if (req._kasmAuthHeader) proxyReq.setHeader('Authorization', req._kasmAuthHeader);
+      // Force Connection: close so Kasm's websockify response framing
+      // parses cleanly on Node 22 (the keep-alive path emits trailing bytes)
+      proxyReq.setHeader('Connection', 'close');
     },
     proxyReqWs: (proxyReq, req) => {
       // WebSocket upgrade also needs the auth header (noVNC upgrades after load)
