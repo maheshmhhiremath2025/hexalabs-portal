@@ -76,9 +76,13 @@ router.use(createProxyMiddleware({
     if (!cached) return 'https://127.0.0.1:1';  // forces a fast error
     return `https://${cached.ip}:6901`;
   },
-  // Strip /kasm/<vmName> prefix so Kasm sees `/` and `/websockify`
+  // Express already strips the /kasm mount prefix before the proxy
+  // sees the URL, so only the /<vmName> segment remains. Strip that
+  // so Kasm sees `/` and `/websockify` as it expects.
   pathRewrite: (path) => {
-    return path.replace(/^\/kasm\/[^\/]+/, '') || '/';
+    // Also handle the WS-upgrade case where /kasm/<vm>/ws is still present
+    const stripped = path.replace(/^\/kasm/, '').replace(/^\/[^\/?]+/, '');
+    return stripped || '/';
   },
   on: {
     proxyReq: (proxyReq, req) => {
