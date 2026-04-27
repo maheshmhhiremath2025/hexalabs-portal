@@ -474,6 +474,28 @@ const IMAGE_CAPABILITIES = {
     addable: [],
     notSupported: [],
   },
+  // === Mainframe COBOL Dev Workstation ===
+  'mainframe-cobol': {
+    label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)',
+    category: 'dev',
+    provides: [
+      'cobol', 'gnucobol', 'cobc',
+      'vs code', 'vscode', 'code-server',
+      'gdb', 'make', 'gcc', 'build-essential',
+      'ubuntu', 'linux',
+      'git', 'python', 'python3',
+    ],
+    keywords: [
+      'cobol', 'mainframe', 'mainframe modernization',
+      'legacy modernization', 'gnucobol', 'micro focus',
+      'aws mainframe modernization', 'm2', 'blu age', 'bluage',
+      'replatform', 'refactor',
+      'batch processing', 'jcl', 'vsam',
+    ],
+    addable: ['openjdk', 'maven', 'ant', 'postgresql client'],
+    notSupported: ['windows', 'gpu', 'z/os native'],
+  },
+
 };
 
 /**

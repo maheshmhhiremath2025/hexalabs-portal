@@ -7,13 +7,19 @@ const {handleCreateMachines} = require ('./../controllers/users/azureVmCreate')
 const {handleVMOperations} = require('./../controllers/users/vm')
 const {handleKillTraining, handlePreviewKill} = require("./../controllers/killTraining")
 const { getVmAccessUrl } = require('../services/guacamoleService');
+const { getDesktopAccessUrl } = require('../services/meshCentralService');
+const { requireWorker, isWorkerAlive } = require('../services/queueHealth');
+const { cascadeRdsSessions } = require('../services/rdsCascade');
 const { logger } = require('../plugins/logger');
 const router = express.Router();
 
 router.get('/trainingName', handleGetTrainingName);
 router.get('/ports', handleGetTrainingPorts);
-router.post('/ports', handleOpenTrainingPorts);
-router.delete('/ports', handleCloseTrainingPorts);
+// Mutations that enqueue Bull jobs are gated by requireWorker — if no
+// worker is heart-beating on Redis, we return 503 with a clear message
+// instead of silently dropping the job into the void.
+router.post('/ports', requireWorker, handleOpenTrainingPorts);
+router.delete('/ports', requireWorker, handleCloseTrainingPorts);
 router.get('/schedules', handleGetExistingSchedule);
 router.delete('/schedules', handleDeleteSchedule);
 router.post('/schedules', handleCreateSchedule);
@@ -22,11 +28,19 @@ router.get('/billing', handleGetBillingStats);
 router.get('/logs', handleGetLogs);
 router.get('/vmnames', handleGetVMnames);
 router.get('/machines', handleGetMachines)
-router.post('/machines', handleCreateMachines)
-router.patch('/machines', handleVMOperations);
-router.patch('/machinesRestart', handleVMRestart);
+router.post('/machines', requireWorker, handleCreateMachines)
+router.patch('/machines', requireWorker, handleVMOperations);
+router.patch('/machinesRestart', requireWorker, handleVMRestart);
 router.get('/killTraining/preview', handlePreviewKill);
 router.delete('/killTraining', handleKillTraining);
+
+// Light-weight queue-health probe for the frontend. Lets the UI gray out
+// Start/Stop buttons proactively instead of discovering the outage at
+// click-time. Cached for 5s inside queueHealth so polling is cheap.
+router.get('/queue-health', async (req, res) => {
+  const alive = await isWorkerAlive();
+  res.json({ alive });
+});
 
 // Delete single VM (superadmin only) — synchronous, deletes from Azure directly
 router.delete('/vm', async (req, res) => {
@@ -49,10 +63,12 @@ router.delete('/vm', async (req, res) => {
     const Training = require('../models/training');
     await Training.updateOne({ name: vm.trainingName }, { $pull: { vmUserMapping: { vmName: vmName } } });
 
-    // Also delete all RDS session entries linked to this server
-    if (vm.remarks?.includes('RDS Server')) {
-      await VM.updateMany({ rdsServer: vmName }, { isAlive: false, isRunning: false, remarks: 'RDS server deleted' });
-    }
+    // Cascade to per-user RDS session rows (helper matches by name prefix
+    // + os tag — the previous `rdsServer` query never matched anything
+    // because that field is never persisted).
+    await cascadeRdsSessions(vmName, 'delete').catch(e =>
+      logger.error(`[delete-vm] ${vmName}: rds cascade failed — ${e.message}`)
+    );
 
     // Return immediately, do Azure cleanup in background
     res.json({ message: `${vmName} deletion started — Azure resources being cleaned up` });
@@ -244,12 +260,25 @@ router.post('/browser-access', async (req, res) => {
       });
     }
 
-    // For Linux VMs with xrdp installed, pass the xrdp flag so the
-    // Guacamole service picks RDP (security='rdp', port 3389) and opens
-    // the XFCE desktop instead of a bare SSH terminal.
+    // Check VM flags for MeshCentral and xrdp
     const VM = require('../models/vm');
-    const vmDoc = await VM.findOne({ name: vmName }, 'hasXrdp').lean();
+    const vmDoc = await VM.findOne({ name: vmName }, 'hasXrdp meshCentral').lean();
 
+    // MeshCentral path: Windows VMs with agent get direct agent-based
+    // desktop — no RDP transcoding, no guacd CPU load. Falls back to
+    // Guacamole if agent hasn't connected yet.
+    if (vmDoc?.meshCentral) {
+      try {
+        const mcResult = await getDesktopAccessUrl(vmName);
+        if (mcResult) return res.json(mcResult);
+        logger.warn(`[browser-access] ${vmName}: MeshCentral device not found, falling back to Guacamole`);
+      } catch (mcErr) {
+        logger.warn(`[browser-access] ${vmName}: MeshCentral error (${mcErr.message}), falling back to Guacamole`);
+      }
+    }
+
+    // Guacamole fallback — for Linux VMs with xrdp, pass the xrdp flag
+    // so Guacamole picks RDP (security='rdp') instead of SSH terminal.
     const result = await getVmAccessUrl({
       vmName, publicIp, adminUsername, adminPassword, os,
       useVnc: useVnc || false,
@@ -263,4 +292,4 @@ router.post('/browser-access', async (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = router

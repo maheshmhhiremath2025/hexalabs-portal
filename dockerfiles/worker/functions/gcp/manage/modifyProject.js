@@ -5,15 +5,19 @@ const {logger} = require('./../../../plugins/logger'); // Using the existing log
 const billingId = process.env.BILLINGACCOUNTID;
 const keyFilename = process.env.KEYFILENAME;
 const parentId = process.env.PARENTID
-const credentials = require(keyFilename);
+let _credentials;
+function getCredentials() {
+  if (!_credentials) _credentials = require(keyFilename);
+  return _credentials;
+}
 
 // const billingId = "011BD9-202351-3CFFD0";
 // const parentId = "organizations/628552726767";
 
 async function createProject(projectId) {
   const projectsClient = new ProjectsClient({
-    credentials: credentials,
-    projectId: credentials.project_id
+    credentials: getCredentials(),
+    projectId: getCredentials().project_id
   });
   
 
@@ -38,8 +42,8 @@ async function createProject(projectId) {
 async function addBilling (projectId) {
 
     const billingClient = new CloudBillingClient({
-        credentials: credentials,
-        projectId: credentials.project_id
+        credentials: getCredentials(),
+        projectId: getCredentials().project_id
       });
 
   // Link the project with the billing account
@@ -58,8 +62,8 @@ async function addBilling (projectId) {
 }
 async function removeBilling(projectId) {
     const billingClient = new CloudBillingClient({
-        credentials: credentials,
-        projectId: credentials.project_id
+        credentials: getCredentials(),
+        projectId: getCredentials().project_id
     });
 
     // Attempt to unlink the project from its billing account
@@ -78,8 +82,8 @@ async function removeBilling(projectId) {
 }
 async function deleteProject(projectId){
   const projectsClient = new ProjectsClient({
-    credentials: credentials,
-    projectId: credentials.project_id
+    credentials: getCredentials(),
+    projectId: getCredentials().project_id
   });
 
   // Attempt to delete the project

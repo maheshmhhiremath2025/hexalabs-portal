@@ -69,11 +69,14 @@ router.use(createProxyMiddleware({
   ws: true,
   changeOrigin: true,
   secure: false,        // Kasm uses a self-signed cert by default
-  // Upstream chosen per-request based on the VM name parsed from the URL
+  // Upstream chosen per-request based on the VM name parsed from the URL.
+  // Also stash the auth header on the req so the later proxyReq/proxyReqWs
+  // hooks can find it even after pathRewrite has mutated req.url.
   router: (req) => {
     const vmName = parseVmName(req.originalUrl || req.url);
     const cached = vmName && upstreamCache.get(vmName);
-    if (!cached) return 'https://127.0.0.1:1';  // forces a fast error
+    if (cached) req._kasmAuth = cached.authHeader;
+    if (!cached) return 'https://127.0.0.1:1';
     return `https://${cached.ip}:6901`;
   },
   // Express already strips the /kasm mount prefix before the proxy
@@ -86,9 +89,7 @@ router.use(createProxyMiddleware({
   },
   on: {
     proxyReq: (proxyReq, req) => {
-      const vmName = parseVmName(req.originalUrl || req.url);
-      const cached = vmName && upstreamCache.get(vmName);
-      if (cached?.authHeader) proxyReq.setHeader('Authorization', cached.authHeader);
+      if (req._kasmAuth) proxyReq.setHeader('Authorization', req._kasmAuth);
       // Force Connection:close ONLY for non-upgrade requests to avoid
       // Node 22's "Data after Connection: close" parse errors on Kasm's
       // websockify responses. WS upgrades keep Connection:Upgrade.
@@ -96,9 +97,7 @@ router.use(createProxyMiddleware({
       if (upgrade !== 'websocket') proxyReq.setHeader('Connection', 'close');
     },
     proxyReqWs: (proxyReq, req) => {
-      const vmName = parseVmName(req.url);
-      const cached = vmName && upstreamCache.get(vmName);
-      if (cached?.authHeader) proxyReq.setHeader('Authorization', cached.authHeader);
+      if (req._kasmAuth) proxyReq.setHeader('Authorization', req._kasmAuth);
     },
     error: (err, req, res) => {
       const vmName = parseVmName(req?.url) || '?';

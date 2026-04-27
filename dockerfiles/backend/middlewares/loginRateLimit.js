@@ -1,97 +1,128 @@
-// Login rate limiter — defends against brute-force credential-stuffing.
+// Login rate limiter v2 — Redis-backed, per-email only.
 //
-// Strategy: sliding window per (IP) AND per (email). If either identifier
-// trips, the request is rejected with 429. Successful login clears the
-// counter for the identifier used.
+// Why "per-email only": v1 counted attempts per IP too. In a classroom
+// behind NAT (30 students share one public IP), a handful of password
+// fumbles tripped the IP bucket for everyone — right-password students
+// got locked out alongside the fumblers. That was the wrong trade-off.
 //
-// In-memory only — single-process. If you scale to multiple backend nodes,
-// replace the Map with a Redis INCR/EXPIRE pattern.
+// v2 tracks only per-email. Student Raj's wrong password doesn't affect
+// student Priya. Persisted in Redis so backend reloads don't reset the
+// counters (v1 lost state on every pm2 reload).
+//
+// Admins can POST /admin/login-rate-limit/unlock to clear a specific
+// email's counter.
 //
 // Tunables via env:
-//   LOGIN_RATE_MAX    (default 5)    — max failed attempts per window
+//   LOGIN_RATE_MAX    (default 8)    — failed attempts before block
 //   LOGIN_RATE_WINDOW (default 900)  — sliding window in seconds (15 min)
 //   LOGIN_RATE_BLOCK  (default 600)  — block duration in seconds (10 min)
 
-const MAX_ATTEMPTS = Number(process.env.LOGIN_RATE_MAX)    || 5;
-const WINDOW_MS    = (Number(process.env.LOGIN_RATE_WINDOW) || 900) * 1000;
-const BLOCK_MS     = (Number(process.env.LOGIN_RATE_BLOCK)  || 600) * 1000;
+const Redis = require('ioredis');
+const { logger } = require('../plugins/logger');
 
-// key → { count, firstAttempt, blockedUntil }
-const attempts = new Map();
+const MAX_ATTEMPTS = Number(process.env.LOGIN_RATE_MAX)    || 8;
+const WINDOW_SEC   = Number(process.env.LOGIN_RATE_WINDOW) || 900;
+const BLOCK_SEC    = Number(process.env.LOGIN_RATE_BLOCK)  || 600;
 
-// Evict entries once an hour — cheap, keeps memory bounded under attack.
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of attempts.entries()) {
-    const expired =
-      (v.blockedUntil && v.blockedUntil < now) ||
-      (!v.blockedUntil && now - v.firstAttempt > WINDOW_MS);
-    if (expired) attempts.delete(k);
-  }
-}, 60 * 60 * 1000).unref();
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT || 6379,
+  // If Redis is unreachable, DON'T block login — fail-open is safer than
+  // locking out every user during a Redis outage.
+  enableOfflineQueue: false,
+  maxRetriesPerRequest: 1,
+  lazyConnect: true,
+});
+redis.on('error', (err) => {
+  // Swallow: every request check handles its own try/catch already.
+  logger.warn(`[login-rate] redis error: ${err.message}`);
+});
+redis.connect().catch(() => {});   // best-effort initial connect
 
-function keyFromReq(req) {
-  // `trust proxy` is already set in index.js so req.ip respects X-Forwarded-For
-  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
-  const email = String(req.body?.email || '').toLowerCase().trim();
-  return { ipKey: `ip:${ip}`, emailKey: email ? `email:${email}` : null };
-}
+function emailKey(email) { return `login:fail:${String(email).toLowerCase().trim()}`; }
+function blockKey(email) { return `login:block:${String(email).toLowerCase().trim()}`; }
 
-function statusOf(key) {
-  const rec = attempts.get(key);
-  if (!rec) return { blocked: false, count: 0 };
-  const now = Date.now();
-  if (rec.blockedUntil && rec.blockedUntil > now) {
-    return { blocked: true, retryAfterSec: Math.ceil((rec.blockedUntil - now) / 1000) };
-  }
-  // Sliding window: reset if first attempt older than window
-  if (now - rec.firstAttempt > WINDOW_MS) {
-    attempts.delete(key);
+async function getStatus(email) {
+  if (!email) return { blocked: false, count: 0 };
+  try {
+    const [[, blockedUntil], [, count]] = await redis.multi()
+      .get(blockKey(email))
+      .get(emailKey(email))
+      .exec();
+    const now = Date.now();
+    if (blockedUntil && Number(blockedUntil) > now) {
+      return { blocked: true, retryAfterSec: Math.ceil((Number(blockedUntil) - now) / 1000) };
+    }
+    return { blocked: false, count: Number(count) || 0 };
+  } catch (e) {
+    // Redis unreachable — fail-open, don't block.
     return { blocked: false, count: 0 };
   }
-  return { blocked: false, count: rec.count };
 }
 
 /**
- * Middleware: rejects with 429 if EITHER the IP or the email is currently
- * blocked. Runs before the login handler.
+ * Middleware: 429 if the EMAIL (not IP) is currently blocked.
  */
-function checkLoginRateLimit(req, res, next) {
-  const { ipKey, emailKey } = keyFromReq(req);
-  const ipStatus = statusOf(ipKey);
-  const emailStatus = emailKey ? statusOf(emailKey) : { blocked: false };
-
-  const blocked = ipStatus.blocked ? ipStatus : emailStatus.blocked ? emailStatus : null;
-  if (blocked) {
-    const mins = Math.ceil(blocked.retryAfterSec / 60);
-    res.set('Retry-After', String(blocked.retryAfterSec));
+async function checkLoginRateLimit(req, res, next) {
+  const email = req.body?.email;
+  if (!email) return next();  // let the handler return "email required"
+  const status = await getStatus(email);
+  if (status.blocked) {
+    const mins = Math.ceil(status.retryAfterSec / 60);
+    res.set('Retry-After', String(status.retryAfterSec));
     return res.status(429).json({
-      message: `Too many login attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
-      retryAfterSec: blocked.retryAfterSec,
+      message: `Too many login attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}, or contact your admin to unlock.`,
+      retryAfterSec: status.retryAfterSec,
     });
   }
   next();
 }
 
-/** Call from the login handler after a BAD password / invalid user. */
-function recordLoginFailure(req) {
-  const now = Date.now();
-  const { ipKey, emailKey } = keyFromReq(req);
-  for (const key of [ipKey, emailKey].filter(Boolean)) {
-    const rec = attempts.get(key) || { count: 0, firstAttempt: now };
-    // Reset if outside the window
-    if (now - rec.firstAttempt > WINDOW_MS) { rec.count = 0; rec.firstAttempt = now; rec.blockedUntil = null; }
-    rec.count += 1;
-    if (rec.count >= MAX_ATTEMPTS) rec.blockedUntil = now + BLOCK_MS;
-    attempts.set(key, rec);
+/** Call from the login handler on a BAD password. */
+async function recordLoginFailure(req) {
+  const email = req.body?.email;
+  if (!email) return;
+  try {
+    const k = emailKey(email);
+    const count = await redis.incr(k);
+    // First failure: start the sliding window timer.
+    if (count === 1) await redis.expire(k, WINDOW_SEC);
+    if (count >= MAX_ATTEMPTS) {
+      const until = Date.now() + BLOCK_SEC * 1000;
+      await redis.set(blockKey(email), String(until), 'EX', BLOCK_SEC);
+      logger.warn(`[login-rate] ${email} locked after ${count} fails`);
+    }
+  } catch (e) { /* Redis down, fail-open */ }
+}
+
+/** Call on successful login — clears the email's counters. */
+async function recordLoginSuccess(req) {
+  const email = req.body?.email;
+  if (!email) return;
+  try { await redis.del(emailKey(email), blockKey(email)); } catch {}
+}
+
+/** Admin/superadmin-triggered unlock. Idempotent. */
+async function unlockEmail(email) {
+  if (!email) return { ok: false, reason: 'email required' };
+  try {
+    const deleted = await redis.del(emailKey(email), blockKey(email));
+    logger.info(`[login-rate] manual unlock: ${email} (cleared ${deleted} keys)`);
+    return { ok: true, cleared: deleted };
+  } catch (e) {
+    return { ok: false, reason: 'redis unreachable' };
   }
 }
 
-/** Call from the login handler on a successful login — clears BOTH counters. */
-function recordLoginSuccess(req) {
-  const { ipKey, emailKey } = keyFromReq(req);
-  attempts.delete(ipKey);
-  if (emailKey) attempts.delete(emailKey);
+/** Debug helper for the admin unlock endpoint. */
+async function getEmailStatus(email) {
+  return getStatus(email);
 }
 
-module.exports = { checkLoginRateLimit, recordLoginFailure, recordLoginSuccess };
+module.exports = {
+  checkLoginRateLimit,
+  recordLoginFailure,
+  recordLoginSuccess,
+  unlockEmail,
+  getEmailStatus,
+};

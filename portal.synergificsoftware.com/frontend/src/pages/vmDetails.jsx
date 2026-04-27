@@ -38,11 +38,11 @@ const Toast = ({ toast, onClose }) => {
 };
 
 /* ===== Progress Toast ===== */
-const ProgressBar = ({ progress, status, operation, label }) => (
-  <div className="fixed top-4 right-4 z-50 bg-white rounded-lg border border-gray-200 shadow-xl p-4 w-72">
+const ProgressBar = ({ progress, status, operation, label, elapsedSec, onCancel }) => (
+  <div className="fixed top-4 right-4 z-50 bg-white rounded-lg border border-gray-200 shadow-xl p-4 w-80">
     <div className="flex items-center justify-between mb-2">
       <span className="text-sm font-semibold text-gray-800">
-        {operation === 'start' ? `Starting ${label || 'instances'}...` : operation === 'stop' ? `Stopping ${label || 'instances'}...` : 'Processing...'}
+        {operation === 'start' ? `Starting ${label || 'instances'}…` : operation === 'stop' ? `Stopping ${label || 'instances'}…` : 'Processing…'}
       </span>
       <span className="text-xs font-medium text-gray-500 tabular-nums">{progress}%</span>
     </div>
@@ -52,7 +52,15 @@ const ProgressBar = ({ progress, status, operation, label }) => (
         style={{ width: `${progress}%` }}
       />
     </div>
-    <p className="text-xs text-gray-500 mt-1.5">{status}</p>
+    <div className="flex items-center justify-between mt-1.5">
+      <p className="text-xs text-gray-500">{status}</p>
+      {elapsedSec != null && <p className="text-[10px] text-gray-400 tabular-nums">{elapsedSec}s elapsed</p>}
+    </div>
+    {onCancel && (
+      <button onClick={onCancel} className="mt-2 text-[11px] text-gray-500 hover:text-gray-700 underline">
+        Dismiss
+      </button>
+    )}
   </div>
 );
 
@@ -85,9 +93,25 @@ const CopyCell = ({ icon: Icon, value, iconColor = 'text-gray-400' }) => {
   );
 };
 
+// `stoppingUntil` is set by the backend when a Stop is queued (whether the user
+// clicked Stop or auto-shutdown queued one). Until 90s elapse the Start button is
+// "cooling down" — a Start request would be refused by the backend with a 409.
+// We surface this on the row so users see the countdown instead of clicking and
+// getting an error toast.
+const stoppingSecondsLeft = (vm) => {
+  if (!vm?.stoppingUntil) return 0;
+  return Math.max(0, Math.ceil((new Date(vm.stoppingUntil) - Date.now()) / 1000));
+};
+
 /* ===== VM Row ===== */
-const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapture, isSuperAdmin, disabled }) => {
+const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapture, isSuperAdmin, disabled, transition }) => {
   const pct = vm?.quota?.total > 0 ? Math.min(100, (vm.quota.consumed / vm.quota.total) * 100) : 0;
+  // `transition` is "start" or "stop" while a request is in flight for this VM
+  // and the DB hasn't caught up yet. We show a pulsing amber chip so users
+  // understand that Stop → [Stopping] → Running (or Start → [Starting]) is in
+  // progress, instead of thinking nothing happened.
+  const isStarting = transition === 'start' && !vm.isRunning;
+  const isStopping = transition === 'stop' && vm.isRunning;
   return (
     <tr className={`border-b border-gray-100 hover:bg-gray-50/60 transition-colors ${vm.selected ? 'bg-blue-50/40' : ''}`}>
       <td className="px-3 py-2.5">
@@ -110,12 +134,43 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapt
       <td className="px-3 py-2.5"><CopyCell icon={FaKey} value={vm.adminPass} /></td>
       <td className="px-3 py-2.5"><CopyCell icon={FaWifi} value={vm.publicIp} iconColor="text-blue-400" /></td>
       <td className="px-3 py-2.5">
-        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-          vm.isRunning ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
-        }`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${vm.isRunning ? 'bg-green-500' : 'bg-gray-400'}`} />
-          {vm.isRunning ? 'Running' : 'Stopped'}
-        </span>
+        {isStarting || isStopping ? (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            {isStarting ? 'Starting…' : 'Stopping…'}
+          </span>
+        ) : (
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+            vm.isRunning ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+          }`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${vm.isRunning ? 'bg-green-500' : 'bg-gray-400'}`} />
+            {vm.isRunning ? 'Running' : 'Stopped'}
+          </span>
+        )}
+        {/* Recent queue-job failure — written by the worker's on('failed') hook
+            and cleared on completion. Only show if within the last 10 min so
+            old errors don't haunt the row forever. */}
+        {vm.lastOpError && vm.lastOpErrorAt &&
+         (Date.now() - new Date(vm.lastOpErrorAt).getTime()) < 10 * 60 * 1000 && (
+          <div
+            className="mt-1 text-[10px] leading-tight text-rose-600 max-w-[200px] truncate"
+            title={`${vm.lastOpErrorQueue || 'job'}: ${vm.lastOpError}`}
+          >
+            ⚠ {vm.lastOpError.length > 60 ? vm.lastOpError.slice(0, 60) + '…' : vm.lastOpError}
+          </div>
+        )}
+        {/* Cooldown pill: VM is mid-stop sequence; Start is refused by the
+            backend until this counter hits 0. Re-renders every 1s via the
+            existing `tick` interval. */}
+        {stoppingSecondsLeft(vm) > 0 && (
+          <div
+            className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+            title="VM is completing its stop sequence (deallocate → snapshot → delete VM → delete disk). Start will be available once this finishes."
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+            Stopping… {stoppingSecondsLeft(vm)}s
+          </div>
+        )}
       </td>
       <td className="px-3 py-2.5">
         {vm.expiresAt ? (() => {
@@ -194,13 +249,49 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapt
   );
 };
 
+/* ===== Persisted pending-operation helpers ═════════════════════════════════
+ * We used to keep start/stop progress in React state only, so a refresh wiped
+ * the progress bar even though the worker kept chugging. Now the in-flight op
+ * lives in localStorage (keyed per training), so a refresh rehydrates it and
+ * polling resumes where it left off.
+ *
+ * Shape:  { operation: 'start'|'stop', target: boolean, vmNames: string[],
+ *           total: number, startedAt: epochMs, label: string }
+ * ===========================================================================*/
+const PENDING_OP_KEY = (training) => `vmPendingOp:${training}`;
+const PENDING_OP_TTL_MS = 8 * 60 * 1000;   // hard cap — don't show a stuck bar forever
+
+function loadPendingOp(training) {
+  if (!training) return null;
+  try {
+    const raw = localStorage.getItem(PENDING_OP_KEY(training));
+    if (!raw) return null;
+    const op = JSON.parse(raw);
+    if (!op || !op.startedAt || Date.now() - op.startedAt > PENDING_OP_TTL_MS) {
+      localStorage.removeItem(PENDING_OP_KEY(training));
+      return null;
+    }
+    return op;
+  } catch { return null; }
+}
+function savePendingOp(training, op) {
+  if (!training) return;
+  try {
+    if (op) localStorage.setItem(PENDING_OP_KEY(training), JSON.stringify(op));
+    else localStorage.removeItem(PENDING_OP_KEY(training));
+  } catch { /* quota / private mode — fall back to in-memory only */ }
+}
+
 /* ===== Main ===== */
 const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   const [aliveVms, setAliveVms] = useState([]);
   const [deadVms, setDeadVms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [opProgress, setOpProgress] = useState({ show: false, progress: 0, status: '', operation: '' });
+  // pendingOp drives the progress bar *and* per-row "Starting…" chips.
+  // Rehydrated from localStorage on training switch so refresh is safe.
+  const [pendingOp, setPendingOp] = useState(() => loadPendingOp(selectedTraining));
+  const [tick, setTick] = useState(0); // forces re-render for elapsed-seconds display
   const { toast, show, clear } = useToast();
 
   const filtered = useMemo(() => {
@@ -227,73 +318,79 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
     finally { setLoading(false); }
   }, [selectedTraining, userDetails?.email, apiRoutes, setVmData, show]);
 
-  const monitorOp = useCallback(async (selected, op, target) => {
-    let done = 0, checks = 0;
-    const iv = setInterval(async () => {
-      try {
-        const res = await apiCaller.get(apiRoutes.machineApi, { params: { trainingName: selectedTraining } });
-        if (res?.data) {
-          const cur = res.data.filter(vm => vm.isAlive);
-          done = selected.filter(s => { const c = cur.find(vm => vm.name === s.name); return c && c.isRunning === target; }).length;
-          checks++;
-          setOpProgress(p => ({ ...p, progress: Math.round((done / selected.length) * 100), status: `${done}/${selected.length} instances ${target ? 'started' : 'stopped'}` }));
-          if (done === selected.length || checks >= 30) {
-            clearInterval(iv);
-            setTimeout(() => { setOpProgress({ show: false, progress: 0, status: '', operation: '' }); getLabsData(); show(`${op} completed`, 'success'); }, 800);
-          }
-        }
-      } catch { clearInterval(iv); setOpProgress({ show: false, progress: 0, status: '', operation: '' }); }
-    }, 10000);
-  }, [selectedTraining, apiRoutes, getLabsData, show]);
+  // Clear the pending op both in memory and in localStorage. `reason` drives
+  // the user-facing toast so "completed" and "timed out" don't look the same.
+  const clearPendingOp = useCallback((reason) => {
+    setPendingOp((prev) => {
+      if (!prev) return null;
+      savePendingOp(selectedTraining, null);
+      if (reason === 'completed') {
+        show(`${prev.operation === 'start' ? 'Started' : 'Stopped'} ${prev.total} ${prev.label}`, 'success');
+      } else if (reason === 'timeout') {
+        show(`${prev.operation === 'start' ? 'Start' : 'Stop'} is taking longer than expected — check back in a minute`, 'error');
+      }
+      return null;
+    });
+  }, [selectedTraining, show]);
 
   const handleAction = useCallback(async (operation) => {
+    if (pendingOp) return show('Another operation is in progress', 'error');
+
     const sel = aliveVms.filter(vm => vm.selected);
     if (!sel.length) return show('No instances selected', 'error');
     const isStart = operation === 'start';
     if (isStart && sel.some(vm => vm.isRunning)) return show('Some instances are already running', 'error');
     if (!isStart && sel.some(vm => !vm.isRunning)) return show('Some instances are already stopped', 'error');
 
-    // Split into VMs and containers
     const vmSel = sel.filter(v => v.type !== 'container');
     const containerSel = sel.filter(v => v.type === 'container');
     const label = containerSel.length && !vmSel.length ? 'workspaces' : vmSel.length && !containerSel.length ? 'VMs' : 'instances';
 
-    setOpProgress({ show: true, progress: 0, status: 'Initiating...', operation, label });
-
     try {
       const promises = [];
-
-      // Handle Azure VMs
       if (vmSel.length) {
         const payload = [{ operation: isStart ? 1 : 0 }, ...vmSel.map(vm => ({ name: vm.name, resourceGroup: vm.resourceGroup }))];
         promises.push(apiCaller.patch(apiRoutes.machineApi, payload));
       }
-
-      // Handle containers — instant, no polling needed
       if (containerSel.length) {
         const containerIds = containerSel.map(c => c.containerId);
         const endpoint = isStart ? '/containers/start' : '/containers/stop';
         promises.push(apiCaller.patch(endpoint, { containerIds }));
       }
-
       await Promise.all(promises);
 
-      // If only containers, complete immediately (no Azure polling needed)
+      // Containers flip state server-side immediately — refresh and we're done.
+      // Azure VMs are async (queue + Azure API), so we register a pendingOp
+      // that the polling effect will watch until the DB reflects the target.
       if (!vmSel.length) {
-        setOpProgress({ show: false, progress: 0, status: '', operation: '' });
         await getLabsData();
         show(`${isStart ? 'Started' : 'Stopped'} ${containerSel.length} workspace${containerSel.length > 1 ? 's' : ''}`, 'success');
-      } else {
-        // Poll for Azure VMs
-        monitorOp(vmSel, isStart ? 'Start' : 'Stop', isStart);
-        // If mixed, also refresh to pick up container changes
-        if (containerSel.length) setTimeout(getLabsData, 2000);
+        return;
       }
-    } catch {
-      setOpProgress({ show: false, progress: 0, status: '', operation: '' });
-      show(`Failed to ${operation} ${label}`, 'error');
+
+      const op = {
+        operation,
+        target: isStart,
+        vmNames: vmSel.map(vm => vm.name),
+        total: vmSel.length,
+        startedAt: Date.now(),
+        label: vmSel.length === 1 ? 'VM' : 'VMs',
+      };
+      savePendingOp(selectedTraining, op);
+      setPendingOp(op);
+      if (containerSel.length) setTimeout(getLabsData, 2000);
+    } catch (err) {
+      // Surface the backend's own message — in particular the 503 from the
+      // queue-health guard ("Queue workers are not processing jobs right
+      // now…") — so the user sees the real problem instead of a generic
+      // "Failed to start VMs".
+      const msg = err?.response?.data?.error
+        || err?.response?.data?.message
+        || err?.message
+        || `Failed to ${operation} ${label}`;
+      show(msg, 'error');
     }
-  }, [aliveVms, apiRoutes, show, monitorOp, getLabsData]);
+  }, [pendingOp, aliveVms, apiRoutes, show, getLabsData, selectedTraining]);
 
   const launchVM = useCallback(async (vm) => {
     if (!vm.isRunning) return show('VM must be running', 'error');
@@ -387,9 +484,46 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   const running = aliveVms.filter(vm => vm.isRunning).length;
   const stopped = aliveVms.filter(vm => !vm.isRunning).length;
   const showCapture = userDetails?.userType === 'superadmin' || userDetails?.userType === 'admin';
-  const opActive = opProgress.show;
 
-  useEffect(() => { selectedTraining ? getLabsData() : (setAliveVms([]), setDeadVms([])); }, [selectedTraining, getLabsData]);
+  // ── Derived progress ─────────────────────────────────────────────────────
+  // Source of truth is the DB (aliveVms) + pendingOp. Both survive refresh.
+  const pendingVmNames = pendingOp ? new Set(pendingOp.vmNames) : null;
+  const doneCount = pendingOp
+    ? pendingOp.vmNames.filter(n => {
+        const v = aliveVms.find(vm => vm.name === n);
+        return v && v.isRunning === pendingOp.target;
+      }).length
+    : 0;
+  const progressPct = pendingOp ? Math.round((doneCount / pendingOp.total) * 100) : 0;
+  const elapsedSec = pendingOp ? Math.floor((Date.now() - pendingOp.startedAt) / 1000) : 0;
+  const opActive = !!pendingOp;
+
+  // Reload VMs when training changes; rehydrate pendingOp from storage for
+  // that training (handles both refresh and switching trainings mid-op).
+  useEffect(() => {
+    if (!selectedTraining) { setAliveVms([]); setDeadVms([]); setPendingOp(null); return; }
+    getLabsData();
+    setPendingOp(loadPendingOp(selectedTraining));
+  }, [selectedTraining, getLabsData]);
+
+  // Polling loop — runs only while a pendingOp exists. Faster cadence than the
+  // old 10s setInterval so the progress bar actually moves, and it resyncs
+  // after refresh because pendingOp is persisted.
+  useEffect(() => {
+    if (!pendingOp) return;
+    let alive = true;
+
+    // Completion check against the VMs we already have in state
+    if (doneCount >= pendingOp.total) { clearPendingOp('completed'); return; }
+    if (Date.now() - pendingOp.startedAt > PENDING_OP_TTL_MS) { clearPendingOp('timeout'); return; }
+
+    // First poll runs quickly (3s) — Azure often flips state in well under 30s.
+    // Subsequent polls every 5s. A 1s tick keeps the elapsed counter moving.
+    const tickId = setInterval(() => alive && setTick(t => t + 1), 1000);
+    const firstPoll = setTimeout(() => alive && getLabsData(), 3000);
+    const poll = setInterval(() => alive && getLabsData(), 5000);
+    return () => { alive = false; clearInterval(tickId); clearInterval(poll); clearTimeout(firstPoll); };
+  }, [pendingOp, doneCount, getLabsData, clearPendingOp]);
 
   if (!selectedTraining) {
     return (
@@ -406,7 +540,16 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   return (
     <div className="space-y-4">
       <Toast toast={toast} onClose={clear} />
-      {opProgress.show && <ProgressBar {...opProgress} />}
+      {pendingOp && (
+        <ProgressBar
+          progress={progressPct}
+          status={`${doneCount}/${pendingOp.total} ${pendingOp.label} ${pendingOp.target ? 'started' : 'stopped'}`}
+          operation={pendingOp.operation}
+          label={pendingOp.label}
+          elapsedSec={elapsedSec}
+          onCancel={elapsedSec > 30 ? () => clearPendingOp() : undefined}
+        />
+      )}
 
       {/* Expiry banner */}
       {(() => {
@@ -626,7 +769,9 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
               </thead>
               <tbody>
                 {filtered.map(vm => (
-                  <VmRow key={vm._id} vm={vm} onSelect={id => setAliveVms(p => p.map(v => v._id === id ? { ...v, selected: !v.selected } : v))}
+                  <VmRow key={vm._id} vm={vm}
+                    transition={pendingVmNames && pendingVmNames.has(vm.name) ? pendingOp.operation : null}
+                    onSelect={id => setAliveVms(p => p.map(v => v._id === id ? { ...v, selected: !v.selected } : v))}
                     onLaunch={launchVM} onCapture={captureVm} onDelete={deleteInstance} onShadow={shadowVm} showCapture={showCapture} isSuperAdmin={userDetails?.userType === 'superadmin'} disabled={loading || opActive} />
                 ))}
               </tbody>
@@ -702,8 +847,10 @@ function VmSettingsPanel({ trainingName, vms, onUpdate, show }) {
         body.vmName = scope;
       }
 
-      await apiCaller.patch('/azure/vm-settings', body);
-      show(`Settings updated for ${scope === 'training' ? 'all VMs' : scope}`, 'success');
+      const r = await apiCaller.patch('/azure/vm-settings', body);
+      // Backend returns { message: "Updated N VM(s)" } — surface the real count
+      // so admin has concrete proof of how many rows actually changed.
+      show(r.data?.message || `Settings updated for ${scope === 'training' ? 'all VMs' : scope}`, 'success');
       onUpdate();
     } catch (err) {
       show('Failed to update settings', 'error');
@@ -731,6 +878,33 @@ function VmSettingsPanel({ trainingName, vms, onUpdate, show }) {
         </h4>
         <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm">&times;</button>
       </div>
+
+      {/* Mixed-values indicator: when admin selects "All VMs in training" but
+          the VMs have different idleMinutes / autoShutdown values, surface it
+          so they don't think they're seeing the existing config and get
+          confused. Saving will overwrite all VMs with the selected values. */}
+      {scope === 'training' && vms.length > 1 && (() => {
+        const idleVals = [...new Set(vms.map(v => v.idleMinutes ?? 15))];
+        const autoVals = [...new Set(vms.map(v => v.autoShutdown ?? false))];
+        if (idleVals.length <= 1 && autoVals.length <= 1) return null;
+        const idleBreakdown = idleVals.length > 1
+          ? idleVals.sort((a,b)=>a-b).map(m => `${vms.filter(v => (v.idleMinutes ?? 15) === m).length} × ${m}min`).join(', ')
+          : null;
+        const autoBreakdown = autoVals.length > 1
+          ? `${vms.filter(v => v.autoShutdown).length}/${vms.length} have auto-shutdown enabled`
+          : null;
+        return (
+          <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg flex items-start gap-1.5">
+            <span className="text-amber-600 flex-shrink-0">⚠</span>
+            <div>
+              <span className="font-medium">Mixed values across VMs in this training.</span>
+              {idleBreakdown && <span className="block">Idle timeout: {idleBreakdown}</span>}
+              {autoBreakdown && <span className="block">Auto-shutdown: {autoBreakdown}</span>}
+              <span className="block opacity-75">Saving will set all VMs to the values selected below.</span>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {/* Apply to */}

@@ -126,7 +126,7 @@ const SupportPage = () => {
       availability: '24/7',
       action: 'Send Email',
       color: 'from-purple-500 to-pink-500',
-      link: 'mailto:itops@synergificsoftware.com?cc=vinay.chandra@synergificsoftware.com'
+      link: 'mailto:itops@synergificsoftware.com'
     }
   ];
 

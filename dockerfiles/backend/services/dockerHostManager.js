@@ -42,13 +42,21 @@ function getDockerClient(host) {
 /**
  * Find a Docker host with enough capacity
  */
-async function getAvailableHost(requiredMemoryMb = 512) {
+async function getAvailableHost(requiredMemoryMb = 512, { windowsOnly } = {}) {
   if (HOST_MODE === 'local') return null; // Use local Docker
 
-  const hosts = await DockerHost.find({
+  const query = {
     status: { $in: ['ready', 'busy'] },
     provider: 'azure',
-  }).sort({ currentContainers: -1 }); // Fill existing hosts first (bin-packing)
+  };
+  // Only return windowsOnly hosts when explicitly requesting Windows containers
+  if (windowsOnly) {
+    query.windowsOnly = true;
+  } else {
+    query.windowsOnly = { $ne: true };
+  }
+
+  const hosts = await DockerHost.find(query).sort({ currentContainers: -1 }); // Fill existing hosts first (bin-packing)
 
   for (const host of hosts) {
     const freeMemory = host.totalMemoryMb - host.usedMemoryMb;
@@ -333,6 +341,7 @@ async function checkAndScaleDown() {
     status: 'idle',
     idleSince: { $lt: threshold },
     provider: 'azure',
+    windowsOnly: { $ne: true }, // Never auto-terminate the dedicated Windows KVM host
   });
 
   for (const host of idleHosts) {

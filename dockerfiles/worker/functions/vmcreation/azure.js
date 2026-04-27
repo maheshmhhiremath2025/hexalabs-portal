@@ -21,7 +21,7 @@ const networkClient = new NetworkManagementClient(credentials, subscriptionId);
 
 // Original function: Create VM from image (for initial creation using template/imageId)
 async function createVirtualMachine(vmName, vmTemplate) {
-    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version} = vmTemplate;
+    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version, securityType} = vmTemplate;
     const nicName = vmName + "-nic";
     const publicIpName = vmName + "-public-IP";
     const publicIpParameters = {
@@ -82,11 +82,9 @@ async function createVirtualMachine(vmName, vmTemplate) {
                     },
                 ],
             },
-            securityProfile: {
-                secureBootEnabled: true,
-                virtualTpmEnabled: true,
-                integrityMonitoringEnabled: true
-            },
+            securityProfile: securityType === 'TrustedLaunch'
+                ? { securityType: 'TrustedLaunch', uefiSettings: { secureBootEnabled: true, vTpmEnabled: true } }
+                : { secureBootEnabled: true, virtualTpmEnabled: true, integrityMonitoringEnabled: true },
             priority: 'Spot',
             evictionPolicy: 'Deallocate',
             billingProfile: {

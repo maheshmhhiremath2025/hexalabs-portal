@@ -18,6 +18,7 @@ const vmSchema = new mongoose.Schema({
   logs: { type: [logSchema], default: [] },
   duration: {type: Number},
   guacamole: {type: Boolean, required: true, default: false},
+  meshCentral: { type: Boolean, default: false },              // MeshCentral agent (Windows browser desktop)
   rate: { type: Number, required: true },
   isRunning: { type: Boolean, required: true, default: false },
   os: { type: String, required: true },
@@ -38,6 +39,25 @@ const vmSchema = new mongoose.Schema({
   expiresAt: { type: Date },                               // When this VM should be auto-deleted
   expiryWarningEmailSent: { type: Boolean, default: false }, // Warning sent before expiry
   extendedCount: { type: Number, default: 0 },              // How many times expiry was extended
+  // Stuck-stop detection: incremented each time idleShutdown tries to stop
+  // the VM. Reset to 0 when the reconciler sees it actually stopped. An
+  // ops alert fires the moment this hits 3 (worker crash-loop, queue jam,
+  // etc. — the exact failure mode we hit on 2026-04-21).
+  stopAttempts: { type: Number, default: 0 },
+
+  // VM is in the middle of a stop sequence (deallocate -> snapshot -> delete VM
+  // -> delete disk) while this date is in the future. Start endpoint refuses
+  // during this window to avoid the start<->stop race that deletes a freshly
+  // started VM.
+  stoppingUntil: { type: Date, default: null },
+
+  // Last Bull queue job failure for this VM. Set by the worker's
+  // `on('failed')` hook; cleared by `on('completed')`. Surfaced on the VM
+  // row in the Lab Console so operators see *why* a start/stop silently
+  // didn't happen — no more "clicked and nothing moved" debugging.
+  lastOpError: { type: String },
+  lastOpErrorQueue: { type: String },
+  lastOpErrorAt: { type: Date },
 }, { timestamps: true });
 
 const VM = mongoose.model('VM', vmSchema);

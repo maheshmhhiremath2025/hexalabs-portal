@@ -2,6 +2,7 @@ const VM = require('../models/vm');
 const Container = require('../models/container');
 const Training = require('../models/training');
 const { logger } = require('../plugins/logger');
+const { cascadeRdsSessions } = require('../services/rdsCascade');
 
 let sendEmail;
 try { sendEmail = require('../services/emailNotifications').sendEmail; } catch {}
@@ -90,10 +91,12 @@ async function labExpiryChecker() {
       vm.remarks = 'Auto-deleted (lab expired)';
       await vm.save();
 
-      // Also delete RDS sessions if this is an RDS server
-      if (vm.remarks?.includes('RDS Server') || vm.os?.includes('RDS')) {
-        await VM.updateMany({ rdsServer: vm.name }, { isAlive: false, isRunning: false, remarks: 'RDS server expired' });
-      }
+      // Cascade to per-user RDS session rows (if any). The previous query
+      // matched on `rdsServer` which was never written, so it silently
+      // no-op'd; the helper matches by name prefix + os tag instead.
+      await cascadeRdsSessions(vm.name, 'delete').catch(e =>
+        logger.error(`[expiry] ${vm.name}: rds cascade failed — ${e.message}`)
+      );
 
       logger.info(`VM ${vm.name} expired and cleaned up`);
     }

@@ -117,6 +117,16 @@ async function handleBulkDeploy(req, res) {
           'lex v1 & v2': 'lex', translate: 'translate',
           'resource tagging': 'tag', 'health dashboard': 'health',
           'resource groups': 'resource-groups',
+          // AWS Mainframe Modernization + related services (added for M2 Managed env deps)
+          m2: 'm2',
+          appstream: 'appstream',
+          workspaces: 'workspaces',
+          logs: 'logs',
+          elasticloadbalancing: 'elasticloadbalancing',
+          elb: 'elasticloadbalancing',
+          ssm: 'ssm',
+          autoscaling: 'autoscaling',
+          applicationautoscaling: 'application-autoscaling',
         };
 
         // Collect unique action prefixes for allowed services (use prefix:* for compactness)

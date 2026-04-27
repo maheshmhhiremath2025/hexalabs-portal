@@ -38,6 +38,10 @@ const sandboxTemplateSchema = new mongoose.Schema({
     dailyCapHours: { type: Number, default: 12 },   // Max hours per student per day
     totalCapHours: { type: Number, default: 0 },     // Max total hours per engagement (0 = unlimited)
     maxInstances: { type: Number, default: 1 },      // Max concurrent EC2/VM instances per student
+    useConnectAccount: { type: Boolean, default: false }, // Use US AWS account for Connect templates
+    connectAccountId: { type: String },              // US AWS account ID
+    connectRegion: { type: String },                 // Region for Connect (us-east-1)
+    enforceOwnerTag: { type: Boolean, default: false }, // If true, IAM policy forces CreatedBy=${aws:username} tag on m2/appstream creates (for cleanup)
   },
 
   // Service permissions

@@ -19,7 +19,7 @@ docker login
 If you don't have a `getlabs` org on Docker Hub yet, either:
 1. Create one at https://hub.docker.com/orgs (free), OR
 2. Push to your personal namespace and update the catalog entry's `image:`
-   field accordingly (e.g. `vinaychandra/lab-bigdata-workspace:1.0`).
+   field accordingly (e.g. `kumar202699/lab-bigdata-workspace:1.0`).
 
 ### Option B: Azure Container Registry (matches the rest of your Azure infra)
 

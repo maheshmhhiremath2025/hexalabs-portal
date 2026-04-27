@@ -386,6 +386,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   const [trainingName, setTrainingName] = useState('');
   const [allocatedHours, setAllocatedHours] = useState(1);
   const [guacamole, setGuacamole] = useState(false);
+  const [meshCentral, setMeshCentral] = useState(false);
   const [autoShutdown, setAutoShutdown] = useState(false);
   const [idleMinutes, setIdleMinutes] = useState(15);
   const [labExpiry, setLabExpiry] = useState(false);
@@ -456,6 +457,16 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // per-second UI tick: forces re-render so elapsed time + time-based % update
+  // smoothly between server polls (which only fire every 12s). Without this,
+  // the progress bar appears frozen and only moves on manual Refresh.
+  const [, setUiTick] = useState(0);
+  useEffect(() => {
+    if (!deployProgress || deployProgress.finished) return;
+    const id = setInterval(() => setUiTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [deployProgress?.startedAt, deployProgress?.finished]);
 
   const stopDeployTracking = useCallback(() => {
     if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
@@ -645,6 +656,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
       allocatedHours: (Number(allocatedHours) || 0) * 60, // minutes
       createVmCount: validEmails.length,
       guacamole,
+      meshCentral,
       autoShutdown,
       idleMinutes: autoShutdown ? idleMinutes : 0,
       expiresAt: labExpiry && expiryDate ? new Date(expiryDate).toISOString() : null,
@@ -1130,6 +1142,28 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                   </div>
                                 </label>
                               </div>
+
+                              {selectedTemplate?.creation?.os?.toLowerCase().includes('windows') && (
+                              <div className="p-4 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors cursor-pointer mt-3">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={meshCentral}
+                                    onChange={(e) => setMeshCentral(e.target.checked)}
+                                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-200 mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="text-sm font-medium text-slate-700">Enable MeshCentral Desktop</div>
+                                    <div className="text-xs text-slate-500 mt-1">
+                                      Agent-based browser desktop for Windows VMs. Faster than Guacamole — no server-side transcoding.
+                                    </div>
+                                    <div className="text-xs text-emerald-600 font-medium mt-1">
+                                      No additional cost
+                                    </div>
+                                  </div>
+                                </label>
+                              </div>
+                              )}
                             </div>
 
                             <div>

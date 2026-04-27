@@ -96,31 +96,43 @@ const azureSandbox = async () => {
                     if (!allDeleted) continue; // Wait for sandbox cleanup to finish
 
                     try {
-                        // Delete Azure AD user directly
-                        const azureUserId = sandbox[0]?.credentials?.username || user.userId;
-                        if (azureUserId) {
-                            const { ClientSecretCredential } = require('@azure/identity');
-                            require('isomorphic-fetch');
-                            const { Client } = require('@microsoft/microsoft-graph-client');
-                            const identityCredential = new ClientSecretCredential(
-                                process.env.IDENTITY_TENANT_ID || process.env.TENANT_ID,
-                                process.env.IDENTITY_CLIENT_ID || process.env.CLIENT_ID,
-                                process.env.IDENTITY_CLIENT_SECRET || process.env.CLIENT_SECRET
-                            );
-                            const tokenRes = await identityCredential.getToken('https://graph.microsoft.com/.default');
-                            const graphClient = Client.init({ authProvider: (done) => done(null, tokenRes.token) });
+                        // Check if student still has remaining quota
+                        const totalCap = user.totalCapHours || 0;
+                        const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
+                        const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
 
-                            try {
-                                await graphClient.api(`/users/${azureUserId}`).delete();
-                                logger.info(`Azure AD user ${azureUserId} deleted (expired) for ${email}`);
-                            } catch (adErr) {
-                                logger.warn(`Azure AD user delete failed: ${adErr.message}`);
+                        if (hasQuotaLeft) {
+                            // Keep user for re-launch — just clear expiry
+                            logger.info(`Azure sandbox ${email}: session expired but quota remaining — keeping for re-launch`);
+                            await SandboxUser.updateOne({ _id: user._id }, {
+                                $set: { expiresAt: null, cleanupAttempts: 0, cleanupError: null },
+                            });
+                        } else {
+                            // Quota exhausted — full cleanup
+                            const azureUserId = sandbox[0]?.credentials?.username || user.userId;
+                            if (azureUserId) {
+                                const { ClientSecretCredential } = require('@azure/identity');
+                                require('isomorphic-fetch');
+                                const { Client } = require('@microsoft/microsoft-graph-client');
+                                const identityCredential = new ClientSecretCredential(
+                                    process.env.IDENTITY_TENANT_ID || process.env.TENANT_ID,
+                                    process.env.IDENTITY_CLIENT_ID || process.env.CLIENT_ID,
+                                    process.env.IDENTITY_CLIENT_SECRET || process.env.CLIENT_SECRET
+                                );
+                                const tokenRes = await identityCredential.getToken('https://graph.microsoft.com/.default');
+                                const graphClient = Client.init({ authProvider: (done) => done(null, tokenRes.token) });
+
+                                try {
+                                    await graphClient.api(`/users/${azureUserId}`).delete();
+                                    logger.info(`Azure AD user ${azureUserId} deleted (quota exhausted) for ${email}`);
+                                } catch (adErr) {
+                                    logger.warn(`Azure AD user delete failed: ${adErr.message}`);
+                                }
                             }
-                        }
 
-                        // Delete DB record
-                        await SandboxUser.deleteOne({ _id: user._id });
-                        logger.info(`Azure sandbox user ${email} cleaned up (expired)`);
+                            await SandboxUser.deleteOne({ _id: user._id });
+                            logger.info(`Azure sandbox user ${email} cleaned up (quota exhausted)`);
+                        }
                     } catch (err) {
                         logger.error(`Azure user cleanup failed for ${email}: ${err.message}`);
                         await SandboxUser.updateOne({ _id: user._id }, {

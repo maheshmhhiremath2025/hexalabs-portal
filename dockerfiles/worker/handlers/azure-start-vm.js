@@ -1,6 +1,7 @@
 // handlers/azure-start-vm.js
 const { logger } = require('./../plugins/logger');
 const VM = require('./../models/vm');
+const { cascadeRdsSessions } = require('./../functions/rdsCascade');
 const vmCreationModule = require('./../functions/vmcreation/azure');
 const { createVirtualMachineFromLatestSnapshot } = vmCreationModule;
 const { NetworkManagementClient } = require('@azure/arm-network');
@@ -43,10 +44,10 @@ async function startExistingVM(vmName, resourceGroup) {
     }
     
     logger.info(`VM ${vmName} started successfully with IP: ${publicIp}`);
-    
+
     // Safely get VM properties with fallbacks
     return {
-      publicIpAddress: publicIp,
+      publicIp,
       adminUsername: (vm.osProfile && vm.osProfile.adminUsername) || 'labuser',
       adminPassword: 'Password not available for running VM',
       vmSize: (vm.hardwareProfile && vm.hardwareProfile.vmSize) || 'Standard_D2s_v3',
@@ -154,18 +155,24 @@ const handler = async (job) => {
     // -----------------------------------------------------------------
     // 5. Persist the new state & useful info back to Mongo
     // -----------------------------------------------------------------
+    // Handle both new (publicIp) and legacy (publicIpAddress) shapes from the
+    // creation/start helpers. The VM schema field is `publicIp`; writing
+    // `publicIpAddress` would be silently dropped by Mongoose strict mode
+    // and leave the portal pointing at a stale/dead IP after stop/start.
+    const resolvedIp = creationResult.publicIp || creationResult.publicIpAddress || '';
+
     const updateData = {
       isRunning: true,
-      publicIpAddress: creationResult.publicIpAddress,
-      // Keep the vmSize and location fields for future use
       vmSize: creationResult.vmSize || vmSize,
       location: creationResult.location || location,
     };
+    if (resolvedIp) updateData.publicIp = resolvedIp;
 
     // Only update admin credentials if they're available (not from running VM)
-    if (creationResult.adminUsername !== 'Password not available for running VM') {
+    if (creationResult.adminUsername && creationResult.adminPassword &&
+        creationResult.adminPassword !== 'Password not available for running VM') {
       updateData.adminUsername = creationResult.adminUsername;
-      updateData.adminPassword = creationResult.adminPassword;
+      updateData.adminPass = creationResult.adminPassword;
     }
 
     await VM.updateOne(
@@ -178,10 +185,16 @@ const handler = async (job) => {
       }
     );
 
-    logger.info(`${vmName} successfully started with size ${creationResult.vmSize || vmSize} (IP: ${creationResult.publicIpAddress})`);
+    logger.info(`${vmName} successfully started with size ${creationResult.vmSize || vmSize} (IP: ${resolvedIp})`);
+
+    // If this VM is an RDS host, wake any session rows that the stop
+    // cascade had paused. Non-RDS VMs match nothing — cheap no-op.
+    cascadeRdsSessions(vmName, 'resume').catch(e =>
+      logger.error(`[start-vm] ${vmName}: rds cascade failed — ${e.message}`)
+    );
   } catch (error) {
     logger.error('Error in azure-start-vm handler:', error);
-    throw error;
+    throw new Error(error.message || String(error));
   }
 };
 

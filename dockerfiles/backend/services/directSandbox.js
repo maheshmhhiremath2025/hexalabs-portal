@@ -90,14 +90,16 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
 }
 
 // ===== AWS =====
-async function createAwsSandbox(username, email) {
+async function createAwsSandbox(username, email, overrideCreds) {
   const { IAMClient, CreateUserCommand, AttachUserPolicyCommand, CreateLoginProfileCommand, PutUserPolicyCommand } = require('@aws-sdk/client-iam');
   const fs = require('fs');
   const path = require('path');
 
+  const awsKey = overrideCreds?.accessKeyId || process.env.AWS_ACCESS_KEY;
+  const awsSecret = overrideCreds?.secretAccessKey || process.env.AWS_ACCESS_SECRET;
   const client = new IAMClient({
-    region: process.env.AWS_REGION || 'ap-south-1',
-    credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET },
+    region: overrideCreds ? 'us-east-1' : (process.env.AWS_REGION || 'ap-south-1'),
+    credentials: { accessKeyId: awsKey, secretAccessKey: awsSecret },
   });
 
   const password = Math.random().toString(36).slice(-8) + 'A1!';
@@ -106,20 +108,23 @@ async function createAwsSandbox(username, email) {
   await client.send(new CreateUserCommand({ UserName: username }));
   logger.info(`AWS user created: ${username}`);
 
-  // Attach policies
-  const policies = [
-    'arn:aws:iam::475184346033:policy/1maiaccessall1',
-    'arn:aws:iam::475184346033:policy/sandbox1',
-    'arn:aws:iam::475184346033:policy/sandbox2',
-    'arn:aws:iam::475184346033:policy/sandbox3',
-    'arn:aws:iam::475184346033:policy/sandbox4',
-  ];
-  for (const arn of policies) {
-    try { await client.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: arn })); } catch {}
+  // Attach policies (skip for override/Connect account — those get their own policies)
+  if (!overrideCreds) {
+    const policies = [
+      'arn:aws:iam::475184346033:policy/1maiaccessall1',
+      'arn:aws:iam::475184346033:policy/sandbox1',
+      'arn:aws:iam::475184346033:policy/sandbox2',
+      'arn:aws:iam::475184346033:policy/sandbox3',
+      'arn:aws:iam::475184346033:policy/sandbox4',
+    ];
+    for (const arn of policies) {
+      try { await client.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: arn })); } catch {}
+    }
   }
 
   // Attach cost restriction inline policy (instance type + region lock)
-  try {
+  // Skip for Connect account — Connect students get their own managed policy
+  if (!overrideCreds) try {
     // Try to load the file-based policy first
     let restrictionPolicy;
     try {
@@ -182,11 +187,12 @@ async function createAwsSandbox(username, email) {
   await client.send(new CreateLoginProfileCommand({ UserName: username, Password: password, PasswordResetRequired: false }));
   logger.info(`AWS login profile created for ${username}`);
 
+  const accountId = overrideCreds ? (process.env.AWS_CONNECT_ACCOUNT_ID || '631461173692') : '475184346033';
   return {
     username,
     password,
-    accessUrl: 'https://475184346033.signin.aws.amazon.com/console',
-    region: 'ap-south-1',
+    accessUrl: `https://${accountId}.signin.aws.amazon.com/console`,
+    region: overrideCreds ? 'us-east-1' : 'ap-south-1',
   };
 }
 

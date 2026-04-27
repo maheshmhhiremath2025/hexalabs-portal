@@ -103,6 +103,11 @@ const CONTAINER_IMAGES = {
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
+  'mainframe-cobol': {
+    image: 'getlabs/lab-mainframe-cobol:1.0', label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)', os: 'VS Code + GnuCOBOL',
+    category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
+    env: ['PASSWORD=password'],
+  },
   'jupyter-scipy': {
     image: 'jupyter/scipy-notebook:latest', label: 'Jupyter Notebook (Python/Science)', os: 'Jupyter',
     category: 'dev', vncPort: 8888, protocol: 'http',

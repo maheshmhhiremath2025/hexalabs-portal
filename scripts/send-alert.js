@@ -17,7 +17,6 @@ require(path.join(BACKEND_DIR, 'node_modules', 'dotenv')).config({
 const nodemailer = require(path.join(BACKEND_DIR, 'node_modules', 'nodemailer'));
 
 const RECIPIENTS = [
-  'vinay.chandra@synergificsoftware.com',
   'itops@synergificsoftware.com',
 ];
 

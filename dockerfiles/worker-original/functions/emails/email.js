@@ -19,7 +19,7 @@ const sendEmail = (to, subject, html, attachment) => {
   const mailOptions = {
     from: process.env.GMAIL_USER, // use authenticated email
     to,
-    cc: "itops@synergificsoftware.com, vinay.chandra@synergificsoftware.com",
+    cc: "itops@synergificsoftware.com",
     subject,
     html,
     // Conditionally include attachments if provided

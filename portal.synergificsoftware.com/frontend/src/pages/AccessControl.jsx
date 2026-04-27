@@ -5,7 +5,9 @@
 // Tab 2 "Power Schedule": create start/stop schedules for VMs of a
 //   training batch — shares the same API as /vm/scheduler.
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
 import apiCaller from '../services/apiCaller';
 import { apiRoutes } from '../services/apiRoutes';
 import {
@@ -54,7 +56,7 @@ function PowerScheduleTab({ pushToast }) {
 
   // schedule form + list
   const [action, setAction] = useState('start');             // 'start' | 'stop'
-  const [date, setDate] = useState('');                      // yyyy-mm-dd
+  const [dates, setDates] = useState([]);                    // array of yyyy-mm-dd
   const [time, setTime] = useState('');                      // HH:mm
   const [scopeAll, setScopeAll] = useState(true);            // all VMs vs specific
   const [vmNames, setVmNames] = useState([]);
@@ -64,6 +66,26 @@ function PowerScheduleTab({ pushToast }) {
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // --- Multi-date helpers (DayPicker mode="multiple") ---
+  const toISODate = (dt) => {
+    if (!dt) return '';
+    const d = dt instanceof Date ? dt : new Date(dt);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const selectedDaysForCalendar = useMemo(
+    () => dates.map(s => new Date(s + 'T00:00:00')),
+    [dates]
+  );
+  const onCalendarSelect = (picked) => {
+    if (!picked) { setDates([]); return; }
+    const arr = Array.isArray(picked) ? picked : [picked];
+    setDates(arr.map(toISODate).filter(Boolean).sort());
+  };
 
   useEffect(() => {
     (async () => {
@@ -116,23 +138,23 @@ function PowerScheduleTab({ pushToast }) {
 
   const addSchedule = async () => {
     if (!selectedTraining) { pushToast('Pick a training first', 'error'); return; }
-    if (!date || !time) { pushToast('Pick a date and time', 'error'); return; }
+    if (dates.length === 0 || !time) { pushToast('Pick at least one date and a time', 'error'); return; }
     if (!scopeAll && selectedVMs.length === 0) { pushToast('Pick at least one VM, or switch to "All VMs"', 'error'); return; }
     setSubmitting(true);
     try {
       await apiCaller.post(apiRoutes.schedulesApi, {
         trainingName: selectedTraining,
         data: {
-          schedules: [{
-            date, time, action,
+          schedules: dates.map(d => ({
+            date: d, time, action,
             entireTraining: scopeAll,
             targetVMs: scopeAll ? [] : selectedVMs,
-          }],
+          })),
           restrictLogin: { restrictUserLogin: false },
         },
       });
-      pushToast(`${action === 'start' ? 'Start' : 'Stop'} schedule added for ${date} ${time}`);
-      setDate(''); setTime(''); setSelectedVMs([]); setScopeAll(true);
+      pushToast(`${action === 'start' ? 'Start' : 'Stop'} schedule${dates.length > 1 ? 's' : ''} added for ${dates.length} date${dates.length > 1 ? 's' : ''}`);
+      setDates([]); setTime(''); setSelectedVMs([]); setScopeAll(true);
       fetchSchedules(selectedTraining);
     } catch (err) {
       pushToast(err.response?.data?.message || 'Failed to add schedule', 'error');
@@ -221,14 +243,30 @@ function PowerScheduleTab({ pushToast }) {
               </div>
             </div>
 
-            {/* Date + Time */}
+            {/* Date(s) + Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-                  <FaCalendarAlt className="w-3 h-3 text-blue-400" /> Date
+                  <FaCalendarAlt className="w-3 h-3 text-blue-400" /> Date(s)
                 </label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)} min={new Date().toISOString().slice(0, 10)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                  <DayPicker
+                    mode="multiple"
+                    selected={selectedDaysForCalendar}
+                    onSelect={onCalendarSelect}
+                    disabled={{ before: new Date(new Date().setHours(0,0,0,0)) }}
+                    className="text-sm"
+                  />
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                    <span className="text-xs text-gray-600">
+                      {dates.length} date{dates.length !== 1 ? 's' : ''} selected
+                    </span>
+                    {dates.length > 0 && (
+                      <button type="button" onClick={() => setDates([])}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">Clear</button>
+                    )}
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">

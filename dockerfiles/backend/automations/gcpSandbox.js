@@ -117,21 +117,34 @@ const gcpSandboxCleanup = async () => {
                     }
 
                     try {
+                        // Check if student still has remaining quota
+                        const totalCap = user.totalCapHours || 0;
+                        const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
+                        const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
+
+                        // Always clean up GCP projects (resources)
                         for (const sb of user.sandbox) {
-                            // Direct deletion first
                             try {
                                 await deleteGcpProject(sb.projectId);
                             } catch (directErr) {
                                 logger.error(`GCP direct delete failed for ${sb.projectId}: ${directErr.message}`);
                             }
-                            // Queue as backup
                             try {
                                 const queues = require('./../controllers/newQueues');
                                 await queues['gcp-delete-project'].add({ projectId: sb.projectId });
                             } catch {}
                         }
-                        await GcpSandboxUser.deleteOne({ _id: user._id });
-                        logger.info(`Deleted expired GCP user: ${user.email}`);
+
+                        if (hasQuotaLeft) {
+                            // Keep user for re-launch
+                            logger.info(`GCP sandbox ${user.email}: session expired but quota remaining — keeping for re-launch`);
+                            await GcpSandboxUser.updateOne({ _id: user._id }, {
+                                $set: { expiresAt: null, sandbox: [], cleanupAttempts: 0, cleanupError: null },
+                            });
+                        } else {
+                            await GcpSandboxUser.deleteOne({ _id: user._id });
+                            logger.info(`Deleted expired GCP user: ${user.email} (quota exhausted)`);
+                        }
                     } catch (cleanupErr) {
                         logger.error(`Failed to clean up expired GCP user ${user.email}: ${cleanupErr.message}`);
                         try {

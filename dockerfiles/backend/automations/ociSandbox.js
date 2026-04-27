@@ -30,11 +30,26 @@ const ociSandboxCleanup = async () => {
             }
 
             try {
-                logger.info(`OCI sandbox expired for ${user.email}, cleaning up...`);
+                // Check if student still has remaining quota
+                const totalCap = user.totalCapHours || 0;
+                const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
+                const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
+
+                logger.info(`OCI sandbox expired for ${user.email}, cleaning up resources...`);
                 await deleteOciSandbox(user.compartmentId, user.userId, user.policyId);
-                user.status = 'deleted';
-                await user.save();
-                logger.info(`OCI sandbox marked as deleted: ${user.email}`);
+
+                if (hasQuotaLeft) {
+                    // Keep user for re-launch
+                    logger.info(`OCI sandbox ${user.email}: resources cleaned but quota remaining — keeping for re-launch`);
+                    await OciSandboxUser.updateOne({ _id: user._id }, {
+                        $set: { expiresAt: null, status: 'expired', cleanupAttempts: 0, cleanupError: null,
+                                compartmentId: null, userId: null, policyId: null },
+                    });
+                } else {
+                    user.status = 'deleted';
+                    await user.save();
+                    logger.info(`OCI sandbox marked as deleted: ${user.email} (quota exhausted)`);
+                }
             } catch (e) {
                 logger.error(`OCI resource cleanup failed for ${user.email}: ${e.message}`);
                 try {

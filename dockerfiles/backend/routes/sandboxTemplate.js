@@ -128,15 +128,30 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
     const baseName = `lab-${template.certificationCode || 'b2b'}-${deployerEmail.split('@')[0]}-${randSuffix}`;
     const username = baseName.replace(/[^a-zA-Z0-9._@+-]/g, '').slice(0, 64);
 
-    const awsResult = await createAwsSandbox(username, deployerEmail);
+    // Use Connect-specific US account if template is flagged for it
+    const useConnectAccount = template.sandboxConfig?.useConnectAccount === true;
+    const awsAccessKey = useConnectAccount ? process.env.AWS_CONNECT_ACCESS_KEY : process.env.AWS_ACCESS_KEY;
+    const awsSecretKey = useConnectAccount ? process.env.AWS_CONNECT_ACCESS_SECRET : process.env.AWS_ACCESS_SECRET;
+    const awsRegion = useConnectAccount ? (process.env.AWS_CONNECT_REGION || 'us-east-1') : (template.sandboxConfig?.region || 'ap-south-1');
+
+    const awsResult = await createAwsSandbox(username, deployerEmail, useConnectAccount ? { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } : undefined);
 
     // Apply the template's specific IAM policy (after default sandbox policy)
     try {
-      const { IAMClient, PutUserPolicyCommand } = require('@aws-sdk/client-iam');
+      const { IAMClient, PutUserPolicyCommand, AttachUserPolicyCommand } = require('@aws-sdk/client-iam');
       const client = new IAMClient({
-        region: template.sandboxConfig?.region || 'ap-south-1',
-        credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET },
+        region: awsRegion,
+        credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey },
       });
+
+      // For Connect templates, also attach the managed Connect policy
+      if (useConnectAccount && process.env.AWS_CONNECT_STUDENT_POLICY_ARN) {
+        await client.send(new AttachUserPolicyCommand({
+          UserName: username,
+          PolicyArn: process.env.AWS_CONNECT_STUDENT_POLICY_ARN,
+        }));
+        logger.info(`Connect student policy attached to ${username}`);
+      }
       await client.send(new PutUserPolicyCommand({
         UserName: username,
         PolicyName: `CoursePolicy-${template.certificationCode || template.slug}`.slice(0, 128),

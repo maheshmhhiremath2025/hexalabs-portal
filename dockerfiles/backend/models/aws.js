@@ -13,6 +13,8 @@ const awsuserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     userId: { type: String, required: true },
     password: { type: String, required: true },
+    accessUrl: { type: String },
+    region: { type: String },
     duration: { type: Number },
     sandboxTtlHours: { type: Number, default: 4 },
     credits: { total: { type: Number, default: 1 }, consumed: { type: Number, default: 0 } },

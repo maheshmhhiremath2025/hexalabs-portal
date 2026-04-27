@@ -13,7 +13,7 @@ router.get("/gcpLogs", handleGcpLogs)
 // Accepts: { name, email, company, demoDate?, preferredTiming? }
 // Saves to DemoRequest collection + sends:
 //   1. Confirmation email to the requester
-//   2. Notification email to vinay + itops
+//   2. Notification email to itops
 // Rate-limited per IP: max 3 submissions per hour (prevents spam).
 
 const demoRateMap = new Map();  // ip -> { count, firstAt }
@@ -85,6 +85,32 @@ router.get("/branding/:organization", async (req, res) => {
     res.json({ branding: org.branding || {}, organization: org.organization });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Permanent Guacamole links — must be LAST so specific GETs above win ─
+// GET /open/:conn?sig=<hmac>
+// Signed (HMAC-SHA256) by backend at email-send time. Verifies the
+// signature, mints a fresh Guac token per click, and 302s to Guacamole.
+// Never expires as long as the Guac connection exists. No auth: the
+// signature IS the auth.
+router.get('/:conn', async (req, res) => {
+  try {
+    const { resolveOpenLink } = require('../services/guacamoleService');
+    const result = await resolveOpenLink(req.params.conn, req.query.sig);
+    if (!result) {
+      return res.status(404).type('html').send(
+        `<html><body style="font-family:sans-serif;padding:40px;max-width:480px;margin:0 auto;">
+          <h2 style="color:#dc2626;">Link not valid</h2>
+          <p>This lab link is either tampered with, or the lab has been deleted. Please log into your training portal at
+          <a href="${(process.env.APP_BASE_URL || 'https://getlabs.cloud')}/login">the portal</a>
+          and use "Open in Browser" from there.</p>
+        </body></html>`);
+    }
+    return res.redirect(302, result.accessUrl);
+  } catch (err) {
+    logger.error(`[open-link] ${req.params.conn}: ${err.message}`);
+    return res.status(500).type('html').send('Temporary error opening your lab. Please try again in a moment.');
   }
 });
 

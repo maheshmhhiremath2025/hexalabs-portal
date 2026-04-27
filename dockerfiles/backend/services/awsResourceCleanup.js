@@ -313,6 +313,97 @@ async function cleanupDynamoDbTables(username) {
 }
 
 /**
+ * Delete M2 (Mainframe Modernization) environments + applications tagged
+ * with CreatedBy={username}. Applications must be stopped/deleted before
+ * their underlying environments. Gracefully no-ops if the SDK isn't installed.
+ */
+async function cleanupM2Resources(username) {
+  try {
+    const { M2Client, ListEnvironmentsCommand, ListApplicationsCommand, ListTagsForResourceCommand, DeleteEnvironmentCommand, DeleteApplicationCommand, StopApplicationCommand } = require('@aws-sdk/client-m2');
+    const m2 = new M2Client({ region: process.env.AWS_REGION || 'ap-south-1', credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET } });
+
+    let count = 0;
+
+    const apps = await m2.send(new ListApplicationsCommand({}));
+    for (const app of apps.applications || []) {
+      try {
+        const { tags } = await m2.send(new ListTagsForResourceCommand({ resourceArn: app.applicationArn }));
+        if (tags?.CreatedBy === username) {
+          try { await m2.send(new StopApplicationCommand({ applicationId: app.applicationId, forceStop: true })); } catch {}
+          await m2.send(new DeleteApplicationCommand({ applicationId: app.applicationId }));
+          count++;
+          logger.info(`Deleted M2 application ${app.applicationId} for ${username}`);
+        }
+      } catch (e) { logger.error(`M2 app ${app.applicationId}: ${e.message}`); }
+    }
+
+    const envs = await m2.send(new ListEnvironmentsCommand({}));
+    for (const env of envs.environments || []) {
+      try {
+        const { tags } = await m2.send(new ListTagsForResourceCommand({ resourceArn: env.environmentArn }));
+        if (tags?.CreatedBy === username) {
+          await m2.send(new DeleteEnvironmentCommand({ environmentId: env.environmentId }));
+          count++;
+          logger.info(`Deleted M2 environment ${env.environmentId} for ${username}`);
+        }
+      } catch (e) { logger.error(`M2 env ${env.environmentId}: ${e.message}`); }
+    }
+
+    if (count) logger.info(`Deleted ${count} M2 resources for ${username}`);
+    return count;
+  } catch (e) {
+    logger.error(`M2 cleanup for ${username}: ${e.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Delete AppStream 2.0 fleets + image builders tagged with CreatedBy={username}.
+ * Stops them first if running — AppStream requires STOPPED state before delete.
+ * Gracefully no-ops if the SDK isn't installed.
+ */
+async function cleanupAppStreamResources(username) {
+  try {
+    const { AppStreamClient, DescribeFleetsCommand, DescribeImageBuildersCommand, ListTagsForResourceCommand, StopFleetCommand, DeleteFleetCommand, StopImageBuilderCommand, DeleteImageBuilderCommand } = require('@aws-sdk/client-appstream');
+    const as = new AppStreamClient({ region: process.env.AWS_REGION || 'ap-south-1', credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET } });
+
+    let count = 0;
+
+    const { Fleets } = await as.send(new DescribeFleetsCommand({}));
+    for (const fleet of Fleets || []) {
+      try {
+        const { Tags } = await as.send(new ListTagsForResourceCommand({ ResourceArn: fleet.Arn }));
+        if (Tags?.CreatedBy === username) {
+          if (fleet.State === 'RUNNING') {
+            try { await as.send(new StopFleetCommand({ Name: fleet.Name })); } catch {}
+          }
+          try { await as.send(new DeleteFleetCommand({ Name: fleet.Name })); count++; logger.info(`Deleted AppStream fleet ${fleet.Name} for ${username}`); } catch (e) { logger.error(`AppStream fleet delete ${fleet.Name}: ${e.message}`); }
+        }
+      } catch (e) { logger.error(`AppStream fleet lookup ${fleet.Name}: ${e.message}`); }
+    }
+
+    const { ImageBuilders } = await as.send(new DescribeImageBuildersCommand({}));
+    for (const ib of ImageBuilders || []) {
+      try {
+        const { Tags } = await as.send(new ListTagsForResourceCommand({ ResourceArn: ib.Arn }));
+        if (Tags?.CreatedBy === username) {
+          if (ib.State === 'RUNNING') {
+            try { await as.send(new StopImageBuilderCommand({ Name: ib.Name })); } catch {}
+          }
+          try { await as.send(new DeleteImageBuilderCommand({ Name: ib.Name })); count++; logger.info(`Deleted AppStream image builder ${ib.Name} for ${username}`); } catch (e) { logger.error(`AppStream IB delete ${ib.Name}: ${e.message}`); }
+        }
+      } catch (e) { logger.error(`AppStream IB lookup ${ib.Name}: ${e.message}`); }
+    }
+
+    if (count) logger.info(`Deleted ${count} AppStream resources for ${username}`);
+    return count;
+  } catch (e) {
+    logger.error(`AppStream cleanup for ${username}: ${e.message}`);
+    return 0;
+  }
+}
+
+/**
  * Full cleanup of all AWS resources for a sandbox user.
  * Call this BEFORE deleting the IAM user.
  */
@@ -329,6 +420,8 @@ async function fullAwsCleanup(username) {
     rdsInstances: await cleanupRdsInstances(username),
     lambdaFunctions: await cleanupLambdaFunctions(username),
     dynamoDbTables: await cleanupDynamoDbTables(username),
+    m2Resources: await cleanupM2Resources(username),
+    appStream: await cleanupAppStreamResources(username),
   };
 
   const total = Object.values(results).reduce((s, v) => s + (v || 0), 0);
@@ -336,4 +429,4 @@ async function fullAwsCleanup(username) {
   return results;
 }
 
-module.exports = { fullAwsCleanup, cleanupEc2Instances, cleanupEbsVolumes, cleanupElasticIps, cleanupSecurityGroups, cleanupKeyPairs };
+module.exports = { fullAwsCleanup, cleanupEc2Instances, cleanupEbsVolumes, cleanupElasticIps, cleanupSecurityGroups, cleanupKeyPairs, cleanupM2Resources, cleanupAppStreamResources };

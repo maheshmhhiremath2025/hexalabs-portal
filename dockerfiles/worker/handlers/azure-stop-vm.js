@@ -1,6 +1,7 @@
 // handlers/azure-stop-vm.js
 const { logger } = require('./../plugins/logger');
 const VM = require('./../models/vm');
+const { cascadeRdsSessions } = require('./../functions/rdsCascade');
 const { ClientSecretCredential } = require('@azure/identity');
 const { ComputeManagementClient } = require('@azure/arm-compute');
 require('dotenv').config();
@@ -38,31 +39,69 @@ const handler = async (job) => {
       return logger.error(`${vmName} not found in DB`);
     }
 
-    if (!vmDoc.isRunning) {
+    // When queued by the reconciler, DB is already updated (isRunning=false, log closed).
+    // We still need to do the Azure operations (snapshot + delete).
+    const reconciledMode = job.data.reconciled === true;
+
+    if (!vmDoc.isRunning && !reconciledMode) {
       return logger.error(`${vmName} is already stopped – skipping`);
     }
 
     const currentTime = new Date();
 
     // Find the open log entry (stop === null)
-    const logIndex = vmDoc.logs.findIndex(log => !log.stop);
-    if (logIndex === -1) {
-      return logger.error(`No open log entry for ${vmName}`);
+    let logIndex = vmDoc.logs.findIndex(log => !log.stop);
+    if (logIndex === -1 && !reconciledMode) {
+      // No open log — proceed with stop anyway (duration = 0 for this session)
+      logger.warn(`No open log entry for ${vmName} — proceeding with stop (duration=0)`);
     }
 
-    const startTime = vmDoc.logs[logIndex].start;
-    const durationMins = Math.ceil((currentTime - new Date(startTime)) / 60000);
-    const totalDuration = vmDoc.duration + durationMins;
-    const consumedQuota = vmDoc.quota.consumed + durationMins;
+    const startTime = logIndex !== -1 ? vmDoc.logs[logIndex].start : null;
+    const durationMins = startTime ? Math.ceil((currentTime - new Date(startTime)) / 60000) : 0;
+    const totalDuration = (vmDoc.duration || 0) + durationMins;
+    const consumedQuota = (vmDoc.quota?.consumed || 0) + durationMins;
 
     // ---------------------------------------------------------------
-    // 2. Deallocate VM for consistent snapshot
+    // 2. UPDATE DB FIRST — mark as stopped BEFORE touching Azure
+    //    This ensures portal never shows "Running" for a deleted VM.
+    // ---------------------------------------------------------------
+    const dbUpdatePayload = {
+      isRunning: false,
+      stopAttempts: 0,   // success — clear the idleShutdown stuck-stop counter
+    };
+
+    if (!reconciledMode && logIndex !== -1) {
+      dbUpdatePayload[`logs.${logIndex}.stop`] = currentTime;
+      dbUpdatePayload[`logs.${logIndex}.duration`] = durationMins;
+      dbUpdatePayload.duration = totalDuration;
+      dbUpdatePayload['quota.consumed'] = consumedQuota;
+    }
+
+    if (consumedQuota >= (vmDoc.quota?.total || Infinity)) {
+      dbUpdatePayload.isAlive = false;
+      dbUpdatePayload.remarks = 'Quota Exceeded';
+    }
+
+    await VM.updateOne({ name: vmName }, { $set: dbUpdatePayload });
+    logger.info(`${vmName} marked as stopped in DB (duration: ${durationMins} min)`);
+
+    // If this VM is an RDS host, pause its session rows too — otherwise the
+    // Lab Console keeps showing them as Running, pointing at an IP that no
+    // longer accepts RDP, which is what triggers Guacamole's "network
+    // unstable" error. We use 'stop' (not 'delete') because the host can
+    // come back from snapshot via the start handler.
+    cascadeRdsSessions(vmName, 'stop').catch(e =>
+      logger.error(`[stop-vm] ${vmName}: rds cascade failed — ${e.message}`)
+    );
+
+    // ---------------------------------------------------------------
+    // 3. Deallocate VM for consistent snapshot
     // ---------------------------------------------------------------
     await computeClient.virtualMachines.beginDeallocateAndWait(resourceGroup, vmName);
     logger.info(`${vmName} deallocated for consistent snapshot`);
 
     // ---------------------------------------------------------------
-    // 3. Get VM and create OS snapshot (mandatory)
+    // 4. Get VM and create OS snapshot (mandatory)
     // ---------------------------------------------------------------
     const vm = await computeClient.virtualMachines.get(resourceGroup, vmName);
     const osDiskName = vm.storageProfile?.osDisk?.name;
@@ -80,19 +119,19 @@ const handler = async (job) => {
     logger.info(`OS snapshot created: ${snapName}`);
 
     // ---------------------------------------------------------------
-    // 4. Delete VM
+    // 5. Delete VM
     // ---------------------------------------------------------------
     await computeClient.virtualMachines.beginDeleteAndWait(resourceGroup, vmName);
     logger.info(`VM deleted: ${vmName}`);
 
     // ---------------------------------------------------------------
-    // 5. Delete OS disk
+    // 6. Delete OS disk
     // ---------------------------------------------------------------
     await computeClient.disks.beginDeleteAndWait(resourceGroup, osDiskName);
     logger.info(`OS disk deleted: ${osDiskName}`);
 
     // ---------------------------------------------------------------
-    // 6. Rotate old snapshots (keep latest N)
+    // 7. Rotate old snapshots (keep latest N)
     // ---------------------------------------------------------------
     const prefix = `${vmName}-os-snap-`;
     const snaps = [];
@@ -109,32 +148,22 @@ const handler = async (job) => {
     logger.info(`Seat preserved: NIC + Public IP + NSG intact for ${vmName}.`);
 
     // ---------------------------------------------------------------
-    // 7. Persist DB changes - Save vmSize in separate field
+    // 8. Save VM size + location for future restarts
     // ---------------------------------------------------------------
-    const actualVmSize = vm.hardwareProfile.vmSize;
+    const actualVmSize = vm.hardwareProfile?.vmSize;
     const actualLocation = vm.location;
 
-    const updatePayload = {
-      isRunning: false,
-      [`logs.${logIndex}.stop`]: currentTime,
-      [`logs.${logIndex}.duration`]: durationMins,
-      duration: totalDuration,
-      'quota.consumed': consumedQuota,
-      vmSize: actualVmSize, // Save VM size in separate field
-      location: actualLocation, // Save location in separate field
-    };
+    await VM.updateOne({ name: vmName }, { $set: {
+      vmSize: actualVmSize,
+      location: actualLocation,
+      remarks: reconciledMode ? 'Stopped & snapshotted (reconciled)' : 'Stopped',
+    }});
 
-    if (consumedQuota >= vmDoc.quota.total) {
-      updatePayload.isAlive = false;
-      updatePayload.remarks = 'Quota Exceeded';
-    }
-
-    await VM.updateOne({ name: vmName }, { $set: updatePayload });
-
-    logger.info(`${vmName} stopped & snapshotted (duration: ${durationMins} min, total: ${totalDuration} min). Saved vmSize: ${actualVmSize}`);
+    logger.info(`${vmName} stopped & snapshotted${reconciledMode ? ' (reconciled)' : ''} (duration: ${durationMins} min, total: ${totalDuration} min). Saved vmSize: ${actualVmSize}`);
   } catch (error) {
     logger.error('Error in azure-stop-vm handler:', error);
-    throw error; // let queue retry/fail
+    // Throw a plain Error to avoid circular JSON serialization issues with Azure SDK errors
+    throw new Error(error.message || String(error));
   }
 };
 

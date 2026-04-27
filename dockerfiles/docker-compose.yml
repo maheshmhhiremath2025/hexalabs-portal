@@ -57,7 +57,7 @@ services:
         aliases:
           - mongodb
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.runCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -161,6 +161,30 @@ services:
         aliases:
           - guac-db
 
+  # MeshCentral - Agent-based browser desktop for Windows VMs
+  meshcentral:
+    image: ghcr.io/ylianst/meshcentral:latest
+    container_name: meshcentral
+    restart: always
+    depends_on:
+      - mongodb
+    volumes:
+      - ./portal_data/meshcentral-data:/opt/meshcentral/meshcentral-data
+      - ./portal_data/meshcentral-files:/opt/meshcentral/meshcentral-files
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "4443:4443"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+    networks:
+      app_network:
+        aliases:
+          - meshcentral
+
   # Worker Services (worker-1 to worker-10)
   worker:
     build:
@@ -177,8 +201,8 @@ services:
       - /usr/bin/chromium-browser:/usr/bin/chromium-browser:ro
       - /usr/lib/chromium:/usr/lib/chromium:ro # Adjust if needed
     environment:
-      - REDIS_HOST=redis
-      - MONGO_URI=mongodb://mongodb:27017/cloudportal
+      - REDIS_HOST=172.17.0.1
+      - MONGO_URI=mongodb://mongodb:27017/userdb
       - CHROMIUM_PATH=/usr/bin/chromium-browser
     networks:
       app_network:

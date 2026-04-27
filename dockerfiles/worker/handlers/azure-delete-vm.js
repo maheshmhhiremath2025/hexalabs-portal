@@ -1,6 +1,7 @@
 const {logger} = require('./../plugins/logger')
 const VM = require('./../models/vm')
 const {DeleteVMandResources} = require('./../functions/vmdeletion/azure')
+const {cascadeRdsSessions} = require('./../functions/rdsCascade')
 const queues = require('./../queues');
 
 
@@ -45,8 +46,13 @@ const handler = async (job) => {
         await queues['guacamole-remove'].add(vm.name)
       }
 
-       await DeleteVMandResources(vm.name, vm.resourceGroup) 
+       await DeleteVMandResources(vm.name, vm.resourceGroup)
        await VM.findOneAndUpdate({name: vm.name}, {isAlive: false})
+
+       // If this was an RDS host, kill the per-user session rows it spawned.
+       await cascadeRdsSessions(vm.name, 'delete').catch(e =>
+         logger.error(`[delete-vm] ${vm.name}: rds cascade failed — ${e.message}`)
+       );
 
   };
   

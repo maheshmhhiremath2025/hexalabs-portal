@@ -2,7 +2,7 @@ const { ClientSecretCredential } = require('@azure/identity');
 const { MonitorClient } = require('@azure/arm-monitor');
 const VM = require('../models/vm');
 const { logger } = require('../plugins/logger');
-const { notifyAutoShutdown } = require('../services/emailNotifications');
+const { notifyAutoShutdown, notifyStuckStop } = require('../services/emailNotifications');
 
 const credential = new ClientSecretCredential(
   process.env.TENANT_ID,
@@ -112,13 +112,73 @@ async function idleShutdownChecker() {
     for (const vm of vms) {
       const idleMinutes = vm.idleMinutes || 15;
 
+      // First check if VM is already stopped/deallocated (user shut down from inside Windows)
+      let alreadyStopped = false;
+      try {
+        const { ComputeManagementClient } = require('@azure/arm-compute');
+        const computeCheck = new ComputeManagementClient(credential, subscriptionId);
+        const azVm = await computeCheck.virtualMachines.get(vm.resourceGroup, vm.name, { expand: 'instanceView' });
+        const statuses = azVm.instanceView?.statuses || [];
+        const ps = statuses.find(s => s.code?.startsWith('PowerState/'));
+        const powerState = ps?.code?.replace('PowerState/', '') || 'unknown';
+
+        if (powerState === 'deallocated' || powerState === 'stopped') {
+          // User shut down from inside — just update DB, DON'T delete the VM
+          logger.info(`VM ${vm.name} already ${powerState} (user shutdown from inside) — updating DB only`);
+          vm.isRunning = false;
+          const lastLog = vm.logs[vm.logs.length - 1];
+          if (lastLog && !lastLog.stop) {
+            lastLog.stop = new Date();
+            lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+            vm.duration = (vm.duration || 0) + lastLog.duration;
+            vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
+          }
+          vm.remarks = 'Stopped by user (no cost while deallocated)';
+          await vm.save();
+          alreadyStopped = true;
+        }
+      } catch (checkErr) {
+        if (checkErr.statusCode === 404) {
+          // VM doesn't exist — already deleted, just update DB
+          logger.warn(`VM ${vm.name} not found in Azure — updating DB`);
+          vm.isRunning = false;
+          vm.remarks = 'VM not found in Azure';
+          await vm.save();
+          alreadyStopped = true;
+        }
+      }
+
+      if (alreadyStopped) continue;
+
+      // VM is still running — check if it's idle
       const idle = await isVmIdle(vm.resourceGroup, vm.name, idleMinutes);
 
       if (idle) {
-        logger.info(`VM ${vm.name} is idle for ${idleMinutes}+ minutes — shutting down`);
+        // Track stuck-stop attempts. Reset to 0 by the reconciler when the
+        // VM actually transitions to stopped. Alert fires exactly once
+        // when count hits 3 (so we don't spam on every 5-min iteration).
+        vm.stopAttempts = (vm.stopAttempts || 0) + 1;
+        await vm.save();
+        logger.info(`VM ${vm.name} is idle for ${idleMinutes}+ minutes — shutting down (attempt ${vm.stopAttempts})`);
+
+        if (vm.stopAttempts === 3) {
+          notifyStuckStop({
+            vmName: vm.name,
+            organization: vm.organization,
+            trainingName: vm.trainingName,
+            resourceGroup: vm.resourceGroup,
+            attempts: vm.stopAttempts,
+            idleMinutes,
+          }).catch(e => logger.error(`[stuck-stop-alert] ${vm.name}: ${e.message}`));
+        }
 
         // Try queue first, fallback to direct API
         if (stopQueue) {
+          // Arm the same 90s cooldown the API path uses, so a fast Start click
+          // (or a user who didn't realize auto-shutdown queued a stop) can't
+          // race the worker's destructive sequence.
+          vm.stoppingUntil = new Date(Date.now() + 90 * 1000);
+          await vm.save();
           await stopQueue.add({
             name: vm.name,
             resourceGroup: vm.resourceGroup,
@@ -136,6 +196,7 @@ async function idleShutdownChecker() {
               vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
             }
             vm.remarks = 'Auto-stopped (idle)';
+            vm.stopAttempts = 0;   // success — clear the stuck-stop counter
             await vm.save();
 
             // Send notification email

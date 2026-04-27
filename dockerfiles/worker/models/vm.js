@@ -29,9 +29,24 @@ const vmSchema = new mongoose.Schema({
   isAlive: { type: Boolean, required: true, default: true },
   quota: { type: quotaSchema, required: true },
   remarks: { type: String, default: 'Alive' },
+  kasmVnc: { type: Boolean, default: false },
+  // Linux VMs that have xrdp+xfce baked in — backend uses this to register a
+  // second Guacamole RDP connection (<vmName>-desktop) so the student can
+  // pick Terminal or Desktop from the Guac home page.
+  hasXrdp: { type: Boolean, default: false },
+  autoShutdown: { type: Boolean, default: false },
+  idleMinutes: { type: Number, default: 15 },
+  lastActivityAt: { type: Date, default: Date.now },
+  hybridBenefit: { type: Boolean, default: false },
+  expiresAt: { type: Date },
+  expiryWarningEmailSent: { type: Boolean, default: false },
+  extendedCount: { type: Number, default: 0 },
   location: { type: String },
-  vmSize: { type: String }, // Added this field for storing VM size
+  vmSize: { type: String },
   organization: { type: String },
+  // Mirror of the backend field — so worker's updateOne({stopAttempts:0})
+  // isn't silently dropped by Mongoose strict-mode on this schema.
+  stopAttempts: { type: Number, default: 0 },
 }, { timestamps: true });
 
 const VM = mongoose.model('VM', vmSchema);

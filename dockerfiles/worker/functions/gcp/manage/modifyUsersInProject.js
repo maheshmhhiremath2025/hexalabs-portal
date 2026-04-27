@@ -3,11 +3,15 @@ const { logger } = require('./../../../plugins/logger'); // Using the existing l
 
 // Replace with the correct path to your service account key file
 const keyFilename = './../../../trail-krishan-prefix-0-8f758fd2d555.json';
-const credentials = require(keyFilename);
+let _credentials;
+function getCredentials() {
+  if (!_credentials) _credentials = require(keyFilename);
+  return _credentials;
+}
 
 async function modifyUsersInProject(projectId, userEmails, addUser, roles) {
     const client = new ProjectsClient({
-        credentials: credentials,
+        credentials: getCredentials(),
     });
 
     const resource = `projects/${projectId}`;

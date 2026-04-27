@@ -8,3 +8,26 @@ dump.rdb
 gcp-service-account.json
 .DS_Store
 dockerfiles/portal_data/
+
+# Duplicate nested directories (server sync artifacts)
+dockerfiles/backend/services/services/
+dockerfiles/backend/routes/routes/
+dockerfiles/backend/controllers/controllers/
+dockerfiles/backend/models/models/
+dockerfiles/backend/automations/automations/
+dockerfiles/backend/data/data/
+dockerfiles/backend/scripts/scripts/
+dockerfiles/worker/worker/
+dockerfiles/worker-original/
+dockerfiles/backup/
+portal.synergificsoftware.com/frontend/src/src/
+scripts/scripts/
+dockerfiles/golden-images/golden-images/
+dockerfiles/vm-templates/vm-templates/
+
+# Backup/temp files
+*.bak
+*.pre-guac-fix
+*.orig-*
+docker-compose-workers.yml
+docker-compose.yml.backup-*

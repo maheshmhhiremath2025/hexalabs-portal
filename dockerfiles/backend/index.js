@@ -120,8 +120,29 @@ app.use("/aro", restrictToLoggedinUserOnly, aroRoute);
 
 // Connect to MongoDB, then start cron jobs and server
 connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')
-  .then(() => {
+  .then(async () => {
     logger.info('MongoDB connected successfully');
+
+    // Startup sanity check — if the VM collection is empty, we're almost
+    // certainly pointing at the wrong database (the exact failure mode
+    // from the 2026-04-21 incident: worker was on "cloudportal" while
+    // backend wrote to "userdb"). Refuse to start so the operator sees
+    // the crash loop immediately. Override with SKIP_VM_COUNT_CHECK=1.
+    try {
+      const VM = require('./models/vm');
+      const n = await VM.countDocuments({});
+      if (n === 0 && process.env.SKIP_VM_COUNT_CHECK !== '1') {
+        logger.error(
+          'STARTUP SANITY FAILED: VM collection is empty. Likely wrong Mongo ' +
+          'database. Refusing to serve traffic. Set SKIP_VM_COUNT_CHECK=1 ' +
+          'to bypass (fresh install only).'
+        );
+        process.exit(1);
+      }
+      logger.info(`[startup] ${n} VMs visible — Mongo looks healthy`);
+    } catch (e) {
+      logger.error(`[startup] VM count check errored (non-fatal): ${e.message}`);
+    }
 
     // Scheduled tasks - run every minute. Each function is async; adding
     // .catch() so a failure in one doesn't silently swallow the error or crash the process.

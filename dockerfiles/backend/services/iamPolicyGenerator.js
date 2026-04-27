@@ -47,6 +47,13 @@ const AWS_SERVICE_MAP = {
   neptune: 'neptune', documentdb: 'rds', elasticdisasterrecovery: 'drs',
   privatelink: 'ec2', transitgateway: 'ec2', globalaccelerator: 'globalaccelerator',
   vpn: 'ec2', directconnect: 'directconnect', wellarchitected: 'wellarchitected',
+  m2: 'm2',
+  // M2 Managed env indirect deps — ensure prefix resolution works
+  logs: 'logs',
+  elasticloadbalancing: 'elasticloadbalancing',
+  elb: 'elasticloadbalancing',
+  ssm: 'ssm',
+  applicationautoscaling: 'application-autoscaling',
 };
 
 /**
@@ -182,6 +189,37 @@ function generateAwsIamPolicy(template) {
       },
     },
   });
+
+  // 8. If template opts in via enforceOwnerTag, force CreatedBy tag on
+  //    M2 / AppStream create actions so cleanup by tag is bulletproof.
+  //    Guarded by an explicit flag so existing templates are unaffected.
+  if (template.sandboxConfig?.enforceOwnerTag) {
+    const allowedSet = new Set((template.allowedServices || []).map(s => s.service.toLowerCase()));
+
+    if (allowedSet.has('m2')) {
+      statements.push({
+        Sid: 'DenyM2CreateWithoutOwnerTag',
+        Effect: 'Deny',
+        Action: ['m2:CreateEnvironment', 'm2:CreateApplication'],
+        Resource: '*',
+        Condition: {
+          StringNotEquals: { 'aws:RequestTag/CreatedBy': '${aws:username}' },
+        },
+      });
+    }
+
+    if (allowedSet.has('appstream')) {
+      statements.push({
+        Sid: 'DenyAppStreamCreateWithoutOwnerTag',
+        Effect: 'Deny',
+        Action: ['appstream:CreateFleet', 'appstream:CreateImageBuilder', 'appstream:CreateStack'],
+        Resource: '*',
+        Condition: {
+          StringNotEquals: { 'aws:RequestTag/CreatedBy': '${aws:username}' },
+        },
+      });
+    }
+  }
 
   const policy = {
     Version: '2012-10-17',

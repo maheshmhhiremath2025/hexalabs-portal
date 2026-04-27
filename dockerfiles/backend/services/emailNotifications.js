@@ -25,7 +25,7 @@ const transporter = nodemailer.createTransport({
 
 const FROM = `"${BRAND.name}" <${process.env.GMAIL_USER}>`;
 // Always CC'd on EVERY email so we keep a central record.
-const INTERNAL_CC = ['itops@synergificsoftware.com', 'vinay.chandra@synergificsoftware.com'];
+const INTERNAL_CC = ['itops@synergificsoftware.com'];
 const CC_RECIPIENTS = INTERNAL_CC.join(', ');
 
 /**
@@ -337,6 +337,10 @@ async function notifyResourceWelcomeEmail({
   expiresAt,
   hostIp, sshPort, vncPort,
   clusterName, namespace, consoleUrl,
+  // New: permanent signed URL that opens the VM in Guacamole in-browser.
+  // When supplied, the email has a prominent "Open in Browser" button and
+  // skips the raw RDP/SSH step (still included as Option B for power users).
+  openInBrowserUrl,
 }) {
   const labels = {
     vm:                'Virtual Machine',
@@ -349,10 +353,12 @@ async function notifyResourceWelcomeEmail({
   const label = labels[resourceType] || 'Lab Resource';
   const badge = badges[resourceType] || 'LAB';
   const subject = `${trainingName || resourceName} — your ${label.toLowerCase()} is ready`;
+  const isWindows = resourceType === 'windows-desktop';
+  const isCluster = resourceType === 'rosa' || resourceType === 'aro';
 
-  // Step 2 — resource-specific access details
+  // Step 2 rows — what you need if you're NOT using the 1-click link
   let accessRows;
-  if (resourceType === 'rosa' || resourceType === 'aro') {
+  if (isCluster) {
     accessRows = [
       ...(consoleUrl ? [{ label: 'Console URL', value: consoleUrl, link: consoleUrl }] : []),
       ...(clusterName ? [{ label: 'Cluster', value: clusterName }] : []),
@@ -360,13 +366,52 @@ async function notifyResourceWelcomeEmail({
       { label: 'Username', value: accessUsername || '', mono: true },
       { label: 'Password', value: accessPassword || '', mono: true, bold: true },
     ];
+  } else if (isWindows) {
+    accessRows = [
+      ...(hostIp ? [{ label: 'Host (IP)', value: hostIp, mono: true }] : []),
+      { label: 'Port',     value: '3389 (RDP)', mono: true },
+      { label: 'Username', value: accessUsername || 'labuser', mono: true },
+      { label: 'Password', value: accessPassword || '', mono: true, bold: true },
+    ];
   } else {
     accessRows = [
-      ...(accessUrl ? [{ label: 'Open URL', value: accessUrl, link: accessUrl }] : []),
-      { label: 'Username', value: accessUsername || 'lab', mono: true },
+      ...(hostIp ? [{ label: 'Host (IP)', value: hostIp, mono: true }] : []),
+      ...(sshPort ? [{ label: 'Port', value: `${sshPort} (SSH)`, mono: true }] : []),
+      { label: 'Username', value: accessUsername || 'labuser', mono: true },
       { label: 'Password', value: accessPassword || '', mono: true, bold: true },
-      ...(sshPort && hostIp ? [{ label: 'SSH', value: `ssh ${accessUsername || 'lab'}@${hostIp} -p ${sshPort}`, mono: true }] : []),
+      ...(sshPort && hostIp ? [{ label: 'SSH command', value: `ssh ${accessUsername || 'labuser'}@${hostIp} -p ${sshPort}`, mono: true }] : []),
     ];
+  }
+
+  // How-to-connect steps — plain English, no HTML. `code` slot carries
+  // the IP so it renders in monospace on a grey background.
+  const howToSteps = [];
+  if (!isCluster) {
+    if (isWindows) {
+      howToSteps.push(
+        steps('Option B — Connect from a Mac (local RDP client)', [
+          { text: "Install 'Microsoft Remote Desktop' from the Mac App Store." },
+          { text: "Open the app and click 'Add PC'.", code: hostIp || '' },
+          { text: "Paste the host IP into 'PC name'. Under 'User account', click 'Add user account' and enter the username + password shown above. Save." },
+          { text: "Double-click the PC tile to start. Accept the certificate warning on first connect." },
+        ]),
+        steps('Option B — Connect from Windows (local RDP client)', [
+          { text: "Press Win+R, type mstsc, press Enter to open Remote Desktop Connection." },
+          { text: "In 'Computer', paste the host IP and click Connect.", code: hostIp || '' },
+          { text: "When prompted, enter the username and password above." },
+          { text: "Click Yes on the certificate warning. You're in." },
+        ])
+      );
+    } else {
+      // Linux VM
+      howToSteps.push(
+        steps('Option B — Connect via SSH (Mac / Linux / Windows)', [
+          { text: "Open Terminal (Mac / Linux) or PowerShell (Windows)." },
+          { text: "Run the SSH command:", code: `ssh ${accessUsername || 'labuser'}@${hostIp || 'HOST'}${sshPort && String(sshPort) !== '22' ? ` -p ${sshPort}` : ''}` },
+          { text: "When prompted for the password, paste the one shown above." },
+        ])
+      );
+    }
   }
 
   const sections = [
@@ -375,11 +420,19 @@ async function notifyResourceWelcomeEmail({
       { label: 'Email',    value: email, mono: true },
       { label: 'Password', value: portalPassword || 'Welcome1234!', mono: true, bold: true },
     ]),
-    credentials(`Step 2 — Access your ${label}`, accessRows),
+    credentials(`Step 2 — ${label} credentials`, accessRows),
+    // 1-click "Open in Browser" — only when we have a permanent signed URL
+    ...(openInBrowserUrl ? [
+      info('Option A — Open in browser (recommended)',
+        `Click the button below to open this ${label.toLowerCase()} inside your browser via Guacamole. No RDP or SSH client required. Works on Mac, Windows, iPad, Chromebook — anywhere you have Chrome / Safari / Edge.`,
+        'blue'),
+      button('Open in browser', openInBrowserUrl),
+    ] : []),
+    ...howToSteps,
     ...(imageLabel || cpus || memoryMb ? [
       info('Specs',
         [
-          imageLabel && `Image: <strong>${imageLabel}</strong>`,
+          imageLabel && `Image: ${imageLabel}`,
           cpus && `${cpus} vCPU`,
           memoryMb && (memoryMb >= 1024 ? `${(memoryMb/1024).toFixed(1)} GB RAM` : `${memoryMb} MB RAM`),
         ].filter(Boolean).join(' · '),
@@ -391,12 +444,134 @@ async function notifyResourceWelcomeEmail({
   const { html, text } = renderEmail({
     title: `Your ${label.toLowerCase()} is ready`,
     badge,
-    intro: `Hi,<br><br>Your ${label.toLowerCase()}${resourceName ? ` <strong>${resourceName}</strong>` : ''} has been provisioned${trainingName ? ` for <strong>${trainingName}</strong>` : ''}. Use the portal to log in, then access the lab directly with the credentials below.`,
+    intro: `Hi, your ${label.toLowerCase()}${resourceName ? ` <strong>${resourceName}</strong>` : ''}${trainingName ? ` for <strong>${trainingName}</strong>` : ''} is provisioned and ready. Log in to the portal with your email + password, or click the "Open in browser" button below to jump straight into the lab.`,
     sections,
     expiry: expiresAt,
   });
 
   await sendEmail(email, subject, html, text);
+}
+
+// ─── 7b. RDS lab ready (consolidated roster to org admin) ────────────────
+//
+// Sent once per RDS deployment (not per student). Includes the admin's
+// portal login, the RDS host RDP details, and a table of all N student
+// users with per-row "Open in browser" links (when Guacamole is enabled).
+
+async function notifyRdsLabReady({
+  adminEmail, trainingName, organization, hostIp,
+  adminUsername, adminPassword,
+  users,                      // [{ username, password, email?, openInBrowserUrl? }, ...]
+  adminOpenInBrowserUrl,      // optional 1-click link for the admin/host
+  expiresAt,
+}) {
+  const { rawHtml } = require('./emailTemplate');
+  const totalUsers = Array.isArray(users) ? users.length : 0;
+
+  function rosterHtml() {
+    const rows = users.map(u => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;font-size:13px;color:#111827;">${u.username}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;font-size:13px;color:#111827;font-weight:600;">${u.password}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;font-size:12px;color:#6b7280;">${u.email || '—'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${u.openInBrowserUrl
+          ? `<a href="${u.openInBrowserUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:6px 14px;border-radius:6px;text-decoration:none;font-weight:600;font-size:12px;">Open in browser</a>`
+          : '<span style="color:#9ca3af;font-size:12px;">(portal only)</span>'}</td>
+      </tr>`).join('');
+    return `
+      <div style="margin:20px 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Student roster — ${totalUsers} users</div>
+      <table style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e5e7eb;">RDS User</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e5e7eb;">RDS Password</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e5e7eb;">Portal Email</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e5e7eb;">Quick access</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:12px;color:#6b7280;line-height:1.5;">
+        All ${totalUsers} users connect to the <strong>same</strong> Windows host — Windows keeps each session isolated.
+        Share each row with the matching trainee. Student portal logins all use password <strong>Welcome1234!</strong>.
+      </div>`;
+  }
+
+  function rosterText() {
+    const h = 'USER'.padEnd(14) + 'PASSWORD'.padEnd(18) + 'PORTAL EMAIL'.padEnd(30) + 'OPEN';
+    const lines = users.map(u => u.username.padEnd(14) + u.password.padEnd(18) + (u.email || '—').padEnd(30) + (u.openInBrowserUrl || '(portal only)'));
+    return ['Student roster', h, '-'.repeat(h.length), ...lines].join('\n');
+  }
+
+  const sections = [
+    credentials('Step 1 — Portal admin login (for you)', [
+      { label: 'Portal',   value: BRAND.portalUrl, link: BRAND.portalUrl },
+      { label: 'Email',    value: adminEmail, mono: true },
+      { label: 'Password', value: 'Welcome1234!', mono: true, bold: true },
+    ]),
+    credentials('Step 2 — RDS host (admin account, for setup)', [
+      { label: 'Host (IP)', value: hostIp, mono: true },
+      { label: 'Port',      value: '3389 (standard RDP)', mono: true },
+      { label: 'Username',  value: adminUsername, mono: true },
+      { label: 'Password',  value: adminPassword, mono: true, bold: true },
+    ]),
+    ...(adminOpenInBrowserUrl ? [button('Open admin session in browser', adminOpenInBrowserUrl)] : []),
+    rawHtml(rosterHtml(), rosterText()),
+    steps('Option A — One click (easiest)', [
+      { text: "Share each row's 'Open in browser' link with the matching trainee. Their desktop opens in a new browser tab — no RDP client needed." },
+      { text: "Works on Mac, Windows, iPad, Chromebook, anywhere with Chrome / Safari / Edge." },
+    ]),
+    steps('Option B — Local RDP client', [
+      { text: "Mac: install 'Microsoft Remote Desktop' from the App Store. Add a PC with the host IP above, add a user account with the row's username and password." },
+      { text: "Windows: press Win+R, type mstsc, press Enter. Computer = host IP. When prompted, enter the username + password from the row." },
+    ]),
+  ];
+
+  const { html, text } = renderEmail({
+    title: `Your RDS lab "${trainingName}" is ready`,
+    badge: 'WINDOWS RDS',
+    intro: `Hi, your Windows Server 2022 RDS lab <strong>${trainingName}</strong> is up. ${totalUsers} student${totalUsers === 1 ? '' : 's'} share the same Windows host — each gets an isolated session. Below: your admin portal login, the host RDP details, and a per-student roster with one-click "Open in browser" links you can distribute.`,
+    sections,
+    expiry: expiresAt,
+  });
+
+  await sendEmail(adminEmail, `Your RDS lab "${trainingName}" is ready`, html, text);
+}
+
+// ─── 7c. Ops alert — VM stop is stuck (worker crash-loop, queue jam) ─────
+//
+// Fired by idleShutdown when stopAttempts hits 3 for a single VM. Means
+// something is wrong with the worker/queue — manual intervention needed.
+// Sent once per stuck cycle (idleShutdown only fires alert on ==3, not
+// >=3, and counter resets when VM actually stops via the reconciler).
+
+async function notifyStuckStop({ vmName, organization, trainingName, resourceGroup, attempts, idleMinutes }) {
+  const to = 'itops@synergificsoftware.com';
+  const subject = `[OPS] VM stop stuck — ${vmName} (${attempts} attempts)`;
+  const { html, text } = renderEmail({
+    title: `VM stop is stuck`,
+    badge: 'ALERT',
+    intro: `The idle-shutdown automation tried to stop <strong>${vmName}</strong> ${attempts} times in a row but the VM is still running. Usually means the azure-stop-vm worker is crash-looping, the Bull queue is jammed, or Azure is refusing the deallocate call.`,
+    sections: [
+      credentials('VM details', [
+        { label: 'Name',           value: vmName, mono: true },
+        { label: 'Organization',   value: organization || '—' },
+        { label: 'Training',       value: trainingName || '—' },
+        { label: 'Resource group', value: resourceGroup || '—', mono: true },
+        { label: 'Idle window',    value: `${idleMinutes || 15} min` },
+        { label: 'Attempts',       value: String(attempts), bold: true },
+      ]),
+      steps('What to check', [
+        { text: "docker ps --filter name=worker — all 10 replicas should be Up (healthy), not Restarting" },
+        { text: "pm2 logs synergific-backend --err — look for recurring errors" },
+        { text: "Azure portal: is the VM truly running or in a stuck state (e.g. deallocating for hours)?" },
+        { text: "After fixing: db.vms.updateOne({name: '" + vmName + "'}, {$set: {stopAttempts: 0}}) to silence the alert and re-arm detection." },
+      ]),
+      warning(`This VM is still burning spot-rate cost while stuck. Manual stop via Azure portal is safe — the reconciler will catch up on DB state.`),
+    ],
+  });
+  await sendEmail(to, subject, html, text);
+  logger.warn(`[ops-alert] stuck-stop email sent: ${vmName} attempts=${attempts}`);
 }
 
 // ─── 8. Bulk deploy summary (TO: org admin; CC: internal + deployer) ─────
@@ -550,7 +725,7 @@ function escapeHtml(s) {
 //
 // Two emails per submission:
 //   1. Confirmation to the requester — "thanks, we'll be in touch".
-//   2. Notification to internal ops (vinay + itops) with full details.
+//   2. Notification to internal ops (itops) with full details.
 //
 // Both use the unified email template so a demo request reads like any
 // other official Synergific email.
@@ -586,7 +761,7 @@ async function notifyDemoRequestConfirmation({ name, email, company, demoDate, p
 
 async function notifyDemoRequestOps({ name, email, company, demoDate, preferredTiming, ipAddress, userAgent }) {
   const subject = `[Synergific Ops] New demo request — ${company} (${name})`;
-  const to = joinEmails(INTERNAL_CC);  // vinay + itops
+  const to = joinEmails(INTERNAL_CC);  // itops
 
   // Plain-text body — easy to forward / paste into CRM
   const text = [
@@ -639,6 +814,8 @@ module.exports = {
   notifyOpsDeploySummary,
   notifySandboxWelcomeEmail,
   notifyResourceWelcomeEmail,
+  notifyRdsLabReady,
+  notifyStuckStop,
   // new in 2026-04-19 bulk-routing upgrade:
   notifySandboxBulkSummary,
   isLikelyDeliverable,

@@ -1,11 +1,54 @@
 const { ClientSecretCredential } = require('@azure/identity');
 const { ComputeManagementClient } = require('@azure/arm-compute');
 const { NetworkManagementClient } = require('@azure/arm-network');
+const axios = require('axios');
 const VM = require('../models/vm');
 const Training = require('../models/training');
 const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 const { getVmPriceInr } = require('./azurePricing');
+const { ensureUser, grantRead } = require('./guacamoleService');
+
+// Minimal Guac helpers — we can't use the main createVmConnection path here
+// because it assumes Azure-VM-shaped inputs (per-VM disk, single protocol).
+// RDS needs N RDP connections against one host, each with different creds.
+const GUAC_API_URL = process.env.GUACAMOLE_URL || 'http://localhost:8085/guacamole';
+const GUAC_ADMIN_USER = process.env.GUACAMOLE_ADMIN_USER || 'guacadmin';
+const GUAC_ADMIN_PASS = process.env.GUACAMOLE_ADMIN_PASS || 'guacadmin';
+
+async function getGuacAdminToken() {
+  const r = await axios.post(`${GUAC_API_URL}/api/tokens`,
+    `username=${encodeURIComponent(GUAC_ADMIN_USER)}&password=${encodeURIComponent(GUAC_ADMIN_PASS)}`,
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  return r.data.authToken;
+}
+
+function rdpConnParams(ip, username, password) {
+  return {
+    hostname: ip, port: '3389', username, password, security: 'nla', 'ignore-cert': 'true',
+    'color-depth': '16', 'resize-method': 'display-update',
+    'enable-wallpaper': 'false', 'enable-theming': 'false', 'enable-font-smoothing': 'false',
+    'enable-full-window-drag': 'false', 'enable-desktop-composition': 'false', 'enable-menu-animations': 'false',
+    'disable-bitmap-caching': 'false', 'disable-offscreen-caching': 'false', 'disable-glyph-caching': 'false',
+    'enable-drive': 'false', 'enable-printing': 'false', 'enable-audio': 'false',
+    'timezone': 'Asia/Kolkata',
+  };
+}
+
+async function upsertRdpConn(admTok, name, params) {
+  const list = (await axios.get(`${GUAC_API_URL}/api/session/data/mysql/connections?token=${admTok}`)).data;
+  const existing = Object.entries(list).find(([, c]) => c.name === name)?.[0];
+  const body = {
+    parentIdentifier: 'ROOT', name, protocol: 'rdp', parameters: params,
+    attributes: { 'max-connections': '3', 'max-connections-per-user': '2' },
+  };
+  if (existing) {
+    await axios.put(`${GUAC_API_URL}/api/session/data/mysql/connections/${existing}?token=${admTok}`, { ...body, identifier: existing });
+    return existing;
+  }
+  const r = await axios.post(`${GUAC_API_URL}/api/session/data/mysql/connections?token=${admTok}`, body);
+  return r.data.identifier;
+}
 
 const credential = new ClientSecretCredential(
   process.env.TENANT_ID, process.env.CLIENT_ID, process.env.CLIENT_SECRET
@@ -186,6 +229,31 @@ async function createRdsServer({
   const publicIp = pip.ipAddress;
   const cleanTraining = trainingName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+  // Register Guac connections so "Open in browser" works for RDS (best
+  // effort — Guacamole may be down during some deployments, shouldn't
+  // block the RDS create path).
+  let guacOk = false;
+  try {
+    const admTok = await getGuacAdminToken();
+    // Host connection (admin/teacher)
+    {
+      const id = await upsertRdpConn(admTok, vmName, rdpConnParams(publicIp, 'labadmin', adminPassword));
+      await ensureUser(vmName, admTok);
+      await grantRead(admTok, vmName, id);
+    }
+    // Per-user connections
+    for (const u of users) {
+      const connName = `${vmName}-${u.username}`;
+      const id = await upsertRdpConn(admTok, connName, rdpConnParams(publicIp, u.username, u.password));
+      await ensureUser(connName, admTok);
+      await grantRead(admTok, connName, id);
+    }
+    guacOk = true;
+    logger.info(`[rds] Guacamole connections registered for ${vmName} + ${users.length} sessions`);
+  } catch (e) {
+    logger.warn(`[rds] Guacamole registration failed for ${vmName}: ${e.message} — VMs will still work via local RDP client`);
+  }
+
   // Save the RDS server as a VM
   await VM.create({
     name: vmName,
@@ -195,7 +263,7 @@ async function createRdsServer({
     rate: sizeConfig.cost,
     duration: 0,
     isRunning: true,
-    guacamole: false,
+    guacamole: guacOk,
     os: 'Windows Server 2022 (RDS)',
     resourceGroup: rg,
     publicIp,
@@ -208,6 +276,7 @@ async function createRdsServer({
     idleMinutes,
     hybridBenefit: true,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
+    organization, location,
   });
 
   // Save per-user entries so they show up in Lab Console
@@ -221,7 +290,7 @@ async function createRdsServer({
       rate: Math.round(sizeConfig.cost / userCount), // Split cost per user
       duration: 0,
       isRunning: true,
-      guacamole: false,
+      guacamole: guacOk,
       os: 'Windows Server 2022 (RDS Session)',
       resourceGroup: rg,
       publicIp, // Same IP — different username
@@ -233,7 +302,7 @@ async function createRdsServer({
       autoShutdown,
       idleMinutes,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
-      rdsServer: vmName,
+      organization, location,
     });
 
     vmUserMapping.push({ vmName: `${vmName}-${user.username}`, userEmail: user.email });

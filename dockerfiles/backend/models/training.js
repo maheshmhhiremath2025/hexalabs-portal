@@ -43,7 +43,9 @@ const trainingsSchema = new mongoose.Schema({
     type: [scheduleSchema],
     required: true,
   },
-  ports: { type: [Number], default: [] },
+  // Stored as strings so we can keep both single ports ("80") and
+  // ranges ("4000-5000"). Legacy numeric values still cast cleanly.
+  ports: { type: [String], default: [] },
   // Lab expiry — auto-purge entire training when expired
   expiresAt: { type: Date },
   expiryWarningEmailSent: { type: Boolean, default: false },

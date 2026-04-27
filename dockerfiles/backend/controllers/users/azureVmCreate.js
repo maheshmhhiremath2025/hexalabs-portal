@@ -4,7 +4,7 @@ const VM = require("./../../models/vm");
 const { logger } = require('./../../plugins/logger');
 
 async function handleCreateMachines(req, res) {
-    const { templateName, email, trainingName, allocatedHours, createVmCount, guacamole, autoShutdown = false, idleMinutes = 15, hybridBenefit = false, expiresAt } = req.body;
+    const { templateName, email, trainingName, allocatedHours, createVmCount, guacamole, meshCentral, autoShutdown = false, idleMinutes = 15, hybridBenefit = false, expiresAt } = req.body;
     // Validate required fields
     if (!templateName || !email || !trainingName || !createVmCount)
         return res.status(400).json({ message: "Required data not received" });
@@ -36,6 +36,7 @@ async function handleCreateMachines(req, res) {
                 kasmVnc: !!templateKasmVnc,
                 hasXrdp: !!templateHasXrdp,
                 guacamole: guacamole,
+                meshCentral: !!meshCentral,
                 autoShutdown: autoShutdown,
                 idleMinutes: idleMinutes,
                 hybridBenefit: hybridBenefit,

@@ -272,9 +272,21 @@ const generateInvoicePDF = (invoiceData, organization) => {
 
 // ✅ ALL YOUR EXISTING FUNCTIONS START HERE - KEEP THEM EXACTLY AS THEY WERE
 async function handleFetchOrganization(req, res) {
-    const results = await Organization.find({});
-    const organization = results.map(result => result.organization);
-    res.status(200).json({ organization: organization });
+    // Org-scope guard: superadmin sees all orgs; admin/sandboxuser sees only own org.
+    const userType = req.user?.userType;
+    const userOrg = req.user?.organization;
+
+    if (userType === 'superadmin') {
+        const results = await Organization.find({});
+        return res.status(200).json({ organization: results.map(r => r.organization) });
+    }
+
+    if (userOrg) {
+        const exists = await Organization.findOne({ organization: userOrg });
+        return res.status(200).json({ organization: exists ? [userOrg] : [] });
+    }
+
+    return res.status(200).json({ organization: [] });
 }
 
 async function handleDeleteOrganization(req, res) {
@@ -448,6 +460,62 @@ async function handleDeleteUser(req, res) {
     } catch (error) {
         logger.error(`Error in deleting user ${email}`)
         res.status(500).json({ message: "Internal Error" })
+    }
+}
+
+// PATCH /admin/users — edit a user from the Admin Center.
+// Accepts { email (target), newOrganization?, userType?, newEmail?, resetPassword? }
+// resetPassword:true sets password to Welcome1234! (bcrypt-hashed via pre-save hook).
+async function handleUpdateUser(req, res) {
+    const { email, newEmail, newOrganization, userType, resetPassword } = req.body;
+    if (!email) return res.status(400).json({ message: 'email (target) is required' });
+    try {
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // Superadmin-only safety: don't let non-superadmins edit superadmins.
+        if (user.userType === 'superadmin' && req.user?.userType !== 'superadmin') {
+            return res.status(403).json({ message: 'Only superadmin can edit a superadmin' });
+        }
+        if (userType === 'superadmin' && req.user?.userType !== 'superadmin') {
+            return res.status(403).json({ message: 'Only superadmin can assign superadmin' });
+        }
+
+        if (newEmail && newEmail !== email) user.email = String(newEmail).trim().toLowerCase();
+        if (newOrganization) user.organization = newOrganization;
+        if (userType) user.userType = userType;
+        if (resetPassword) user.password = 'Welcome1234!';   // pre-save hook hashes
+
+        await user.save();
+        logger.info(`[admin] ${req.user?.email} updated ${email} (resetPw:${!!resetPassword})`);
+        res.status(200).json({ message: 'User updated', user: { email: user.email, organization: user.organization, userType: user.userType } });
+    } catch (err) {
+        if (err.code === 11000) return res.status(409).json({ message: 'That email already exists' });
+        logger.error(`handleUpdateUser error: ${err.message}`);
+        res.status(500).json({ message: err.message });
+    }
+}
+
+// PATCH /admin/template — edit a template's non-destructive fields:
+// rate, kasmVnc, hasXrdp (not name/imageId — those would orphan VMs that
+// reference the template).
+async function handleUpdateTemplate(req, res) {
+    const { name, rate, kasmVnc, hasXrdp } = req.body;
+    if (!name) return res.status(400).json({ message: 'name is required' });
+    try {
+        const Templates = require('../models/templates');
+        const set = {};
+        if (rate !== undefined) set.rate = Number(rate);
+        if (kasmVnc !== undefined) set.kasmVnc = !!kasmVnc;
+        if (hasXrdp !== undefined) set.hasXrdp = !!hasXrdp;
+        if (Object.keys(set).length === 0) return res.status(400).json({ message: 'Nothing to update' });
+        const r = await Templates.updateOne({ name }, { $set: set });
+        if (r.matchedCount === 0) return res.status(404).json({ message: 'Template not found' });
+        logger.info(`[admin] ${req.user?.email} updated template ${name}: ${JSON.stringify(set)}`);
+        res.status(200).json({ message: 'Template updated' });
+    } catch (err) {
+        logger.error(`handleUpdateTemplate error: ${err.message}`);
+        res.status(500).json({ message: err.message });
     }
 }
 
@@ -1570,6 +1638,8 @@ module.exports = {
     handleDeleteLogs,
     handleCreateTemplate,
     handleDeleteUser,
+    handleUpdateUser,
+    handleUpdateTemplate,
     handleDeleteTemplate,
     handleDeleteAssignTemplate,
     handleGetAccounts,

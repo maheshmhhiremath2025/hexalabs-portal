@@ -12,6 +12,8 @@ const {
     handleCreateUser,
     handleDeleteLogs,
     handleDeleteUser,
+    handleUpdateUser,
+    handleUpdateTemplate,
     handleDeleteTemplate,
     handleDeleteAssignTemplate,
     handleGetAccounts, // ✅ CORRECT NAME - NO DUPLICATE "handle"
@@ -90,12 +92,14 @@ router.delete('/organization', handleDeleteOrganization);
 router.post('/organization', handleCreateOrganization);
 router.get('/users', handleFetchUsers);
 router.post('/users', handleCreateUser);
+router.patch('/users', handleUpdateUser);
 router.delete('/users', handleDeleteUser);
 router.post('/assignTemplate', handleAssignTemplate);
 router.delete('/assignTemplate', handleDeleteAssignTemplate);
 router.get('/assignTemplate', handleGetAssignTemplate);
 router.get('/template', handleGetTemplate);
 router.post('/template', handleCreateTemplate);
+router.patch('/template', handleUpdateTemplate);
 router.delete('/template', handleDeleteTemplate);
 router.delete('/logs', handleDeleteLogs);
 router.get("/dashboard", handleDashboardFunction);
@@ -376,6 +380,31 @@ router.delete('/docker-hosts/:id', async (req, res) => {
     await terminateHost(req.params.id);
     res.json({ message: 'Host terminated' });
   } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// ─── Login rate-limiter admin endpoints ─────────────────────────────────
+// Superadmin AND admin can both unlock users (admins run training batches
+// and often need to unblock a stuck trainee without escalating).
+router.get('/login-rate-limit/:email', async (req, res) => {
+  if (!['superadmin', 'admin'].includes(req.user?.userType)) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  const { getEmailStatus } = require('../middlewares/loginRateLimit');
+  const status = await getEmailStatus(req.params.email);
+  res.json({ email: req.params.email, ...status });
+});
+
+router.post('/login-rate-limit/unlock', async (req, res) => {
+  if (!['superadmin', 'admin'].includes(req.user?.userType)) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  const email = req.body?.email;
+  if (!email) return res.status(400).json({ message: 'email required in body' });
+  const { unlockEmail } = require('../middlewares/loginRateLimit');
+  const result = await unlockEmail(email);
+  require('../plugins/logger').logger.info(`[login-rate] ${req.user.email} unlocked ${email}`);
+  if (!result.ok) return res.status(500).json({ message: result.reason });
+  res.json({ message: `Unlocked ${email}`, ...result });
 });
 
 module.exports = router;

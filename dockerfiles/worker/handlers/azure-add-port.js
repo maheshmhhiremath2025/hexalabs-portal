@@ -1,37 +1,44 @@
-const {openPort, openPortDirection, openPortBoth} = require('./../functions/vmManagers')
+const {
+  openPortsBatch,
+  openPort,
+  openPortDirection,
+  openPortBoth,
+} = require('./../functions/vmManagers');
 const { logger } = require('./../plugins/logger');
 
+// New payload: { vmName, resourceGroup, ports: string[], direction }
+// Legacy payload: { vmName, resourceGroup, port, priority, direction }
 const handler = async (job) => {
-  const {vmName, port, priority, resourceGroup, direction = 'inbound'} = job.data;
-  
-  console.log('🔧 Port opening request:', {
-    vmName,
-    port, 
-    priority,
-    resourceGroup,
-    direction
-  });
+  const { vmName, resourceGroup, direction = 'inbound' } = job.data;
+  const ports = Array.isArray(job.data.ports)
+    ? job.data.ports
+    : job.data.port !== undefined ? [String(job.data.port)] : [];
+
+  if (!vmName || !resourceGroup || !ports.length) {
+    logger.error('azure-add-port: missing vmName/resourceGroup/ports', job.data);
+    return;
+  }
 
   try {
-    // Handle different direction cases
-    if (direction === 'both') {
-      console.log('🔄 Opening BOTH inbound and outbound ports');
-      await openPortBoth(vmName, port, priority, resourceGroup);
-      logger.info(`PORT: ${port} opened for BOTH directions for ${vmName}`);
-    } else if (direction === 'outbound') {
-      console.log('📤 Opening OUTBOUND port only');
-      await openPortDirection(vmName, port, priority, resourceGroup, 'Outbound');
-      logger.info(`PORT: ${port} opened for OUTBOUND for ${vmName}`);
-    } else {
-      // Default to inbound (existing behavior)
-      console.log('📥 Opening INBOUND port only');
-      await openPort(vmName, port, priority, resourceGroup);
-      logger.info(`PORT: ${port} opened for INBOUND for ${vmName}`);
+    if (job.data.ports) {
+      await openPortsBatch(vmName, ports, resourceGroup, direction);
+      logger.info(`PORTS opened on ${vmName}: ${ports.join(', ')} (${direction})`);
+      return;
     }
 
+    // Legacy single-port path — keep old behaviour for any already-queued jobs.
+    const { port, priority } = job.data;
+    if (direction === 'both') {
+      await openPortBoth(vmName, port, priority, resourceGroup);
+    } else if (direction === 'outbound') {
+      await openPortDirection(vmName, port, priority, resourceGroup, 'Outbound');
+    } else {
+      await openPort(vmName, port, priority, resourceGroup);
+    }
+    logger.info(`PORT ${port} opened for ${direction} on ${vmName}`);
   } catch (error) {
-    logger.error(`Error opening ${direction} port: ${port} for ${vmName}`, error);
-    throw error; // Fixed: use throw instead of return new error
+    logger.error(`Error opening ports on ${vmName}: ${error.message}`);
+    throw error;
   }
 };
 

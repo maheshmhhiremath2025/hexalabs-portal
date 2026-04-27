@@ -29,6 +29,7 @@ const aws = {
   lightsail:        { category: 'Compute', riskTier: 'safe',     baselineHourlyInr: 1.0 },
   elasticbeanstalk: { category: 'Compute', riskTier: 'safe',     baselineHourlyInr: 2.5 },
   appstream:        { category: 'Compute', riskTier: 'moderate', baselineHourlyInr: 5.0 },
+  m2:               { category: 'Compute', riskTier: 'moderate', baselineHourlyInr: 70.0, notes: 'AWS Mainframe Modernization — envs bill continuously; ensure cleanup covers m2:DeleteEnvironment/Application' },
   workspaces:       { category: 'Compute', riskTier: 'moderate', baselineHourlyInr: 4.0 },
   sagemaker:        { category: 'ML',      riskTier: 'dangerous', baselineHourlyInr: 15.0, notes: 'expensive by default, needs review' },
   outposts:         { category: 'Compute', riskTier: 'blocked',  baselineHourlyInr: 0,    notes: 'not offered in sandbox' },
@@ -85,6 +86,8 @@ const aws = {
 
   // --- Monitoring / DevOps ---
   cloudwatch:       { category: 'Monitoring', riskTier: 'safe',  baselineHourlyInr: 0.3 },
+  logs:             { category: 'Monitoring', riskTier: 'safe',  baselineHourlyInr: 0.2, notes: 'CloudWatch Logs — separate IAM prefix from cloudwatch' },
+  elasticloadbalancing: { category: 'Networking',  riskTier: 'safe',  baselineHourlyInr: 1.5, notes: 'ALB/NLB — needed by M2 Managed envs' },
   cloudtrail:       { category: 'Monitoring', riskTier: 'safe',  baselineHourlyInr: 0.2 },
   xray:             { category: 'Monitoring', riskTier: 'safe',  baselineHourlyInr: 0.2 },
   cloudformation:   { category: 'DevOps', riskTier: 'safe',      baselineHourlyInr: 0.2 },

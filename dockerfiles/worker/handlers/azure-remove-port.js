@@ -1,36 +1,43 @@
-const {closePort, closePortDirection, closePortBoth} = require('./../functions/vmManagers')
+const {
+  closePortsBatch,
+  closePort,
+  closePortDirection,
+  closePortBoth,
+} = require('./../functions/vmManagers');
 const { logger } = require('./../plugins/logger');
 
+// New payload: { vmName, resourceGroup, ports: string[], direction }
+// Legacy payload: { vmName, resourceGroup, port, direction }
 const handler = async (job) => {
-  const {vmName, port, resourceGroup, direction = 'inbound'} = job.data;
-  
-  console.log('🔧 Port closing request:', {
-    vmName,
-    port, 
-    resourceGroup,
-    direction
-  });
+  const { vmName, resourceGroup, direction = 'inbound' } = job.data;
+  const ports = Array.isArray(job.data.ports)
+    ? job.data.ports
+    : job.data.port !== undefined ? [String(job.data.port)] : [];
+
+  if (!vmName || !resourceGroup || !ports.length) {
+    logger.error('azure-remove-port: missing vmName/resourceGroup/ports', job.data);
+    return;
+  }
 
   try {
-    // Handle different direction cases
-    if (direction === 'both') {
-      console.log('🔄 Closing BOTH inbound and outbound ports');
-      await closePortBoth(vmName, port, resourceGroup);
-      logger.info(`PORT: ${port} closed for BOTH directions for ${vmName}`);
-    } else if (direction === 'outbound') {
-      console.log('📤 Closing OUTBOUND port only');
-      await closePortDirection(vmName, port, resourceGroup, 'Outbound');
-      logger.info(`PORT: ${port} closed for OUTBOUND for ${vmName}`);
-    } else {
-      // Default to inbound (existing behavior)
-      console.log('📥 Closing INBOUND port only');
-      await closePort(vmName, port, resourceGroup);
-      logger.info(`PORT: ${port} closed for INBOUND for ${vmName}`);
+    if (job.data.ports) {
+      await closePortsBatch(vmName, ports, resourceGroup, direction);
+      logger.info(`PORTS closed on ${vmName}: ${ports.join(', ')} (${direction})`);
+      return;
     }
 
+    const { port } = job.data;
+    if (direction === 'both') {
+      await closePortBoth(vmName, port, resourceGroup);
+    } else if (direction === 'outbound') {
+      await closePortDirection(vmName, port, resourceGroup, 'Outbound');
+    } else {
+      await closePort(vmName, port, resourceGroup);
+    }
+    logger.info(`PORT ${port} closed for ${direction} on ${vmName}`);
   } catch (error) {
-    logger.error(`Error closing ${direction} port: ${port} for ${vmName}`, error);
-    throw error; // Use throw instead of return new error
+    logger.error(`Error closing ports on ${vmName}: ${error.message}`);
+    throw error;
   }
 };
 

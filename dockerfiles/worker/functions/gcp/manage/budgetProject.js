@@ -6,12 +6,20 @@ const {logger} = require('./../../../plugins/logger'); // Using the existing log
 const billingAccountId = process.env.BILLINGACCOUNTID;
 const keyFilename = process.env.KEYFILENAME;
 // const keyFilename = './../../../trail-krishan-prefix-0-8f758fd2d555.json'
-const credentials = require(keyFilename);
+let _credentials;
+function getCredentials() {
+  if (!_credentials) _credentials = require(keyFilename);
+  return _credentials;
+}
 
 
 // const billingAccountId = "011BD9-202351-3CFFD0";
 
-const budgetsClient = new BudgetServiceClient({credentials});
+let _budgetsClient;
+function getBudgetsClient() {
+  if (!_budgetsClient) _budgetsClient = new BudgetServiceClient({ credentials: getCredentials() });
+  return _budgetsClient;
+}
 
 async function createBudget(projectId, budgetAmount) {
   const parent = `billingAccounts/${billingAccountId}`;
@@ -48,7 +56,7 @@ async function createBudget(projectId, budgetAmount) {
   logger.info('Request:', JSON.stringify(request, null, 2)); // Log the request
 
   try {
-    const [response] = await budgetsClient.createBudget(request);
+    const [response] = await getBudgetsClient().createBudget(request);
     logger.info(`Budget ${response.name} created for project ${projectId}.`);
     return
   } catch (err) {
@@ -60,7 +68,7 @@ async function deleteBudget(budgetDisplayName) {
 
   try {
     // List all budgets to find the budget with the specified display name
-    const [budgets] = await budgetsClient.listBudgets({ parent });
+    const [budgets] = await getBudgetsClient().listBudgets({ parent });
 
     // Find the budget with the matching display name
     const budget = budgets.find(b => b.displayName === budgetDisplayName);
@@ -71,7 +79,7 @@ async function deleteBudget(budgetDisplayName) {
     }
 
     // Delete the budget
-    await budgetsClient.deleteBudget({ name: budget.name });
+    await getBudgetsClient().deleteBudget({ name: budget.name });
     logger.info(`Budget ${budget.name} deleted successfully.`);
   } catch (err) {
     logger.error('Error deleting budget:', err);

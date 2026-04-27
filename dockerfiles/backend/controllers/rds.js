@@ -1,6 +1,7 @@
 const { createRdsServer, getRdsCostComparison, RDS_VM_SIZES } = require('../services/rdsService');
 const { logger } = require('../plugins/logger');
-const { notifyResourceWelcomeEmail, notifyOpsDeploySummary } = require('../services/emailNotifications');
+const { notifyRdsLabReady, notifyOpsDeploySummary } = require('../services/emailNotifications');
+const { buildOpenInBrowserUrl } = require('../services/guacamoleService');
 
 const rdsJobs = new Map();
 
@@ -45,30 +46,34 @@ async function handleCreateRds(req, res) {
         job.finishedAt = Date.now();
         job.duration = Math.round((job.finishedAt - job.startedAt) / 1000);
 
-        // Send welcome emails to each student (non-blocking)
+        // Single consolidated email to the admin who submitted the request
+        // (one roster, per-row "Open in browser" link, Mac/Windows guide).
         if (result.users?.length) {
-          for (const u of result.users) {
-            notifyResourceWelcomeEmail({
-              email: u.email,
-              resourceType: 'windows-desktop',
-              portalPassword: 'Welcome1234!',
-              accessUrl: u.accessUrl || `rdp://${result.publicIp}`,
-              accessUsername: u.username,
-              accessPassword: u.password,
-              resourceName: `${trainingName} - ${u.username}`,
+          const adminEmail = req.user?.email;
+          if (adminEmail) {
+            const vmName = result.serverName;
+            notifyRdsLabReady({
+              adminEmail,
               trainingName,
               organization,
-              imageLabel: `Windows Server 2022 (RDS) - ${result.vmSize}`,
-              expiresAt: expiresAt || null,
               hostIp: result.publicIp,
-            }).catch(e => logger.error(`RDS welcome email failed for ${u.email}: ${e.message}`));
+              adminUsername: result.adminUsername,
+              adminPassword: result.adminPassword,
+              adminOpenInBrowserUrl: buildOpenInBrowserUrl(null, vmName),
+              users: result.users.map(u => ({
+                username: u.username,
+                password: u.password,
+                email: u.email,
+                openInBrowserUrl: buildOpenInBrowserUrl(null, `${vmName}-${u.username}`),
+              })),
+              expiresAt: expiresAt || null,
+            }).catch(e => logger.error(`RDS lab-ready email failed for ${adminEmail}: ${e.message}`));
           }
 
-          // Ops summary
-          const opsEmail = req.user?.email;
-          if (opsEmail) {
+          // Ops summary (internal record) — keep plain tabular format
+          if (adminEmail) {
             notifyOpsDeploySummary({
-              opsEmail,
+              opsEmail: adminEmail,
               trainingName,
               organization,
               imageLabel: `Windows RDS · ${result.vmSize} · ${result.userCount} users`,

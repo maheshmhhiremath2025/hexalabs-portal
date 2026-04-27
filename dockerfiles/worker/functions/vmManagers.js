@@ -234,13 +234,133 @@ async function closePortBoth(vmName, port, resourceGroupName) {
   }
 }
 
-module.exports = { 
-  startAzureVM, 
-  stopAzureVM, 
-  openPort,           // Original - inbound only
-  closePort,          // Original - inbound only
-  openPortDirection,  // New - specific direction
-  openPortBoth,       // New - both directions
-  closePortDirection, // New - specific direction
-  closePortBoth       // New - both directions
+// Batched NSG rule management ───────────────────────────────────────────────
+// The controller passes a list of ports like ["80", "443", "4000-5000"].
+// We update the NSG once per VM (instead of once per port) and allocate
+// priorities dynamically by scanning existing rules — this fixes the old
+// `existingPorts.length + 1001` collision bug when a port is closed and
+// re-opened.
+
+// Normalize a port spec for use in a rule name.
+// "80" → "80",  "4000-5000" → "4000to5000"
+function portRuleSlug(port) {
+  return String(port).replace('-', 'to');
+}
+
+// All rule names we consider "ours" for a given port spec. The list covers
+// both the legacy (`allow-80`) and directional (`allow-80-inbound`) naming,
+// so we can still clean up rules created before this refactor.
+function candidateRuleNames(port) {
+  const slug = portRuleSlug(port);
+  return [
+    `allow-${slug}`,
+    `allow-${slug}-inbound`,
+    `allow-${slug}-outbound`,
+    // Also recognise legacy literal hyphen form for ranges
+    `allow-${port}`,
+    `allow-${port}-inbound`,
+    `allow-${port}-outbound`,
+  ];
+}
+
+function nextFreePriority(usedPriorities, start = 1000) {
+  const used = new Set(usedPriorities);
+  let p = start;
+  while (used.has(p)) p++;
+  used.add(p);
+  return { priority: p, used };
+}
+
+function makeRule(port, priority, direction) {
+  return {
+    name: `allow-${portRuleSlug(port)}-${direction.toLowerCase()}`,
+    protocol: 'Tcp',
+    sourcePortRange: '*',
+    sourceAddressPrefix: '*',
+    destinationPortRange: String(port), // Azure accepts "80" or "4000-5000"
+    destinationAddressPrefix: '*',
+    direction,                           // 'Inbound' | 'Outbound'
+    access: 'Allow',
+    priority,
+  };
+}
+
+async function openPortsBatch(vmName, ports, resourceGroupName, direction = 'inbound') {
+  const nsgName = `${vmName}-nsg`;
+  const nsg = await networkClient.networkSecurityGroups.get(resourceGroupName, nsgName);
+  nsg.securityRules = nsg.securityRules || [];
+
+  const usedPriorities = nsg.securityRules.map(r => r.priority).filter(Number.isFinite);
+  let usedSet = new Set(usedPriorities);
+
+  const directions = direction === 'both' ? ['Inbound', 'Outbound'] : [direction[0].toUpperCase() + direction.slice(1).toLowerCase()];
+
+  let added = 0;
+  for (const port of ports) {
+    for (const dir of directions) {
+      const ruleName = `allow-${portRuleSlug(port)}-${dir.toLowerCase()}`;
+      if (nsg.securityRules.some(r => r.name === ruleName)) continue; // already open
+      const { priority, used } = nextFreePriority([...usedSet]);
+      usedSet = used;
+      nsg.securityRules.push(makeRule(port, priority, dir));
+      added++;
+    }
+  }
+
+  if (!added) {
+    logger.info(`All requested ports already open on ${vmName}, no NSG update needed`);
+    return;
+  }
+
+  await networkClient.networkSecurityGroups.beginCreateOrUpdate(resourceGroupName, nsgName, nsg);
+  logger.info(`Opened ${added} rule(s) on ${nsgName} (${direction})`);
+}
+
+async function closePortsBatch(vmName, ports, resourceGroupName, direction = 'inbound') {
+  const nsgName = `${vmName}-nsg`;
+  const nsg = await networkClient.networkSecurityGroups.get(resourceGroupName, nsgName);
+  nsg.securityRules = nsg.securityRules || [];
+
+  // Build the name set we want to strip. When direction=both, drop every direction;
+  // otherwise only drop rules matching the requested direction (plus legacy/no-direction names).
+  const targetNames = new Set();
+  for (const port of ports) {
+    const slug = portRuleSlug(port);
+    if (direction === 'both') {
+      candidateRuleNames(port).forEach(n => targetNames.add(n));
+    } else {
+      targetNames.add(`allow-${slug}-${direction.toLowerCase()}`);
+      targetNames.add(`allow-${port}-${direction.toLowerCase()}`);
+      // legacy rules without a direction suffix were inbound-only
+      if (direction === 'inbound') {
+        targetNames.add(`allow-${slug}`);
+        targetNames.add(`allow-${port}`);
+      }
+    }
+  }
+
+  const before = nsg.securityRules.length;
+  nsg.securityRules = nsg.securityRules.filter(r => !targetNames.has(r.name));
+  const removed = before - nsg.securityRules.length;
+
+  if (!removed) {
+    logger.info(`No matching rules to close on ${nsgName} for ports ${ports.join(',')}`);
+    return;
+  }
+
+  await networkClient.networkSecurityGroups.beginCreateOrUpdate(resourceGroupName, nsgName, nsg);
+  logger.info(`Closed ${removed} rule(s) on ${nsgName} (${direction})`);
+}
+
+module.exports = {
+  startAzureVM,
+  stopAzureVM,
+  openPort,           // Legacy - inbound only
+  closePort,          // Legacy - inbound only
+  openPortDirection,  // Legacy - specific direction
+  openPortBoth,       // Legacy - both directions
+  closePortDirection, // Legacy - specific direction
+  closePortBoth,      // Legacy - both directions
+  openPortsBatch,     // Current - list of ports, single NSG update
+  closePortsBatch,    // Current - list of ports, single NSG update
 };
