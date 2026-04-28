@@ -39,7 +39,7 @@ function getDockerForContainer(containerDoc) {
 }
 
 // Available container images organized by category
-// Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
+// Desktop images use kumar202699/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
 // All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
   // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
@@ -94,17 +94,17 @@ const CONTAINER_IMAGES = {
     env: ['PASSWORD=password'],
   },
   'claude-code': {
-    image: 'getlabs/lab-claude-code:1.0', label: 'VS Code + Claude Code CLI', os: 'VS Code + Claude AI',
+    image: 'kumar202699/lab-claude-code:1.0', label: 'VS Code + Claude Code CLI', os: 'VS Code + Claude AI',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
   'claude-code-thinknyx': {
-    image: 'getlabs/claude-code-thinknyx:1.0', label: 'VS Code + Claude Code (Thinknyx Pre-configured)', os: 'VS Code + Claude AI',
+    image: 'kumar202699/claude-code-thinknyx:1.0', label: 'VS Code + Claude Code (Thinknyx Pre-configured)', os: 'VS Code + Claude AI',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
   'mainframe-cobol': {
-    image: 'getlabs/lab-mainframe-cobol:1.0', label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)', os: 'VS Code + GnuCOBOL',
+    image: 'kumar202699/lab-mainframe-cobol:1.0', label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)', os: 'VS Code + GnuCOBOL',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
@@ -121,7 +121,7 @@ const CONTAINER_IMAGES = {
 
   // === DevOps CI/CD Lab ===
   'devops-cicd': {
-    image: 'getlabs/lab-devops-cicd:1.0',
+    image: 'kumar202699/lab-devops-cicd:1.0',
     label: 'DevOps CI/CD — Jenkins, GitLab Runner, ArgoCD, Docker, K8s',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab', runtime: 'sysbox-runc',
@@ -130,7 +130,7 @@ const CONTAINER_IMAGES = {
 
   // === Terraform / IaC Lab ===
   'terraform-lab': {
-    image: 'getlabs/lab-terraform:1.0',
+    image: 'kumar202699/lab-terraform:1.0',
     label: 'Terraform + AWS/Azure/GCP CLIs — Infrastructure as Code',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -139,7 +139,7 @@ const CONTAINER_IMAGES = {
 
   // === ELK Stack Lab ===
   'elk-stack': {
-    image: 'getlabs/lab-elk-stack:1.0',
+    image: 'kumar202699/lab-elk-stack:1.0',
     label: 'ELK Stack — Elasticsearch, Logstash, Kibana, Filebeat',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -148,7 +148,7 @@ const CONTAINER_IMAGES = {
 
   // === AI/ML Lab ===
   'ai-ml-lab': {
-    image: 'getlabs/lab-ai-ml:1.0',
+    image: 'kumar202699/lab-ai-ml:1.0',
     label: 'AI/ML Lab — TensorFlow, PyTorch, HuggingFace, JupyterLab',
     os: 'Python 3.11', category: 'bigdata', vncPort: 8888, protocol: 'http',
     defaultUser: 'lab',
@@ -157,7 +157,7 @@ const CONTAINER_IMAGES = {
 
   // === Ansible Lab ===
   'ansible-lab': {
-    image: 'getlabs/lab-ansible:1.0',
+    image: 'kumar202699/lab-ansible:1.0',
     label: 'Ansible Lab — Controller + 3 managed nodes (RHCE/EX294)',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab', runtime: 'sysbox-runc',
@@ -166,7 +166,7 @@ const CONTAINER_IMAGES = {
 
   // === SOC Analyst / SIEM Lab ===
   'soc-analyst': {
-    image: 'getlabs/lab-soc-analyst:1.0',
+    image: 'kumar202699/lab-soc-analyst:1.0',
     label: 'SOC Analyst Lab — Wazuh, Elasticsearch, Kibana, Suricata',
     os: 'Ubuntu 22.04', category: 'security', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -175,7 +175,7 @@ const CONTAINER_IMAGES = {
 
   // === Monitoring Lab ===
   'monitoring-lab': {
-    image: 'getlabs/lab-monitoring:1.0',
+    image: 'kumar202699/lab-monitoring:1.0',
     label: 'Monitoring Lab — Prometheus, Grafana, Alertmanager',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -184,7 +184,7 @@ const CONTAINER_IMAGES = {
 
   // === Full-Stack Web Dev Lab ===
   'fullstack-lab': {
-    image: 'getlabs/lab-fullstack:1.0',
+    image: 'kumar202699/lab-fullstack:1.0',
     label: 'Full-Stack Lab — Node.js, React, Angular, MongoDB, Redis',
     os: 'Ubuntu 22.04', category: 'dev', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -210,7 +210,7 @@ const CONTAINER_IMAGES = {
   //   sudo dpkg -i sysbox-ce_0.6.4-0.linux_amd64.deb
   //   sudo systemctl restart docker
   'docker-k8s-lab': {
-    image: 'getlabs/lab-docker-k8s:1.0',
+    image: 'kumar202699/lab-docker-k8s:1.0',
     label: 'Docker + Kubernetes Lab (nested containers)',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -239,7 +239,7 @@ const CONTAINER_IMAGES = {
 
   // === Big Data / Streaming Labs ===
   'bigdata-workspace': {
-    image: 'getlabs/lab-bigdata-workspace:1.0',
+    image: 'kumar202699/lab-bigdata-workspace:1.0',
     label: 'Big Data Lab — Kafka, Spark, MySQL, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -257,7 +257,7 @@ const CONTAINER_IMAGES = {
     shmSize: '1gb',
   },
   'bigdata-workspace-cassandra': {
-    image: 'getlabs/lab-bigdata-workspace:1.0',
+    image: 'kumar202699/lab-bigdata-workspace:1.0',
     label: 'Big Data Lab — Kafka, Spark, MySQL, Cassandra, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -360,7 +360,7 @@ async function createContainer({
       });
       logger.info(`Image ${imageConfig.image} pulled successfully`);
     } catch (pullErr) {
-      throw new Error(`Failed to pull image "${imageConfig.image}": ${pullErr.message}. For custom getlabs/* images, build them first with: cd dockerfiles/${imageKey} && docker build -t ${imageConfig.image} .`);
+      throw new Error(`Failed to pull image "${imageConfig.image}": ${pullErr.message}. For custom kumar202699/* images, build them first with: cd dockerfiles/${imageKey} && docker build -t ${imageConfig.image} .`);
     }
   }
 
@@ -817,11 +817,11 @@ async function captureContainerAsTemplate({ containerId, templateName, templateL
   } else {
     // Linux: docker commit to create a new image
     const container = docker.getContainer(containerId);
-    const newImageName = `getlabs/custom-${sanitizedName}:1.0`;
+    const newImageName = `kumar202699/custom-${sanitizedName}:1.0`;
 
     // Commit the container as a new image
     const commitResult = await container.commit({
-      repo: `getlabs/custom-${sanitizedName}`,
+      repo: `kumar202699/custom-${sanitizedName}`,
       tag: '1.0',
       comment: `Custom template from ${containerDoc.name}`,
       author: 'GetLabs Portal',
