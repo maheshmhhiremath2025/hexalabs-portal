@@ -288,7 +288,7 @@ async function getNextAvailablePort() {
 
   // Also check Docker directly for host port bindings (catches orphan containers not in DB)
   try {
-    const allContainers = await docker.listContainers({ all: true });
+    const allContainers = await localDocker.listContainers({ all: true });
     for (const c of allContainers) {
       if (c.Ports) {
         for (const p of c.Ports) {
@@ -399,9 +399,21 @@ async function createContainer({
   };
 
   if (isSysbox) {
-    // Sysbox provides its own security isolation — don't set SecurityOpt
-    // or it conflicts. The runtime flag tells Docker to use sysbox-runc.
-    hostConfig.Runtime = 'sysbox-runc';
+    // Check if sysbox-runc is available on the Docker host
+    let sysboxAvailable = false;
+    try {
+      const info = await docker.info();
+      const runtimes = info.Runtimes || {};
+      sysboxAvailable = !!runtimes['sysbox-runc'];
+    } catch { /* ignore — assume not available */ }
+
+    if (sysboxAvailable) {
+      hostConfig.Runtime = 'sysbox-runc';
+    } else {
+      // Fallback: use --privileged so Docker-in-Docker still works without sysbox
+      logger.warn(`sysbox-runc not available on host — falling back to privileged mode for ${name}`);
+      hostConfig.Privileged = true;
+    }
   } else {
     hostConfig.SecurityOpt = ['seccomp=unconfined']; // needed for some desktop images
   }
