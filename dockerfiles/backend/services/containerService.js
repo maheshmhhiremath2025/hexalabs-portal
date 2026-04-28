@@ -392,8 +392,6 @@ async function createContainer({
       [`${imageConfig.vncPort}/tcp`]: [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(vncPort) }],
       '22/tcp': [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(sshPort) }],
     },
-    Memory: memory * 1024 * 1024,
-    NanoCpus: cpus * 1e9,
     ShmSize: shmSizeBytes,
     RestartPolicy: { Name: 'unless-stopped' },
   };
