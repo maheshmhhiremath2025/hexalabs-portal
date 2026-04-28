@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiCaller from '../services/apiCaller';
 import {
   FaDesktop, FaKey, FaUser, FaWifi, FaPlay, FaPowerOff, FaCamera,
   FaServer, FaSearch, FaCopy, FaCheck, FaExternalLinkAlt, FaDocker, FaTrash, FaClock, FaEye
 } from 'react-icons/fa';
 import { FaArrowsSpin, FaDownload } from 'react-icons/fa6';
+import GuidedLabPanel from '../components/GuidedLab/GuidedLabPanel';
 
 /* ===== Toast Hook ===== */
 const useToast = () => {
@@ -104,7 +106,7 @@ const stoppingSecondsLeft = (vm) => {
 };
 
 /* ===== VM Row ===== */
-const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapture, isSuperAdmin, disabled, transition }) => {
+const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapture, isSuperAdmin, disabled, transition, guidedLab, trainingName, onOpenLabView }) => {
   const pct = vm?.quota?.total > 0 ? Math.min(100, (vm.quota.consumed / vm.quota.total) * 100) : 0;
   // `transition` is "start" or "stop" while a request is in flight for this VM
   // and the DB hasn't caught up yet. We show a pulsing amber chip so users
@@ -207,13 +209,25 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapt
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 justify-end">
           {vm.type === 'container' ? (
-            <a href={vm.accessUrl} target="_blank" rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
-              }`}>
-              <FaDesktop className="w-2.5 h-2.5" />
-              Open Desktop
-            </a>
+            guidedLab ? (
+              <button
+                onClick={() => onOpenLabView(vm)}
+                disabled={!vm.isRunning}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                  vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}>
+                <FaDesktop className="w-2.5 h-2.5" />
+                Open Lab
+              </button>
+            ) : (
+              <a href={vm.accessUrl} target="_blank" rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                  vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
+                }`}>
+                <FaDesktop className="w-2.5 h-2.5" />
+                Open Desktop
+              </a>
+            )
           ) : (
             <>
               {showCapture && (
@@ -227,7 +241,7 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapt
                   vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}>
                 <FaDesktop className="w-2.5 h-2.5" />
-                Open in Browser
+                {guidedLab ? 'Open Lab' : 'Open in Browser'}
               </button>
             </>
           )}
@@ -284,6 +298,7 @@ function savePendingOp(training, op) {
 
 /* ===== Main ===== */
 const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
+  const navigate = useNavigate();
   const [aliveVms, setAliveVms] = useState([]);
   const [deadVms, setDeadVms] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -292,7 +307,14 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   // Rehydrated from localStorage on training switch so refresh is safe.
   const [pendingOp, setPendingOp] = useState(() => loadPendingOp(selectedTraining));
   const [tick, setTick] = useState(0); // forces re-render for elapsed-seconds display
+  const [guidedLab, setGuidedLab] = useState(null);
   const { toast, show, clear } = useToast();
+
+  // Navigate to LabView (split view: desktop iframe + Lab Guide)
+  const openLabView = useCallback((vm) => {
+    const url = vm.accessUrl || '';
+    navigate(`/lab-view?url=${encodeURIComponent(url)}&training=${encodeURIComponent(selectedTraining)}&instance=${encodeURIComponent(vm.name)}`);
+  }, [navigate, selectedTraining]);
 
   const filtered = useMemo(() => {
     let f = aliveVms;
@@ -407,16 +429,24 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         useVnc: isLinux && vm.kasmVnc, // Only if KasmVNC is installed on the image
         vncPort: 6901,
       });
-      window.open(res.data.accessUrl, '_blank', 'noopener');
+      // If guided lab exists, open in LabView split-view instead of new tab
+      if (guidedLab && res.data.accessUrl) {
+        navigate(`/lab-view?url=${encodeURIComponent(res.data.accessUrl)}&training=${encodeURIComponent(selectedTraining)}&instance=${encodeURIComponent(vm.name)}`);
+      } else {
+        window.open(res.data.accessUrl, '_blank', 'noopener');
+      }
     } catch {
       // Fallback: direct KasmVNC URL if available, else old Guacamole
-      if (vm.kasmVnc) {
-        window.open(`http://${vm.publicIp}:6901`, '_blank', 'noopener');
+      const fallbackUrl = vm.kasmVnc
+        ? `http://${vm.publicIp}:6901`
+        : `https://labs.synergificsoftware.com/#/?username=${encodeURIComponent(vm.name)}&password=${encodeURIComponent(vm.adminPass)}`;
+      if (guidedLab) {
+        navigate(`/lab-view?url=${encodeURIComponent(fallbackUrl)}&training=${encodeURIComponent(selectedTraining)}&instance=${encodeURIComponent(vm.name)}`);
       } else {
-        window.open(`https://labs.synergificsoftware.com/#/?username=${encodeURIComponent(vm.name)}&password=${encodeURIComponent(vm.adminPass)}`, '_blank', 'noopener');
+        window.open(fallbackUrl, '_blank', 'noopener');
       }
     }
-  }, [show]);
+  }, [show, guidedLab, navigate, selectedTraining]);
 
   const captureVm = useCallback(async (name) => {
     setLoading(true);
@@ -504,6 +534,10 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
     if (!selectedTraining) { setAliveVms([]); setDeadVms([]); setPendingOp(null); return; }
     getLabsData();
     setPendingOp(loadPendingOp(selectedTraining));
+    // Fetch guided lab linked to this training
+    apiCaller.get(`/guided-labs/by-training/${selectedTraining}`)
+      .then(res => setGuidedLab(res.data || null))
+      .catch(() => setGuidedLab(null));
   }, [selectedTraining, getLabsData]);
 
   // Polling loop — runs only while a pendingOp exists. Faster cadence than the
@@ -538,6 +572,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   }
 
   return (
+    <div>
     <div className="space-y-4">
       <Toast toast={toast} onClose={clear} />
       {pendingOp && (
@@ -772,7 +807,8 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
                   <VmRow key={vm._id} vm={vm}
                     transition={pendingVmNames && pendingVmNames.has(vm.name) ? pendingOp.operation : null}
                     onSelect={id => setAliveVms(p => p.map(v => v._id === id ? { ...v, selected: !v.selected } : v))}
-                    onLaunch={launchVM} onCapture={captureVm} onDelete={deleteInstance} onShadow={shadowVm} showCapture={showCapture} isSuperAdmin={userDetails?.userType === 'superadmin'} disabled={loading || opActive} />
+                    onLaunch={launchVM} onCapture={captureVm} onDelete={deleteInstance} onShadow={shadowVm} showCapture={showCapture} isSuperAdmin={userDetails?.userType === 'superadmin'} disabled={loading || opActive}
+                    guidedLab={guidedLab} trainingName={selectedTraining} onOpenLabView={openLabView} />
                 ))}
               </tbody>
             </table>
@@ -815,6 +851,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

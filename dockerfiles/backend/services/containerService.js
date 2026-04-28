@@ -454,6 +454,33 @@ async function createContainer({
 
   // Start it
   await container.start();
+
+  // KasmWeb containers: set kasm-user password + passwordless sudo.
+  // -disableBasicAuth skips OS password setup so we configure it explicitly.
+  if (imageConfig.defaultUser === 'kasm_user') {
+    try {
+      const setupExec = await container.exec({
+        Cmd: ['bash', '-c', [
+          `echo "kasm-user:${password}" | chpasswd`,
+          'echo "kasm-user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/kasm-nopasswd',
+          'chmod 440 /etc/sudoers.d/kasm-nopasswd',
+        ].join(' && ')],
+        AttachStdout: true,
+        AttachStderr: true,
+        User: 'root',
+      });
+      const setupStream = await setupExec.start({ hijack: true, stdin: false });
+      await new Promise((resolve) => {
+        setupStream.on('end', resolve);
+        setupStream.on('error', resolve);
+        setTimeout(resolve, 5000);
+      });
+      logger.info(`[container] Configured kasm-user password + sudo in ${name}`);
+    } catch (err) {
+      logger.warn(`[container] Failed to configure kasm-user in ${name}: ${err.message}`);
+    }
+  }
+
   const info = await container.inspect();
   const hostIp = process.env.CONTAINER_HOST_IP || 'localhost';
   const accessProtocol = imageConfig.protocol || 'http';

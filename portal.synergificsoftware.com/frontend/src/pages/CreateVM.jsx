@@ -385,12 +385,14 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   const [emailTokens, setEmailTokens] = useState([]);
   const [trainingName, setTrainingName] = useState('');
   const [allocatedHours, setAllocatedHours] = useState(1);
-  const [guacamole, setGuacamole] = useState(false);
-  const [meshCentral, setMeshCentral] = useState(false);
+  // Remote access: 'none' | 'guacamole' | 'meshcentral'
+  const [remoteAccess, setRemoteAccess] = useState('none');
   const [autoShutdown, setAutoShutdown] = useState(false);
   const [idleMinutes, setIdleMinutes] = useState(15);
   const [labExpiry, setLabExpiry] = useState(false);
   const [expiryDate, setExpiryDate] = useState('');
+  const [guidedLabId, setGuidedLabId] = useState('');
+  const [guidedLabs, setGuidedLabs] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
@@ -504,6 +506,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
 
   useEffect(() => {
     fetchTemplates();
+    apiCaller.get('/guided-labs').then(res => setGuidedLabs(res.data || [])).catch(() => {});
     return () => { if (abortRef.current) abortRef.current.abort(); };
   }, [fetchTemplates]);
 
@@ -517,14 +520,14 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     const totalTemplates = templates.length;
     const totalVMs = templates.reduce((acc, t) => acc + (t.estimatedCount ?? 0), 0) || Math.max(0, Math.floor(totalTemplates * 3));
     const avgPrice = templates.length ? Math.round((templates.reduce((s, t) => s + (Number(t.rate || 0) || 0), 0) / templates.length)) : 0;
-    const estMonthly = Math.round((allocatedHours || 1) * (totalVMs || 1) * (guacamole ? 5 : 0.8));
-    
+    const estMonthly = Math.round((allocatedHours || 1) * (totalVMs || 1) * (remoteAccess === 'guacamole' ? 5 : 0.8));
+
     // Marketplace-specific stats
     const marketplaceTemplates = categorizedTemplates['Marketplace'] || [];
     const marketplaceCount = marketplaceTemplates.length;
-    
+
     return { totalTemplates, totalVMs, avgPrice, estMonthly, marketplaceCount };
-  }, [templates, categorizedTemplates, allocatedHours, guacamole]);
+  }, [templates, categorizedTemplates, allocatedHours, remoteAccess]);
 
   // Charts data
   const osDistribution = useMemo(() => {
@@ -610,7 +613,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     setTrainingName('');
     setEmailTokens([]);
     setAllocatedHours(1);
-    setGuacamole(false);
+    setRemoteAccess('none');
     setCurrentStep(1);
   };
 
@@ -655,11 +658,12 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
       trainingName,
       allocatedHours: (Number(allocatedHours) || 0) * 60, // minutes
       createVmCount: validEmails.length,
-      guacamole,
-      meshCentral,
+      guacamole: remoteAccess === 'guacamole',
+      meshCentral: remoteAccess === 'meshcentral',
       autoShutdown,
       idleMinutes: autoShutdown ? idleMinutes : 0,
       expiresAt: labExpiry && expiryDate ? new Date(expiryDate).toISOString() : null,
+      guidedLabId: guidedLabId || undefined,
     };
 
     setConfirm({
@@ -1118,21 +1122,56 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             <div>
                               <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
                                 <Monitor className="w-4 h-4" />
-                                Access Type
+                                Remote Access Method
                               </label>
-                              <div className="p-4 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors cursor-pointer">
+
+                              {/* No browser access */}
+                              <div
+                                className={`p-4 border rounded-xl transition-colors cursor-pointer ${
+                                  remoteAccess === 'none'
+                                    ? 'border-slate-400 bg-slate-50 ring-1 ring-slate-400'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                                }`}
+                                onClick={() => setRemoteAccess('none')}
+                              >
                                 <label className="flex items-start gap-3 cursor-pointer">
                                   <input
-                                    type="checkbox"
-                                    id="guacamole"
-                                    checked={guacamole}
-                                    onChange={(e) => setGuacamole(e.target.checked)}
-                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-200 mt-1"
+                                    type="radio"
+                                    name="remoteAccess"
+                                    checked={remoteAccess === 'none'}
+                                    onChange={() => setRemoteAccess('none')}
+                                    className="w-4 h-4 text-slate-600 focus:ring-slate-200 mt-1"
                                   />
                                   <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-700">Enable Browser Access (Guacamole)</div>
+                                    <div className="text-sm font-medium text-slate-700">No Browser Access</div>
                                     <div className="text-xs text-slate-500 mt-1">
-                                      Provides web-based access to VMs without requiring additional software
+                                      Users connect via RDP/SSH client only. No web-based remote desktop.
+                                    </div>
+                                  </div>
+                                </label>
+                              </div>
+
+                              {/* Guacamole */}
+                              <div
+                                className={`p-4 border rounded-xl transition-colors cursor-pointer mt-3 ${
+                                  remoteAccess === 'guacamole'
+                                    ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-400'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                                }`}
+                                onClick={() => setRemoteAccess('guacamole')}
+                              >
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="remoteAccess"
+                                    checked={remoteAccess === 'guacamole'}
+                                    onChange={() => setRemoteAccess('guacamole')}
+                                    className="w-4 h-4 text-blue-600 focus:ring-blue-200 mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="text-sm font-medium text-slate-700">Guacamole</div>
+                                    <div className="text-xs text-slate-500 mt-1">
+                                      Web-based remote desktop via Apache Guacamole. Works with all OS types (Windows RDP, Linux SSH/VNC).
                                     </div>
                                     {(userDetails?.userType === 'admin' || userDetails?.userType === 'superadmin') && (
                                     <div className="text-xs text-blue-600 font-medium mt-1">
@@ -1143,17 +1182,26 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 </label>
                               </div>
 
+                              {/* MeshCentral — Windows only */}
                               {selectedTemplate?.creation?.os?.toLowerCase().includes('windows') && (
-                              <div className="p-4 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors cursor-pointer mt-3">
+                              <div
+                                className={`p-4 border rounded-xl transition-colors cursor-pointer mt-3 ${
+                                  remoteAccess === 'meshcentral'
+                                    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                                }`}
+                                onClick={() => setRemoteAccess('meshcentral')}
+                              >
                                 <label className="flex items-start gap-3 cursor-pointer">
                                   <input
-                                    type="checkbox"
-                                    checked={meshCentral}
-                                    onChange={(e) => setMeshCentral(e.target.checked)}
-                                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-200 mt-1"
+                                    type="radio"
+                                    name="remoteAccess"
+                                    checked={remoteAccess === 'meshcentral'}
+                                    onChange={() => setRemoteAccess('meshcentral')}
+                                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-200 mt-1"
                                   />
                                   <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-700">Enable MeshCentral Desktop</div>
+                                    <div className="text-sm font-medium text-slate-700">MeshCentral</div>
                                     <div className="text-xs text-slate-500 mt-1">
                                       Agent-based browser desktop for Windows VMs. Faster than Guacamole — no server-side transcoding.
                                     </div>
@@ -1248,6 +1296,34 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 </label>
                               </div>
                             </div>
+
+                            {/* Guided Lab (Optional) */}
+                            {guidedLabs.length > 0 && (
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                                <BookOpen className="w-4 h-4" />
+                                Guided Lab (Optional)
+                              </label>
+                              <div className="p-4 border border-slate-200 rounded-xl bg-white">
+                                <select
+                                  value={guidedLabId}
+                                  onChange={(e) => setGuidedLabId(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                >
+                                  <option value="">No guided lab</option>
+                                  {guidedLabs.map(l => (
+                                    <option key={l._id} value={l._id}>
+                                      {l.icon} {l.title} ({l.stepCount || l.steps?.length || 0} steps, {l.difficulty})
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="text-xs text-slate-500 mt-2">
+                                  Attach a guided lab to show step-by-step instructions in the student's lab console.
+                                </div>
+                              </div>
+                            </div>
+                            )}
+
                           </div>
                         </div>
                       </div>
@@ -1282,7 +1358,9 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-slate-600">Browser Access</span>
-                              <span className="text-sm font-medium">{guacamole ? 'Enabled' : 'Disabled'}</span>
+                              <span className="text-sm font-medium">
+                                {remoteAccess === 'guacamole' ? 'Guacamole' : remoteAccess === 'meshcentral' ? 'MeshCentral' : 'None'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-slate-600">Auto-Shutdown</span>
@@ -1313,9 +1391,9 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 {INR.format((Number(selectedTemplate.rate) || 0) * emailTokens.filter(t => t.isValid).length)}/hr
                               </span>
                             </div>
-                            {guacamole && (
+                            {remoteAccess === 'guacamole' && (
                               <div className="flex justify-between">
-                                <span className="text-sm text-slate-600">Browser Access</span>
+                                <span className="text-sm text-slate-600">Browser Access (Guacamole)</span>
                                 <span className="text-sm font-medium">
                                   {INR.format(5 * emailTokens.filter(t => t.isValid).length)}/hr
                                 </span>
@@ -1326,7 +1404,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 <span className="text-sm font-semibold text-slate-700">Total Estimated</span>
                                 <span className="text-sm font-bold text-blue-600">
                                   {INR.format(
-                                    ((Number(selectedTemplate.rate) || 0) + (guacamole ? 5 : 0)) *
+                                    ((Number(selectedTemplate.rate) || 0) + (remoteAccess === 'guacamole' ? 5 : 0)) *
                                     Math.max(1, emailTokens.filter(t => t.isValid).length)
                                   )}/hr
                                 </span>
@@ -1360,7 +1438,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             <div className="text-sm font-medium text-amber-800">Estimated Cost</div>
                             <div className="text-lg font-bold text-amber-900">
                               {INR.format(
-                                ((Number(selectedTemplate.rate) || 0) + (guacamole ? 5 : 0)) *
+                                ((Number(selectedTemplate.rate) || 0) + (remoteAccess === 'guacamole' ? 5 : 0)) *
                                 Math.max(1, emailTokens.filter(t => t.isValid).length) *
                                 allocatedHours
                               )}

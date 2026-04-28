@@ -8,6 +8,7 @@ import {
   FaClock, FaRocket, FaShieldAlt, FaTrashAlt, FaStopCircle, FaCloud,
   FaCubes, FaFileAlt, FaSuperscript, FaChevronLeft, FaChevronRight, FaChartLine, FaDocker, FaChartBar, FaCut, FaWindows, FaDatabase,
   FaGraduationCap,
+  FaBookOpen,
   FaRobot,
   FaCog,
   FaTachometerAlt as FaQuota,
@@ -143,6 +144,9 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
         )}
         {(userType === 'admin' || userType === 'superadmin') && (
           <NavItem to="/courses" icon={FaGraduationCap} label="Course Catalog" collapsed={collapsed} />
+        )}
+        {(userType === 'admin' || userType === 'superadmin') && (
+          <NavItem to="/guided-labs" icon={FaBookOpen} label="Guided Labs" collapsed={collapsed} />
         )}
 
         {!collapsed && (userType !== 'sandboxuser' && userType !== 'awssandboxuser') && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Infrastructure</div>}

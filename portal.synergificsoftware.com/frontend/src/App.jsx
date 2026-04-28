@@ -53,6 +53,9 @@ const MySandboxes          = lazy(() => import('./pages/MySandboxes'))
 const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
 const AroCluster           = lazy(() => import('./pages/AroCluster'))
 const AccessControl        = lazy(() => import('./pages/AccessControl'))
+const GuidedLabs           = lazy(() => import('./pages/GuidedLabs'))
+const GuidedLabEditor      = lazy(() => import('./pages/GuidedLabEditor'))
+const LabView              = lazy(() => import('./pages/LabView'))
 
 // Tiny fallback shown while a lazy route's chunk is fetching.
 // Plain centered spinner — keeps perceived latency low without a layout shift.
@@ -178,7 +181,8 @@ function AppInner() {
   const sidebarWidth = sidebarCollapsed ? 72 : 260;
   const { pathname } = useLocation();
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname.startsWith('/welcome/');
-  const showChrome = isLoggedIn && !isAuthPage;
+  const isFullscreenPage = pathname === '/lab-view';
+  const showChrome = isLoggedIn && !isAuthPage && !isFullscreenPage;
 
   return (
     <div className="min-h-screen bg-surface-50">
@@ -254,6 +258,14 @@ function AppInner() {
             <Route path="/b2b/courses/:id" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<B2BCourseDetail />} />} />
 
             <Route path="/support" element={<PrivateRoute isLoggedIn={isLoggedIn}><SupportPage /></PrivateRoute>} />
+
+            {/* Guided labs — step-by-step labs with progress tracking */}
+            <Route path="/guided-labs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabs />} />} />
+            <Route path="/guided-labs/editor" element={<RoleBasedRoute allowedRoles={['superadmin']} element={<GuidedLabEditor />} />} />
+            <Route path="/guided-labs/editor/:id" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabEditor />} />} />
+
+            {/* Lab View — full-screen split view: desktop iframe + Lab Guide (no sidebar/navbar) */}
+            <Route path="/lab-view" element={<PrivateRoute isLoggedIn={isLoggedIn}><LabView /></PrivateRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

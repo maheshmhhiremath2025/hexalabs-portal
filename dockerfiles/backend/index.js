@@ -57,6 +57,7 @@ const ociSandboxRoute = require('./routes/ociSandbox')
 const rosaRoute = require('./routes/rosa')
 const aroRoute = require('./routes/aro')
 const kasmProxyRoute = require('./routes/kasmProxy')
+const guidedLabRoute = require('./routes/guidedLab')
 
 const { restrictToLoggedinUserOnly, checkAuth } = require('./middlewares/auth');
 const { azureSandbox } = require('./automations/azureSandbox');
@@ -117,6 +118,7 @@ app.use("/b2b/courses", restrictToLoggedinUserOnly, b2bCoursesRoute);
 app.use("/oci-sandbox", restrictToLoggedinUserOnly, ociSandboxRoute);
 app.use("/rosa", restrictToLoggedinUserOnly, rosaRoute);
 app.use("/aro", restrictToLoggedinUserOnly, aroRoute);
+app.use("/guided-labs", restrictToLoggedinUserOnly, guidedLabRoute);
 
 // Connect to MongoDB, then start cron jobs and server
 connectMongoDB(process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb')

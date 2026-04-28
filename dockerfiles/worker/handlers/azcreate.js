@@ -98,6 +98,7 @@ const handler = async (job) => {
         ],
         schedules: [],
         ports: data.template.os === 'Windows' ? [3389, 22] : [22],
+        ...(data.guidedLabId && { guidedLabId: data.guidedLabId }),
       };
       await Training.create(newTraining);
       logger.info(`Training document created for ${trainingName} in ${data.user.organization}`);

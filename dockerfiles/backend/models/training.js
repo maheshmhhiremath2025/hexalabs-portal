@@ -49,6 +49,7 @@ const trainingsSchema = new mongoose.Schema({
   // Lab expiry — auto-purge entire training when expired
   expiresAt: { type: Date },
   expiryWarningEmailSent: { type: Boolean, default: false },
+  guidedLabId: { type: mongoose.Schema.Types.ObjectId, ref: 'GuidedLab' },
 }, { timestamps: true });
 
 const Training = mongoose.model('Training', trainingsSchema);
