@@ -13,12 +13,11 @@ function buildAccessUrl(container) {
   const port = container.vncPort;
 
   // Windows containers on remote host → proxy via /win/<port>/
-  if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && protocol === 'http' && accessDomain) {
+  if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && accessDomain) {
     return `https://${accessDomain}/win/${port}/`;
   }
   if (accessDomain && protocol === 'https') {
-    const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
-    return `https://${accessDomain}:${port + sslPortOffset}/`;
+    return `https://${accessDomain}/wss/${port}/`;
   } else if (accessDomain) {
     return `https://${accessDomain}/ws/${port}/`;
   }
