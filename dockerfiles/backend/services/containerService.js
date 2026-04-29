@@ -17,7 +17,7 @@ function buildAccessUrl(container) {
     return `https://${accessDomain}/win/${port}/`;
   }
   if (accessDomain && protocol === 'https') {
-    return `https://${accessDomain}/wss/${port}/`;
+    return `https://${accessDomain}/wss/${port}/?path=wss/${port}/websockify&autoconnect=true`;
   } else if (accessDomain) {
     return `https://${accessDomain}/ws/${port}/`;
   }
