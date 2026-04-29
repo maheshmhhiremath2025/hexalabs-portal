@@ -4,7 +4,7 @@ const User = require('../models/user');
 const Plan = require('../models/plan');
 const Subscription = require('../models/subscription');
 const Container = require('../models/container');
-const { createContainer, buildAccessUrl } = require('../services/containerService');
+const { createContainer, buildAccessUrl, buildExtraAccessUrls } = require('../services/containerService');
 const { notifyInstanceReady } = require('../services/emailNotifications');
 const { setUser } = require('../services/auth');
 const { logger } = require('../plugins/logger');
@@ -227,6 +227,8 @@ async function handleDashboard(req, res) {
         memory: c.memory,
         isRunning: c.isRunning,
         accessUrl: buildAccessUrl(c),
+        vncLabel: c.vncLabel || null,
+        extraAccessUrls: buildExtraAccessUrls(c),
         password: c.password,
         containerId: c.containerId,
         runtimeHours: Math.round((c.duration || 0) / 3600 * 10) / 10,

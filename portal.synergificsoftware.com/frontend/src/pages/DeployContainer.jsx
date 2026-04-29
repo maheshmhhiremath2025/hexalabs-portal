@@ -332,12 +332,18 @@ export default function DeployContainer({ userDetails }) {
             {/* Savings line removed — pricing hidden from client-facing pages */}
             <div className="space-y-1">
               {result.results?.filter(r => r.success).map(r => (
-                <div key={r.name} className="flex items-center gap-3 text-sm">
+                <div key={r.name} className="flex items-center gap-3 text-sm flex-wrap">
                   <span className="font-medium text-gray-700">{r.name}</span>
                   <a href={r.accessUrl} target="_blank" rel="noopener noreferrer"
                     className="text-blue-600 hover:underline inline-flex items-center gap-1">
-                    <FaExternalLinkAlt className="w-2.5 h-2.5" /> Open Desktop
+                    <FaExternalLinkAlt className="w-2.5 h-2.5" /> {r.vncLabel || 'Open Desktop'}
                   </a>
+                  {r.extraAccessUrls?.map(eu => (
+                    <a key={eu.hostPort} href={eu.url} target="_blank" rel="noopener noreferrer"
+                      className="text-purple-600 hover:underline inline-flex items-center gap-1">
+                      <FaExternalLinkAlt className="w-2.5 h-2.5" /> {eu.label}
+                    </a>
+                  ))}
                   <span className="text-gray-400 text-xs">pw: {r.password}</span>
                 </div>
               ))}
@@ -407,11 +413,17 @@ function ContainerRow({ c, onAction }) {
       <td className="px-3 py-2.5 text-gray-600">{c.cpus} CPU / {c.memory >= 1024 ? `${c.memory / 1024} GB` : `${c.memory} MB`}</td>
       <td className="px-3 py-2.5">
         {c.isRunning ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <a href={c.accessUrl || `https://getlabs.cloud/ws/${c.vncPort}/`} target="_blank" rel="noopener noreferrer"
               className="text-blue-600 hover:underline text-xs inline-flex items-center gap-1">
-              <FaExternalLinkAlt className="w-2 h-2" /> Desktop
+              <FaExternalLinkAlt className="w-2 h-2" /> {c.vncLabel || 'Desktop'}
             </a>
+            {c.extraAccessUrls?.map(eu => (
+              <a key={eu.hostPort} href={eu.url} target="_blank" rel="noopener noreferrer"
+                className="text-purple-600 hover:underline text-xs inline-flex items-center gap-1">
+                <FaExternalLinkAlt className="w-2 h-2" /> {eu.label}
+              </a>
+            ))}
             <button onClick={() => copy(c.password)} className="text-gray-400 hover:text-gray-600" title={`Password: ${c.password}`}>
               {copied ? <FaCheck className="w-2.5 h-2.5 text-green-500" /> : <FaCopy className="w-2.5 h-2.5" />}
             </button>

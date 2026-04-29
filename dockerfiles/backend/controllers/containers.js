@@ -1,6 +1,7 @@
 const {
   createContainer, stopContainer, startContainer, deleteContainer,
   getContainers, getAvailableImages, getCostComparison, CONTAINER_IMAGES,
+  buildAccessUrl, buildExtraAccessUrls,
 } = require('../services/containerService');
 const { logger } = require('../plugins/logger');
 const { notifyResourceWelcomeEmail, notifyOpsDeploySummary, isLikelyDeliverable } = require('../services/emailNotifications');
@@ -163,7 +164,14 @@ async function handleGetContainers(req, res) {
     const { trainingName, organization } = req.query;
     if (!trainingName) return res.status(400).json({ message: 'trainingName required' });
     const containers = await getContainers(trainingName, organization);
-    res.json(containers);
+    // Enrich with computed access URLs for the frontend
+    const enriched = containers.map(c => {
+      const obj = c.toObject ? c.toObject() : c;
+      obj.accessUrl = buildAccessUrl(c);
+      obj.extraAccessUrls = buildExtraAccessUrls(c);
+      return obj;
+    });
+    res.json(enriched);
   } catch (err) {
     logger.error(`Get containers error: ${err.message}`);
     res.status(500).json({ message: 'Failed to fetch containers' });

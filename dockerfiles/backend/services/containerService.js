@@ -25,6 +25,23 @@ function buildAccessUrl(container) {
   return `${protocol}://${container.hostIp}:${port}`;
 }
 
+// Build access URLs for extra ports on a container
+function buildExtraAccessUrls(container) {
+  if (!container.extraPorts || !container.extraPorts.length) return [];
+  const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
+  return container.extraPorts.map(ep => {
+    let url;
+    if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && accessDomain) {
+      url = `https://${accessDomain}/win/${ep.hostPort}/`;
+    } else if (accessDomain) {
+      url = `https://${accessDomain}/ws/${ep.hostPort}/`;
+    } else {
+      url = `http://${container.hostIp || 'localhost'}:${ep.hostPort}`;
+    }
+    return { label: ep.label, hostPort: ep.hostPort, url };
+  });
+}
+
 // Fallback local Docker client (for stop/start/delete when host info is in container record)
 const localDocker = new Docker({
   socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
@@ -124,8 +141,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-devops-cicd:1.0',
     label: 'DevOps CI/CD — Jenkins, GitLab Runner, ArgoCD, Docker, K8s',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    defaultUser: 'lab', runtime: 'sysbox-runc',
+    vncLabel: 'Terminal', defaultUser: 'lab', runtime: 'sysbox-runc',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
+    extraPorts: [{ containerPort: 8080, label: 'Jenkins' }],
   },
 
   // === Terraform / IaC Lab ===
@@ -142,8 +160,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-elk-stack:1.0',
     label: 'ELK Stack — Elasticsearch, Logstash, Kibana, Filebeat',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    defaultUser: 'lab',
+    vncLabel: 'Terminal', defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
+    extraPorts: [{ containerPort: 5601, label: 'Kibana' }],
   },
 
   // === AI/ML Lab ===
@@ -151,8 +170,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-ai-ml:1.0',
     label: 'AI/ML Lab — TensorFlow, PyTorch, HuggingFace, JupyterLab',
     os: 'Python 3.11', category: 'bigdata', vncPort: 8888, protocol: 'http',
-    defaultUser: 'lab',
+    vncLabel: 'JupyterLab', defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
+    extraPorts: [{ containerPort: 7681, label: 'Terminal' }],
   },
 
   // === Ansible Lab ===
@@ -169,8 +189,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-soc-analyst:1.0',
     label: 'SOC Analyst Lab — Wazuh, Elasticsearch, Kibana, Suricata',
     os: 'Ubuntu 22.04', category: 'security', vncPort: 7681, protocol: 'http',
-    defaultUser: 'lab',
+    vncLabel: 'Terminal', defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '1g',
+    extraPorts: [{ containerPort: 5601, label: 'Kibana' }],
   },
 
   // === Monitoring Lab ===
@@ -178,8 +199,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-monitoring:1.0',
     label: 'Monitoring Lab — Prometheus, Grafana, Alertmanager',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    defaultUser: 'lab',
+    vncLabel: 'Terminal', defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '256m',
+    extraPorts: [{ containerPort: 3000, label: 'Grafana' }, { containerPort: 9090, label: 'Prometheus' }],
   },
 
   // === Full-Stack Web Dev Lab ===
@@ -187,8 +209,9 @@ const CONTAINER_IMAGES = {
     image: 'kumar202699/lab-fullstack:1.0',
     label: 'Full-Stack Lab — Node.js, React, Angular, MongoDB, Redis',
     os: 'Ubuntu 22.04', category: 'dev', vncPort: 7681, protocol: 'http',
-    defaultUser: 'lab',
+    vncLabel: 'Terminal', defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '256m',
+    extraPorts: [{ containerPort: 3000, label: 'App (3000)' }, { containerPort: 8080, label: 'App (8080)' }],
   },
 
   // === Big Data / Streaming Labs ===
@@ -280,11 +303,12 @@ const CONTAINER_IMAGES = {
 let nextPort = parseInt(process.env.CONTAINER_PORT_START || '10000');
 const MAX_PORT = parseInt(process.env.CONTAINER_PORT_END || '11000');
 
-async function getNextAvailablePort() {
+async function getNextAvailablePort(extraPortCount = 0) {
   // Collect ports from DB (both alive and dead — Docker may still hold them)
   const usedVncPorts = await Container.distinct('vncPort');
   const usedSshPorts = await Container.distinct('sshPort');
-  const usedSet = new Set([...usedVncPorts, ...usedSshPorts]);
+  const usedExtraPorts = await Container.distinct('extraPorts.hostPort');
+  const usedSet = new Set([...usedVncPorts, ...usedSshPorts, ...usedExtraPorts]);
 
   // Also check Docker directly for host port bindings (catches orphan containers not in DB)
   try {
@@ -300,10 +324,14 @@ async function getNextAvailablePort() {
     logger.warn(`Could not list Docker ports for collision check: ${err.message}`);
   }
 
+  // Allocate a consecutive block: P (primary), P+1..P+N (extra), P+5000 (SSH)
   for (let port = nextPort; port < MAX_PORT; port++) {
     const sshPort = port + 5000;
-    // Both the VNC port and SSH port must be free
-    if (!usedSet.has(port) && !usedSet.has(sshPort)) return port;
+    let blockFree = !usedSet.has(port) && !usedSet.has(sshPort);
+    for (let i = 1; i <= extraPortCount && blockFree; i++) {
+      if (usedSet.has(port + i)) blockFree = false;
+    }
+    if (blockFree) return port;
   }
   // Wrap around — only reuse ports from deleted containers
   const deadPorts = await Container.distinct('vncPort', { isAlive: false });
@@ -341,10 +369,18 @@ async function createContainer({
     throw new Error(`Unknown container image key: "${imageKey}". Available: ${Object.keys(CONTAINER_IMAGES).join(', ')}`);
   }
 
-  const vncPort = await getNextAvailablePort();
+  const cfgExtraPorts = imageConfig.extraPorts || [];
+  const vncPort = await getNextAvailablePort(cfgExtraPorts.length);
   const sshPort = vncPort + 5000; // SSH on offset port
 
-  logger.info(`Creating container ${name} from ${imageConfig.image} on port ${vncPort}`);
+  // Compute host ports for extra services (consecutive after primary)
+  const extraPortMappings = cfgExtraPorts.map((ep, idx) => ({
+    containerPort: ep.containerPort,
+    hostPort: vncPort + 1 + idx,
+    label: ep.label,
+  }));
+
+  logger.info(`Creating container ${name} from ${imageConfig.image} on port ${vncPort}${extraPortMappings.length ? ` (+${extraPortMappings.map(e => e.hostPort).join(',')})` : ''}`);
 
   // Pull image if not present — auto-pulls from registry on first use
   try {
@@ -385,13 +421,17 @@ async function createContainer({
 
   // Build HostConfig — sysbox containers need different security settings
   const isSysbox = imageConfig.runtime === 'sysbox-runc';
+  const bindIp = dockerHost ? '0.0.0.0' : '127.0.0.1';
+  const portBindings = {
+    [`${imageConfig.vncPort}/tcp`]: [{ HostIp: bindIp, HostPort: String(vncPort) }],
+    '22/tcp': [{ HostIp: bindIp, HostPort: String(sshPort) }],
+  };
+  // Add extra port bindings (Jenkins, Kibana, Grafana, etc.)
+  for (const ep of extraPortMappings) {
+    portBindings[`${ep.containerPort}/tcp`] = [{ HostIp: bindIp, HostPort: String(ep.hostPort) }];
+  }
   const hostConfig = {
-    PortBindings: {
-      // Bind to 127.0.0.1 on local host so ports are only reachable via Nginx proxy (HTTPS domain).
-      // On remote Docker hosts, bind to 0.0.0.0 so the main Nginx can proxy to them.
-      [`${imageConfig.vncPort}/tcp`]: [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(vncPort) }],
-      '22/tcp': [{ HostIp: dockerHost ? '0.0.0.0' : '127.0.0.1', HostPort: String(sshPort) }],
-    },
+    PortBindings: portBindings,
     ShmSize: shmSizeBytes,
     RestartPolicy: { Name: 'unless-stopped' },
   };
@@ -458,6 +498,7 @@ async function createContainer({
     ExposedPorts: {
       [`${imageConfig.vncPort}/tcp`]: {},
       '22/tcp': {},
+      ...Object.fromEntries(extraPortMappings.map(ep => [`${ep.containerPort}/tcp`, {}])),
     },
     HostConfig: hostConfig,
   });
@@ -535,6 +576,8 @@ async function createContainer({
     quota: { total: allocatedHours, consumed: 0 },
     accessProtocol,
     type: 'container',
+    extraPorts: extraPortMappings,
+    vncLabel: imageConfig.vncLabel || null,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
     dockerHostId: dockerHost?._id || null,
     dockerHostIp: dockerHost?.publicIp || 'localhost',
@@ -547,12 +590,17 @@ async function createContainer({
     await addContainerToHost(dockerHost._id, info.Id, name, memory);
   }
 
-  // Update Nginx upstream map for remote containers
+  // Update Nginx upstream map for remote containers (primary + extra ports)
   if (dockerHost && dockerHost.publicIp && dockerHost.publicIp !== 'localhost') {
     const { addUpstream } = require('./nginxUpstreamManager');
     addUpstream(vncPort, dockerHost.publicIp).catch(err => {
       logger.error(`Failed to update Nginx upstream for port ${vncPort}: ${err.message}`);
     });
+    for (const ep of extraPortMappings) {
+      addUpstream(ep.hostPort, dockerHost.publicIp).catch(err => {
+        logger.error(`Failed to update Nginx upstream for extra port ${ep.hostPort}: ${err.message}`);
+      });
+    }
   }
 
   // Update training mapping
@@ -581,6 +629,9 @@ async function createContainer({
 
   logger.info(`Container ${name} created: ${info.Id.slice(0, 12)} on port ${vncPort}`);
 
+  // Build extra access URLs for the response
+  const extraAccessUrls = buildExtraAccessUrls(containerDoc);
+
   return {
     name,
     containerId: info.Id,
@@ -588,6 +639,9 @@ async function createContainer({
     sshPort,
     hostIp,
     accessUrl,
+    vncLabel: imageConfig.vncLabel || null,
+    extraPorts: extraPortMappings,
+    extraAccessUrls,
     username: actualUsername,
     password,
   };
@@ -662,6 +716,14 @@ async function deleteContainer(containerId) {
       removeUpstream(doc.vncPort).catch(err => {
         logger.error(`Failed to remove Nginx upstream for port ${doc.vncPort}: ${err.message}`);
       });
+      // Also remove extra port upstreams
+      if (doc.extraPorts && doc.extraPorts.length) {
+        for (const ep of doc.extraPorts) {
+          removeUpstream(ep.hostPort).catch(err => {
+            logger.error(`Failed to remove Nginx upstream for extra port ${ep.hostPort}: ${err.message}`);
+          });
+        }
+      }
     }
     doc.isAlive = false;
     doc.isRunning = false;
@@ -778,6 +840,7 @@ module.exports = {
   prePullImage,
   CONTAINER_IMAGES,
   buildAccessUrl,
+  buildExtraAccessUrls,
   captureContainerAsTemplate,
 };
 

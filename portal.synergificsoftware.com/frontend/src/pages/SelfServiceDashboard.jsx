@@ -736,8 +736,14 @@ function InstanceRow({ inst, onAction, onFeedback, feedbackSubmitted }) {
           <>
             <a href={inst.accessUrl} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-semibold rounded-md hover:bg-blue-700 transition-colors">
-              <FaExternalLinkAlt className="w-2.5 h-2.5" /> Open
+              <FaExternalLinkAlt className="w-2.5 h-2.5" /> {inst.vncLabel || 'Open'}
             </a>
+            {inst.extraAccessUrls?.map(eu => (
+              <a key={eu.hostPort} href={eu.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-semibold rounded-md hover:bg-purple-700 transition-colors">
+                <FaExternalLinkAlt className="w-2.5 h-2.5" /> {eu.label}
+              </a>
+            ))}
             <button onClick={copy} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100" title="Copy password">
               {copied ? <FaCheck className="w-3 h-3 text-green-500" /> : <FaCopy className="w-3 h-3" />}
             </button>

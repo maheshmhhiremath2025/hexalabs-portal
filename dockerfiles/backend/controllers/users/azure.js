@@ -3,7 +3,7 @@ const Templates = require('./../../models/templates')
 const Organization = require('../../models/organization')
 const VM = require('../../models/vm')
 const Container = require('../../models/container')
-const { buildAccessUrl } = require('../../services/containerService');
+const { buildAccessUrl, buildExtraAccessUrls } = require('../../services/containerService');
 const { logger } = require('../../plugins/logger');
 const queues = require('./../newQueues')
 
@@ -97,6 +97,9 @@ async function handleGetMachines(req,res){
            vncPort: c.vncPort,
            hostIp: c.hostIp,
            accessUrl: buildAccessUrl(c),
+           vncLabel: c.vncLabel || null,
+           extraPorts: c.extraPorts || [],
+           extraAccessUrls: buildExtraAccessUrls(c),
            cpus: c.cpus,
            memory: c.memory,
            azureEquivalentRate: c.azureEquivalentRate,

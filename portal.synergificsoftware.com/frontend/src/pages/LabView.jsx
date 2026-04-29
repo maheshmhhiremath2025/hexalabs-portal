@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import apiCaller from '../services/apiCaller';
 import GuidedLabPanel from '../components/GuidedLab/GuidedLabPanel';
-import { FaArrowLeft, FaExpand, FaCompress, FaBookOpen, FaTimes, FaSpinner } from 'react-icons/fa';
+import { FaArrowLeft, FaExpand, FaCompress, FaBookOpen, FaTimes, FaSpinner, FaExternalLinkAlt } from 'react-icons/fa';
 
 /**
  * LabView — Full-screen lab page: Desktop (iframe) + Lab Guide overlay panel.
@@ -19,6 +19,10 @@ export default function LabView() {
   const desktopUrl = searchParams.get('url') || '';
   const trainingName = searchParams.get('training') || '';
   const instanceName = searchParams.get('instance') || '';
+  const vncLabel = searchParams.get('vncLabel') || '';
+  const extraUrls = useMemo(() => {
+    try { return JSON.parse(searchParams.get('extraUrls') || '[]'); } catch { return []; }
+  }, [searchParams]);
 
   const [guidedLab, setGuidedLab] = useState(null);
   const [labLoading, setLabLoading] = useState(!!trainingName);
@@ -131,6 +135,25 @@ export default function LabView() {
           </button>
         </div>
       </div>
+
+      {/* Service links bar — shown when container has extra ports (Jenkins, Kibana, etc.) */}
+      {extraUrls.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1 bg-slate-700 border-b border-slate-600 flex-shrink-0 relative z-20">
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mr-1">Services:</span>
+          {vncLabel && (
+            <a href={desktopUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+              <FaExternalLinkAlt className="w-2 h-2" /> {vncLabel}
+            </a>
+          )}
+          {extraUrls.map(eu => (
+            <a key={eu.hostPort} href={eu.url} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+              <FaExternalLinkAlt className="w-2 h-2" /> {eu.label}
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Main content: iframe + side panel (side-by-side) */}
       <div className="flex-1 flex overflow-hidden">

@@ -220,13 +220,21 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, showCapt
                 Open Lab
               </button>
             ) : (
-              <a href={vm.accessUrl} target="_blank" rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                  vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
-                }`}>
-                <FaDesktop className="w-2.5 h-2.5" />
-                Open Desktop
-              </a>
+              <>
+                <a href={vm.accessUrl} target="_blank" rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                    vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
+                  }`}>
+                  <FaDesktop className="w-2.5 h-2.5" />
+                  {vm.vncLabel || 'Open Desktop'}
+                </a>
+                {vm.isRunning && vm.extraAccessUrls?.map(eu => (
+                  <a key={eu.hostPort} href={eu.url} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+                    {eu.label}
+                  </a>
+                ))}
+              </>
             )
           ) : (
             <>
@@ -313,7 +321,12 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   // Navigate to LabView (split view: desktop iframe + Lab Guide)
   const openLabView = useCallback((vm) => {
     const url = vm.accessUrl || '';
-    navigate(`/lab-view?url=${encodeURIComponent(url)}&training=${encodeURIComponent(selectedTraining)}&instance=${encodeURIComponent(vm.name)}`);
+    const params = new URLSearchParams({
+      url, training: selectedTraining, instance: vm.name,
+    });
+    if (vm.vncLabel) params.set('vncLabel', vm.vncLabel);
+    if (vm.extraAccessUrls?.length) params.set('extraUrls', JSON.stringify(vm.extraAccessUrls));
+    navigate(`/lab-view?${params.toString()}`);
   }, [navigate, selectedTraining]);
 
   const filtered = useMemo(() => {

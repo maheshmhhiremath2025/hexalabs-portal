@@ -87,12 +87,18 @@ async function rebuildFromDb() {
     const remoteContainers = await Container.find({
       isAlive: true,
       dockerHostIp: { $exists: true, $ne: 'localhost' },
-    }, 'vncPort dockerHostIp');
+    }, 'vncPort extraPorts dockerHostIp');
 
     upstreams.clear();
     for (const c of remoteContainers) {
       if (c.vncPort && c.dockerHostIp) {
         upstreams.set(c.vncPort, c.dockerHostIp);
+        // Also register extra port host ports (Jenkins, Kibana, etc.)
+        if (c.extraPorts && c.extraPorts.length) {
+          for (const ep of c.extraPorts) {
+            upstreams.set(ep.hostPort, c.dockerHostIp);
+          }
+        }
       }
     }
 
