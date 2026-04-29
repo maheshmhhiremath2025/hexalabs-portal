@@ -6,7 +6,7 @@ const {
   handleDashboard, handleGetSandboxes, handleSelfDeploy, handleSelfSandbox,
   handleSelfStop, handleSelfStart, handleSelfDelete,
   handleSelfDeployAsync, handleSelfDeployStatus,
-} = require('../controllers/selfservice');
+} = require('../controllers/selfService');
 const { handleSubmitFeedback, handleCheckFeedback, handleGetTrainingRatings } = require('../controllers/feedback');
 
 // Public routes (no auth)
