@@ -205,13 +205,13 @@ const CONTAINER_IMAGES = {
   },
 
   // === Full-Stack Web Dev Lab ===
+  // No extraPorts — ports 3000/8080 are for user-started apps, not pre-configured services
   'fullstack-lab': {
     image: 'kumar202699/lab-fullstack:1.0',
     label: 'Full-Stack Lab — Node.js, React, Angular, MongoDB, Redis',
     os: 'Ubuntu 22.04', category: 'dev', vncPort: 7681, protocol: 'http',
-    vncLabel: 'Terminal', defaultUser: 'lab',
+    defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '256m',
-    extraPorts: [{ containerPort: 3000, label: 'App (3000)' }, { containerPort: 8080, label: 'App (8080)' }],
   },
 
   // === Big Data / Streaming Labs ===

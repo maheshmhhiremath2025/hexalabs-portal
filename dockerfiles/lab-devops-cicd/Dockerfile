@@ -68,9 +68,9 @@ RUN useradd -m -s /bin/bash -G sudo,docker lab && \
     echo 'lab ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/lab
 
 # Systemd services
-RUN printf '[Unit]\nDescription=ttyd\nAfter=network.target\n[Service]\nExecStart=/usr/local/bin/ttyd -p 7681 -W -t fontSize=14 login -f lab\nRestart=always\n[Install]\nWantedBy=multi-user.target\n' \
-      > /etc/systemd/system/ttyd.service && \
-    systemctl enable ttyd ssh docker
+RUN printf '[Unit]\nDescription=ttyd\nAfter=network.target\n[Service]\nExecStart=/usr/local/bin/ttyd -p 7681 -W -t fontSize=14 login -f lab\nRestart=always\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/ttyd.service
+RUN printf '[Unit]\nDescription=Jenkins CI\nAfter=network.target docker.service\n[Service]\nUser=lab\nEnvironment=JENKINS_HOME=/home/lab/.jenkins\nExecStart=/usr/bin/java -jar /opt/jenkins/jenkins.war --httpPort=8080\nRestart=always\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/jenkins.service
+RUN systemctl enable ttyd ssh docker jenkins
 
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
