@@ -6,7 +6,8 @@ const GuidedLab = require('../models/guidedLab');
   await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/userdb');
 
   await GuidedLab.deleteMany({});
-  await GuidedLab.insertMany([
+  // Use create() instead of insertMany() to ensure Mongoose generates _id for subdocuments (steps)
+  await GuidedLab.create([
     {
       title: 'Deploy Your First Azure VM', slug: 'azure-first-vm', cloud: 'azure', difficulty: 'beginner', duration: 30,
       description: 'Learn how to create a virtual machine in Azure from scratch.',
