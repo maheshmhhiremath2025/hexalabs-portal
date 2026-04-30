@@ -55,6 +55,7 @@ const AroCluster           = lazy(() => import('./pages/AroCluster'))
 const AccessControl        = lazy(() => import('./pages/AccessControl'))
 const GuidedLabs           = lazy(() => import('./pages/GuidedLabs'))
 const GuidedLabEditor      = lazy(() => import('./pages/GuidedLabEditor'))
+const GuidedLabAnalytics   = lazy(() => import('./pages/GuidedLabAnalytics'))
 const LabView              = lazy(() => import('./pages/LabView'))
 
 // Tiny fallback shown while a lazy route's chunk is fetching.
@@ -104,6 +105,8 @@ function AppInner() {
     setShowIdleWarning(false);
     clearIdleTimers();
     if (!isLoggedIn) return;
+    // Superadmins are exempt from idle timeout
+    if (localStorage.getItem("AH1apq12slurt5") === "hpQ3s5dK247") return;
 
     warnTimer.current = setTimeout(() => {
       setShowIdleWarning(true);
@@ -261,6 +264,7 @@ function AppInner() {
 
             {/* Guided labs — step-by-step labs with progress tracking */}
             <Route path="/guided-labs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabs />} />} />
+            <Route path="/guided-labs/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabAnalytics />} />} />
             <Route path="/guided-labs/editor" element={<RoleBasedRoute allowedRoles={['superadmin']} element={<GuidedLabEditor />} />} />
             <Route path="/guided-labs/editor/:id" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabEditor />} />} />
 

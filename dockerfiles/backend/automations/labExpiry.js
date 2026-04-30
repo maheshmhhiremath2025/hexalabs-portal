@@ -3,6 +3,7 @@ const Container = require('../models/container');
 const Training = require('../models/training');
 const { logger } = require('../plugins/logger');
 const { cascadeRdsSessions } = require('../services/rdsCascade');
+const { cleanupTrainingSandboxes } = require('../services/sandboxCleanup');
 
 let sendEmail;
 try { sendEmail = require('../services/emailNotifications').sendEmail; } catch {}
@@ -155,10 +156,15 @@ async function labExpiryChecker() {
       c.isAlive = false; c.isRunning = false; c.remarks = 'Training expired'; await c.save();
     }
 
+    // Clean up cloud sandboxes provisioned via guided lab
+    cleanupTrainingSandboxes(training.name).catch(err =>
+      logger.error(`[expiry] Sandbox cleanup failed for ${training.name}: ${err.message}`)
+    );
+
     training.status = 'expired';
     await training.save();
 
-    logger.info(`Training ${training.name} fully purged (${vms.length} VMs, ${containers.length} containers)`);
+    logger.info(`Training ${training.name} fully purged (${vms.length} VMs, ${containers.length} containers + sandboxes)`);
   }
 }
 

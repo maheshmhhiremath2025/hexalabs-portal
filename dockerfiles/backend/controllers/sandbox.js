@@ -4,6 +4,13 @@ const SandboxUser = require('./../models/sandboxuser')
 const User = require('./../models/user')
 const { notifySandboxWelcomeEmail } = require('./../services/emailNotifications')
 
+// Sandbox type → custom Azure role/initiative IDs (types not listed here use worker defaults)
+const SANDBOX_TYPE_CONFIG = {
+    databricks: {
+        customRoleId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823',
+        policyInitiativeId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827',
+    },
+};
 
 async function handleGetSandbox(req, res) {
     const { email, userType } = req.user;
@@ -147,7 +154,7 @@ async function handleDeleteSandboxUser(req, res) {
 }
 
 async function handleCreateSandbox(req, res) {
-    const { resourceGroupName, resourceGroupLocation } = req.body;
+    const { resourceGroupName, resourceGroupLocation, sandboxType } = req.body;
     const { email, userType } = req.user;
 
     try {
@@ -184,11 +191,14 @@ async function handleCreateSandbox(req, res) {
         }
 
         // ✅ Prepare the sandbox creation request
+        const typeConfig = SANDBOX_TYPE_CONFIG[sandboxType] || {};
         const data = {
             resourceGroupName: resourceGroupName.trim(),
             resourceGroupLocation: resourceGroupLocation.trim(),
             userId: user.userId,
             budgetLimit: req.body.budgetLimit || 500,
+            ...(typeConfig.customRoleId && { customRoleId: typeConfig.customRoleId }),
+            ...(typeConfig.policyInitiativeId && { policyInitiativeId: typeConfig.policyInitiativeId }),
         };
 
         // ✅ Add job to Azure create sandbox queue
@@ -335,7 +345,7 @@ async function handleBulkDeployAzure(req, res) {
             const cleanName = userEmail.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 12);
             const rgName = `tpl-${(template.certificationCode || template.slug).slice(0, 10)}-${cleanName}-${randSuffix}-sbx`.toLowerCase().slice(0, 60);
 
-            const azResult = await createAzureSandbox(rgName, region, null, userEmail);
+            const azResult = await createAzureSandbox(rgName, region, null, userEmail, template.customRoleId);
 
             // Apply Azure Policies
             try {
@@ -358,32 +368,7 @@ async function handleBulkDeployAzure(req, res) {
                     await applyAllSandboxPolicies(policyClient, process.env.SUBSCRIPTION_ID, rgName, template, region);
                 }
 
-                // If template has a custom role, replace the default role assignment
-                if (template.customRoleId) {
-                    try {
-                        const { AuthorizationManagementClient } = require('@azure/arm-authorization');
-                        const authClient = new AuthorizationManagementClient(credential, process.env.SUBSCRIPTION_ID);
-                        const crypto = require('crypto');
-
-                        // Get the Azure AD user's object ID from the sandbox credentials
-                        const azureObjectId = azResult.objectId || azResult.principalId;
-                        if (azureObjectId) {
-                            // Remove default Contributor role and assign custom role
-                            await authClient.roleAssignments.create(
-                                scope,
-                                crypto.randomUUID(),
-                                {
-                                    principalId: azureObjectId,
-                                    roleDefinitionId: template.customRoleId,
-                                    scope,
-                                }
-                            );
-                            logger.info(`[bulk-deploy-azure] Custom role ${template.customRoleId.split('/').pop()} assigned to ${userEmail} on ${rgName}`);
-                        }
-                    } catch (roleErr) {
-                        logger.error(`[bulk-deploy-azure] Custom role assignment failed for ${rgName}: ${roleErr.message}`);
-                    }
-                }
+                // Custom role is now handled by createAzureSandbox() via the customRoleId parameter
             } catch (policyErr) {
                 logger.error(`[bulk-deploy-azure] Azure Policy failed for ${rgName}: ${policyErr.message}`);
             }
@@ -471,6 +456,7 @@ async function handleBulkDeployAzure(req, res) {
         deployed: results.length,
         failed: errors.length,
         templateSlug,
+        templateName: template.name,
         ttlHours,
         region,
         results,

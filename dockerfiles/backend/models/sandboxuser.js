@@ -31,7 +31,7 @@ const sandboxuserSchema = new mongoose.Schema({
             expiresAt: { type: Date },
             warningEmailSent: { type: Boolean, default: false },
             estimatedCost: { type: Number, default: 0 },
-            status: { type: String, enum: ['provisioning', 'ready', 'expired', 'failed'], default: 'provisioning' },
+            status: { type: String, enum: ['provisioning', 'provisioned', 'ready', 'expired', 'failed'], default: 'provisioning' },
             accessUrl: { type: String },       // e.g. https://portal.azure.com
             credentials: {
                 username: { type: String },

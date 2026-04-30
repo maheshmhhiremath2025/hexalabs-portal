@@ -44,6 +44,7 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
     const [deployEmails, setDeployEmails] = useState('');
     const [deploying, setDeploying] = useState(false);
     const [deployResults, setDeployResults] = useState(null);
+    const [filterTemplate, setFilterTemplate] = useState('all');
 
     const pollRef = useRef(null);
 
@@ -135,7 +136,7 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
             });
             const data = res.data;
             setDeployResults(data);
-            setSuccess(`Deployed ${data.deployed || data.succeeded} of ${data.total} Azure sandboxes from "${data.templateName || selectedTemplateSlug}".`);
+            setSuccess(`Deployed ${data.deployed ?? 0} of ${data.total} Azure sandboxes from "${data.templateName || selectedTemplateSlug}".`);
             if (data.failed > 0) {
                 setError(`${data.failed} deployment(s) failed.`);
             }
@@ -461,7 +462,7 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                         <div className="border border-gray-200 rounded-lg overflow-hidden">
                             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-gray-600">
-                                    Deploy Results: {deployResults.deployed || deployResults.succeeded} succeeded, {deployResults.failed} failed
+                                    Deploy Results: {deployResults.deployed ?? 0} succeeded, {deployResults.failed} failed
                                 </span>
                                 <button onClick={() => {
                                     const rows = [['Email','Login URL','Username','Password','Resource Group','Expires At'].join(',')];
@@ -526,6 +527,38 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                         Microsoft Azure
                     </span>
                 </div>
+
+                {/* Template filter tabs */}
+                {users.length > 0 && (
+                    <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-1 overflow-x-auto">
+                        {[
+                            { key: 'all', label: 'All' },
+                            { key: 'azure-sandbox', label: 'Sandbox' },
+                            { key: 'azure-databricks', label: 'Databricks' },
+                            { key: 'azure-openai', label: 'OpenAI' },
+                            { key: 'self-service', label: 'Self-Service' },
+                        ].map(tab => {
+                            const count = tab.key === 'all' ? users.length
+                                : tab.key === 'self-service'
+                                    ? users.filter(u => !u.usageSessions?.length || u.usageSessions.every(s => !s.templateSlug)).length
+                                    : users.filter(u => u.usageSessions?.some(s => s.templateSlug === tab.key)).length;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setFilterTemplate(tab.key)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                                        filterTemplate === tab.key
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-600 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {tab.label} ({count})
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 {loading ? (
                     <div className="px-5 py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
                 ) : users.length === 0 ? (
@@ -535,13 +568,17 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                         <table className="min-w-full text-[13px]">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
-                                    {['Email', 'User ID', 'Duration', 'Credits', 'Start', 'End', ''].map(h => (
+                                    {['Email', 'User ID', 'Template', 'Credits', 'Start', 'End', ''].map(h => (
                                         <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {users.map(u => {
+                                {users.filter(u => {
+                                    if (filterTemplate === 'all') return true;
+                                    if (filterTemplate === 'self-service') return !u.usageSessions?.length || u.usageSessions.every(s => !s.templateSlug);
+                                    return u.usageSessions?.some(s => s.templateSlug === filterTemplate);
+                                }).map(u => {
                                     const expired = u.endDate && new Date(u.endDate) < new Date();
                                     const isDeleting = u.deletionStatus === 'deleting';
                                     const deleteFailed = u.deletionStatus === 'failed';
@@ -561,7 +598,13 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-2.5 font-mono text-gray-700">{u.userId || '-'}</td>
-                                            <td className="px-4 py-2.5 text-gray-600">{u.duration ? `${u.duration} days` : '-'}</td>
+                                            <td className="px-4 py-2.5 text-gray-600">
+                                                {u.usageSessions?.length > 0 && u.usageSessions[u.usageSessions.length - 1].templateSlug
+                                                    ? <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 rounded">
+                                                        {({ 'azure-sandbox': 'Sandbox', 'azure-databricks': 'Databricks', 'azure-openai': 'OpenAI' })[u.usageSessions[u.usageSessions.length - 1].templateSlug] || u.usageSessions[u.usageSessions.length - 1].templateSlug}
+                                                      </span>
+                                                    : u.duration ? `${u.duration} days` : <span className="text-gray-400 text-[10px]">Self-Service</span>}
+                                            </td>
                                             <td className="px-4 py-2.5 text-gray-600">{u.credits ? `${u.credits.consumed} / ${u.credits.total}` : '-'}</td>
                                             <td className="px-4 py-2.5 text-gray-500">
                                                 {u.startDate ? new Date(u.startDate).toLocaleString('en-IN') : '-'}

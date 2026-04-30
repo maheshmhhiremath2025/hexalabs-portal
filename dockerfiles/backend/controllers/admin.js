@@ -13,6 +13,7 @@ const fs = require('fs');
 const { createObjectCsvWriter } = require('csv-writer');
 const queues = require('./newQueues')
 const PDFDocument = require('pdfkit'); // ✅ ADD PDFKIT
+const { cleanupTrainingSandboxes } = require('../services/sandboxCleanup');
 const https = require('https');
 
 
@@ -667,6 +668,11 @@ async function handleDeleteLogs(req, res) {
         }
 
         const userEmails = data.vmUserMapping.map(({ userEmail }) => userEmail);
+
+        // Clean up cloud sandboxes provisioned via guided lab
+        await cleanupTrainingSandboxes(trainingName).catch(err =>
+            console.error(`Sandbox cleanup failed for ${trainingName}: ${err.message}`)
+        );
 
         await VM.deleteMany({ trainingName });
         await User.deleteMany({

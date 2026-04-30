@@ -50,8 +50,9 @@ router.get('/my-sandboxes', restrictToLoggedinUserOnly, async (req, res) => {
     // --- AWS sandboxes (awsuser collection) ---
     const awsDocs = await awsUser.find({ email }).lean();
     for (const awsDoc of awsDocs) {
-      const expiry = awsDoc.expiresAt || awsDoc.endDate || null;
-      const isExpired = expiry && new Date(expiry) < now;
+      const isDeferred = !awsDoc.expiresAt && awsDoc.templateSlug;
+      const expiry = isDeferred ? null : (awsDoc.expiresAt || awsDoc.endDate || null);
+      const isExpired = !isDeferred && expiry && new Date(expiry) < now;
       sandboxes.push({
         cloud: 'aws',
         username: awsDoc.userId,
@@ -59,7 +60,7 @@ router.get('/my-sandboxes', restrictToLoggedinUserOnly, async (req, res) => {
         accessUrl: awsDoc.accessUrl || `https://${process.env.AWS_ACCOUNT_ID || '475184346033'}.signin.aws.amazon.com/console`,
         region: awsDoc.region || 'ap-south-1',
         expiresAt: expiry,
-        status: isExpired ? 'expired' : 'active',
+        status: isDeferred ? 'provisioned' : (isExpired ? 'expired' : 'active'),
         templateName: awsDoc.templateName,
         templateSlug: awsDoc.templateSlug,
         allowedServices: awsDoc.allowedServices || [],
@@ -72,10 +73,37 @@ router.get('/my-sandboxes', restrictToLoggedinUserOnly, async (req, res) => {
     // --- Legacy Azure sandboxes (sandboxuser collection) ---
     const azureDoc = await SandboxUser.findOne({ email }).lean();
     if (azureDoc && azureDoc.sandbox?.length) {
+      // Batch-fetch templates for all sandbox entries that have a templateId
+      const azTemplateIds = [...new Set(azureDoc.sandbox.map(s => s.templateId?.toString()).filter(Boolean))];
+      const azTemplates = azTemplateIds.length
+        ? await SandboxTemplate.find({ _id: { $in: azTemplateIds } }).lean()
+        : [];
+      const azTmplMap = {};
+      for (const t of azTemplates) azTmplMap[t._id.toString()] = t;
+
+      // Also look up by templateSlug from usageSessions
+      const azSlugs = [...new Set((azureDoc.usageSessions || []).map(s => s.templateSlug).filter(Boolean))];
+      if (azSlugs.length) {
+        const slugTemplates = await SandboxTemplate.find({ slug: { $in: azSlugs } }).lean();
+        for (const t of slugTemplates) { if (!azTmplMap[t._id.toString()]) azTmplMap[t._id.toString()] = t; }
+        // Also build slug->template map
+        var azSlugMap = {};
+        for (const t of slugTemplates) azSlugMap[t.slug] = t;
+      }
+
       for (const sb of azureDoc.sandbox) {
         if (sb.status === 'failed') continue;
-        const expiry = sb.expiresAt || sb.deleteTime || azureDoc.endDate || null;
-        const isExpired = sb.status === 'expired' || (expiry && new Date(expiry) < now);
+        // Provisioned (deferred activation) sandboxes have no expiry yet
+        const expiry = sb.status === 'provisioned' ? null : (sb.expiresAt || sb.deleteTime || azureDoc.endDate || null);
+        const isExpired = sb.status !== 'provisioned' && (sb.status === 'expired' || (expiry && new Date(expiry) < now));
+
+        // Find matching template (by templateId or by usageSession slug)
+        const tmpl = sb.templateId ? azTmplMap[sb.templateId.toString()] : null;
+        // Fall back to latest usageSession slug if no templateId
+        const lastSession = (azureDoc.usageSessions || []).slice(-1)[0];
+        const slugTmpl = !tmpl && lastSession?.templateSlug && azSlugMap ? azSlugMap[lastSession.templateSlug] : null;
+        const effectiveTmpl = tmpl || slugTmpl;
+
         sandboxes.push({
           cloud: 'azure',
           username: sb.credentials?.username || azureDoc.userId,
@@ -84,9 +112,14 @@ router.get('/my-sandboxes', restrictToLoggedinUserOnly, async (req, res) => {
           region: sb.location || 'southindia',
           expiresAt: expiry,
           status: isExpired ? 'expired' : (sb.status || 'active'),
-          allowedServices: sb.allowedServices || [],
-          blockedServices: sb.blockedServices || [],
-          templateSlug: sb.templateId || null,
+          allowedServices: (sb.allowedServices?.length ? sb.allowedServices : effectiveTmpl?.allowedServices || []).map(s => ({
+            service: s.service, category: s.category, restrictions: s.restrictions,
+          })),
+          blockedServices: (sb.blockedServices?.length ? sb.blockedServices : effectiveTmpl?.blockedServices || []).map(s => ({
+            service: s.service, reason: s.reason,
+          })),
+          templateSlug: effectiveTmpl?.slug || sb.templateId || null,
+          templateName: effectiveTmpl?.name || null,
           hoursUsedToday: calcUsageToday(azureDoc.usageSessions),
           dailyCapHours: azureDoc.dailyCapHours || 12,
         });
@@ -342,6 +375,149 @@ router.post('/relaunch-sandbox', restrictToLoggedinUserOnly, async (req, res) =>
   } catch (err) {
     console.error('Error in /user/relaunch-sandbox:', err.message);
     res.status(500).json({ message: 'Failed to re-launch sandbox', error: err.message });
+  }
+});
+
+/**
+ * POST /user/activate-sandbox
+ * Activates a deferred sandbox — starts the timer and sets expiresAt.
+ * Called when a student clicks "Start Sandbox" in the guided lab panel.
+ * Body: { cloud: 'aws'|'azure'|'gcp', templateSlug: string }
+ */
+router.post('/activate-sandbox', restrictToLoggedinUserOnly, async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(401).json({ message: 'Not authenticated' });
+
+    const { cloud, templateSlug } = req.body;
+    if (!cloud || !templateSlug) {
+      return res.status(400).json({ message: 'cloud and templateSlug are required' });
+    }
+
+    // 1. Find template
+    const template = await SandboxTemplate.findOne({ slug: templateSlug, cloud }).lean();
+    if (!template) return res.status(404).json({ message: 'Template not found' });
+
+    const ttlHours = template.sandboxConfig?.ttlHours || 4;
+    const dailyCapHours = template.sandboxConfig?.dailyCapHours || 12;
+    const totalCapHours = template.sandboxConfig?.totalCapHours || 0;
+
+    // 2. Get user doc
+    let userDoc;
+    if (cloud === 'aws') userDoc = await awsUser.findOne({ email: userEmail });
+    else if (cloud === 'azure') userDoc = await SandboxUser.findOne({ email: userEmail });
+    else if (cloud === 'gcp') userDoc = await GcpSandboxUser.findOne({ email: userEmail });
+
+    if (!userDoc) return res.status(404).json({ message: 'No sandbox record found' });
+
+    // 3. Calculate usage — IST midnight to midnight
+    const now = new Date();
+    const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    nowIST.setHours(0, 0, 0, 0);
+    const offsetMs = now.getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getTime();
+    const todayMidnightIST = new Date(nowIST.getTime() + offsetMs);
+
+    const sessions = userDoc.usageSessions || [];
+    const hoursUsedToday = sessions
+      .filter(s => new Date(s.startedAt) >= todayMidnightIST && s.templateSlug === templateSlug)
+      .reduce((sum, s) => sum + (s.ttlHours || 0), 0);
+
+    const totalHoursUsed = sessions
+      .filter(s => s.templateSlug === templateSlug)
+      .reduce((sum, s) => sum + (s.ttlHours || 0), 0);
+
+    // 4. Validate daily cap
+    if (hoursUsedToday + ttlHours > dailyCapHours) {
+      return res.status(429).json({ error: 'Daily limit reached', hoursUsedToday, dailyCapHours });
+    }
+
+    // 5. Validate total cap
+    if (totalCapHours > 0 && totalHoursUsed + ttlHours > totalCapHours) {
+      return res.status(429).json({ error: 'Total engagement hours exhausted', totalHoursUsed, totalCapHours });
+    }
+
+    // 6. Activate — set expiresAt on the existing sandbox entry
+    const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
+
+    if (cloud === 'azure') {
+      // Find the provisioned sandbox matching this template
+      const sbIdx = userDoc.sandbox.findIndex(
+        sb => sb.status === 'provisioned' && sb.templateId?.toString() === template._id.toString()
+      );
+      if (sbIdx === -1) return res.status(404).json({ message: 'No provisioned sandbox found to activate' });
+
+      userDoc.sandbox[sbIdx].expiresAt = expiresAt;
+      userDoc.sandbox[sbIdx].deleteTime = expiresAt;
+      userDoc.sandbox[sbIdx].status = 'ready';
+      userDoc.endDate = expiresAt;
+      userDoc.usageSessions.push({ startedAt: now, ttlHours, templateSlug });
+      await userDoc.save();
+
+      res.json({
+        message: 'Sandbox activated',
+        sandbox: {
+          cloud, templateSlug,
+          username: userDoc.sandbox[sbIdx].credentials?.username || userDoc.userId,
+          password: userDoc.sandbox[sbIdx].credentials?.password || '',
+          accessUrl: userDoc.sandbox[sbIdx].accessUrl || 'https://portal.azure.com',
+          region: userDoc.sandbox[sbIdx].location,
+          expiresAt,
+          hoursUsedToday: hoursUsedToday + ttlHours,
+          dailyCapHours,
+        },
+      });
+
+    } else if (cloud === 'aws') {
+      if (userDoc.expiresAt) return res.status(400).json({ message: 'Sandbox is already active' });
+
+      userDoc.expiresAt = expiresAt;
+      userDoc.endDate = expiresAt;
+      userDoc.usageSessions.push({ startedAt: now, ttlHours, templateSlug });
+      await userDoc.save();
+
+      res.json({
+        message: 'Sandbox activated',
+        sandbox: {
+          cloud, templateSlug,
+          username: userDoc.userId,
+          password: userDoc.password,
+          accessUrl: userDoc.accessUrl,
+          region: userDoc.region,
+          expiresAt,
+          hoursUsedToday: hoursUsedToday + ttlHours,
+          dailyCapHours,
+        },
+      });
+
+    } else if (cloud === 'gcp') {
+      const sbIdx = userDoc.sandbox.findIndex(
+        sb => !sb.expiresAt && sb.templateId?.toString() === template._id.toString()
+      );
+      if (sbIdx === -1) return res.status(404).json({ message: 'No provisioned sandbox found to activate' });
+
+      userDoc.sandbox[sbIdx].expiresAt = expiresAt;
+      userDoc.sandbox[sbIdx].deleteTime = expiresAt;
+      userDoc.endDate = expiresAt;
+      userDoc.usageSessions.push({ startedAt: now, ttlHours, templateSlug });
+      await userDoc.save();
+
+      res.json({
+        message: 'Sandbox activated',
+        sandbox: {
+          cloud, templateSlug,
+          username: userDoc.googleEmail || userDoc.email,
+          password: 'Use your Google account',
+          accessUrl: `https://console.cloud.google.com/home/dashboard?project=${userDoc.sandbox[sbIdx].projectId}`,
+          region: template.sandboxConfig?.region || 'asia-south1',
+          expiresAt,
+          hoursUsedToday: hoursUsedToday + ttlHours,
+          dailyCapHours,
+        },
+      });
+    }
+  } catch (err) {
+    console.error('Error in /user/activate-sandbox:', err.message);
+    res.status(500).json({ message: 'Failed to activate sandbox', error: err.message });
   }
 });
 

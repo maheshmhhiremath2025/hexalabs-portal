@@ -6,7 +6,7 @@ require('dotenv').config();
 const { logger } = require('../plugins/logger');
 
 // ===== AZURE =====
-async function createAzureSandbox(resourceGroupName, location = 'southindia', userId, userEmail) {
+async function createAzureSandbox(resourceGroupName, location = 'southindia', userId, userEmail, customRoleId) {
   const { ClientSecretCredential } = require('@azure/identity');
   const { ResourceManagementClient } = require('@azure/arm-resources');
   const { AuthorizationManagementClient } = require('@azure/arm-authorization');
@@ -69,7 +69,7 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
   // 3. Assign role to the new Azure AD user
   if (azureObjectId) {
     try {
-      const CUSTOM_ROLE_ID = `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975`;
+      const CUSTOM_ROLE_ID = customRoleId || `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975`;
       await authClient.roleAssignments.create(
         `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}`,
         crypto.randomUUID(),
@@ -86,6 +86,7 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
     portalUrl: 'https://portal.azure.com',
     username: azureUsername,
     password: azurePassword,
+    objectId: azureObjectId || undefined,
   };
 }
 

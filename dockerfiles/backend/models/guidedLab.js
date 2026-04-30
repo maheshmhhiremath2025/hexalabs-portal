@@ -19,7 +19,7 @@ const guidedLabSchema = new mongoose.Schema({
   title: { type: String, required: true },
   slug: { type: String, required: true, unique: true },
   description: { type: String, required: true },
-  cloud: { type: String, enum: ['azure', 'aws', 'gcp', 'container'], required: true },
+  cloud: { type: String, enum: ['azure', 'aws', 'gcp', 'container', 'vm'], required: true },
   difficulty: { type: String, enum: ['beginner', 'intermediate', 'advanced'], default: 'beginner' },
   duration: { type: Number, default: 30 },   // Estimated minutes
   category: { type: String },                 // e.g. "Compute", "Storage", "Networking", "Security"
@@ -37,6 +37,7 @@ const guidedLabSchema = new mongoose.Schema({
     memory: { type: Number, default: 2048 },  // MB
   },
   vmTemplateName: { type: String },            // For azure labs: template name e.g. "ubuntu-22"
+  sandboxTemplateSlug: { type: String },       // Optional: cloud sandbox template for labs needing cloud access
   // Steps
   steps: [stepSchema],
   // Tier access

@@ -8,7 +8,8 @@ import {
 } from 'react-icons/fa';
 import { BookOpen, AlertCircle, Upload, Sparkles, Zap, Monitor, Cloud } from 'lucide-react';
 
-const CLOUDS = ['azure', 'aws', 'gcp', 'container'];
+const CLOUDS = ['azure', 'aws', 'gcp', 'container', 'vm'];
+const CLOUD_LABELS = { azure: 'Azure', aws: 'AWS', gcp: 'GCP', container: 'Container', vm: 'VM' };
 const DIFFICULTIES = ['beginner', 'intermediate', 'advanced'];
 const CATEGORIES = ['Compute', 'Storage', 'Networking', 'Security', 'Containers', 'Development', 'Database', 'AI/ML'];
 const VERIFY_TYPES = [
@@ -371,8 +372,8 @@ function DeployModal({ lab, onClose }) {
             {lab.cloud === 'container' && lab.containerImage && (
               <div className="text-xs text-purple-600 mt-1">Image: {lab.containerImage}</div>
             )}
-            {lab.cloud === 'azure' && lab.vmTemplateName && (
-              <div className="text-xs text-blue-600 mt-1">Template: {lab.vmTemplateName}</div>
+            {(lab.cloud === 'azure' || lab.cloud === 'vm') && lab.vmTemplateName && (
+              <div className="text-xs text-blue-600 mt-1">VM Template: {lab.vmTemplateName}</div>
             )}
           </div>
 
@@ -590,6 +591,7 @@ export default function GuidedLabEditor() {
   // Deploy state
   const [showDeploy, setShowDeploy] = useState(false);
   const [containerImages, setContainerImages] = useState([]);
+  const [sandboxTemplates, setSandboxTemplates] = useState([]);
 
   // Role checks
   const isSuperAdmin = (() => {
@@ -612,6 +614,9 @@ export default function GuidedLabEditor() {
     apiCaller.get('/containers/images')
       .then(res => setContainerImages(res.data || []))
       .catch(() => {});
+    apiCaller.get('/sandbox-templates')
+      .then(res => setSandboxTemplates(res.data || []))
+      .catch(() => {});
     if (isSuperAdmin) {
       apiCaller.get('/admin/organization')
         .then(res => setAllOrgs(res.data?.organization || []))
@@ -621,11 +626,37 @@ export default function GuidedLabEditor() {
 
   // AI generation state
   const [pdfFile, setPdfFile] = useState(null);
+  const [aiMode, setAiMode] = useState('generate'); // 'generate' | 'import'
   const [generating, setGenerating] = useState(false);
+  const [genStage, setGenStage] = useState(0);
+  const [genElapsed, setGenElapsed] = useState(0);
   const [genMeta, setGenMeta] = useState(null);
   const [cloudHint, setCloudHint] = useState('auto');
   const [difficultyHint, setDifficultyHint] = useState('auto');
+  const [customPrompt, setCustomPrompt] = useState('');
   const [improving, setImproving] = useState(null); // "stepIndex-field" when improving
+
+  const GEN_STAGES = aiMode === 'import' ? [
+    'Extracting text from document...',
+    'Parsing lab steps...',
+    'Structuring step data...',
+  ] : [
+    'Extracting text from document...',
+    'Analyzing modules and topics...',
+    'Detecting infrastructure requirements...',
+    'Generating lab steps and commands...',
+    'Building verification commands...',
+    'Adding troubleshooting guides...',
+    'Finalizing lab structure...',
+  ];
+  useEffect(() => {
+    if (!generating) { setGenStage(0); setGenElapsed(0); return; }
+    const startTime = Date.now();
+    const elapsed = setInterval(() => setGenElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
+    const stageMs = aiMode === 'import' ? 8000 : 20000;
+    const stage = setInterval(() => setGenStage(s => (s + 1) % GEN_STAGES.length), stageMs);
+    return () => { clearInterval(elapsed); clearInterval(stage); };
+  }, [generating, aiMode]);
 
   // Load existing lab for edit mode OR pick up AI-generated lab from sessionStorage
   useEffect(() => {
@@ -722,10 +753,12 @@ export default function GuidedLabEditor() {
       formData.append('file', pdfFile);
       if (cloudHint !== 'auto') formData.append('cloudHint', cloudHint);
       if (difficultyHint !== 'auto') formData.append('difficultyHint', difficultyHint);
+      if (customPrompt.trim()) formData.append('customPrompt', customPrompt.trim());
 
-      const res = await apiCaller.post('/guided-labs/generate', formData, {
+      const endpoint = aiMode === 'import' ? '/guided-labs/import-steps' : '/guided-labs/generate';
+      const res = await apiCaller.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000, // 5 min timeout for AI generation
+        timeout: 420000, // 7 min timeout
       });
 
       const generated = res.data.lab;
@@ -862,8 +895,21 @@ export default function GuidedLabEditor() {
               <h2 className="text-sm font-semibold text-purple-800">AI Lab Generator</h2>
               <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full font-medium">Beta</span>
             </div>
+            {/* Mode tabs */}
+            <div className="flex border-b border-purple-200 mb-3">
+              <button onClick={() => setAiMode('generate')}
+                className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${aiMode === 'generate' ? 'border-purple-600 text-purple-700' : 'border-transparent text-purple-400 hover:text-purple-600'}`}>
+                <Sparkles className="w-3 h-3 inline mr-1 -mt-0.5" />AI Generate
+              </button>
+              <button onClick={() => setAiMode('import')}
+                className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${aiMode === 'import' ? 'border-blue-600 text-blue-700' : 'border-transparent text-purple-400 hover:text-purple-600'}`}>
+                <Upload className="w-3 h-3 inline mr-1 -mt-0.5" />Direct Import
+              </button>
+            </div>
             <p className="text-xs text-purple-600 mb-4">
-              Upload a course PDF or CSV (syllabus, TOC, lab manual, or structured topics) and AI will generate the complete guided lab with steps, instructions, hints, and troubleshooting tips.
+              {aiMode === 'generate'
+                ? 'Upload a course TOC, syllabus, or topics list — AI will generate a complete guided lab.'
+                : 'Upload a PDF or CSV with existing lab steps — they will be extracted and added directly.'}
             </p>
 
             <div className="flex gap-4 items-start">
@@ -911,7 +957,7 @@ export default function GuidedLabEditor() {
                   <select value={cloudHint} onChange={(e) => setCloudHint(e.target.value)}
                     className="w-full px-2 py-1.5 text-xs border border-purple-200 rounded-md bg-white outline-none">
                     <option value="auto">Auto-detect</option>
-                    {CLOUDS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                    {CLOUDS.map(c => <option key={c} value={c}>{CLOUD_LABELS[c] || c}</option>)}
                   </select>
                 </div>
                 <div>
@@ -922,6 +968,18 @@ export default function GuidedLabEditor() {
                     {DIFFICULTIES.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
                   </select>
                 </div>
+                {aiMode === 'generate' && (
+                  <div>
+                    <label className="block text-[10px] font-medium text-purple-600 mb-0.5">Custom Instructions</label>
+                    <textarea
+                      value={customPrompt}
+                      onChange={(e) => setCustomPrompt(e.target.value)}
+                      placeholder="e.g. Focus on networking modules only, skip intro..."
+                      rows={2}
+                      className="w-full px-2 py-1.5 text-xs border border-purple-200 rounded-md outline-none focus:ring-1 focus:ring-purple-400 resize-none placeholder:text-purple-300"
+                    />
+                  </div>
+                )}
                 <button
                   onClick={handleGenerate}
                   disabled={generating || !pdfFile}
@@ -930,13 +988,14 @@ export default function GuidedLabEditor() {
                   {generating ? (
                     <>
                       <FaSpinner className="w-3 h-3 animate-spin" />
-                      Generating...
+                      {aiMode === 'import' ? 'Importing...' : 'Generating...'}
                     </>
                   ) : (
-                    <>
-                      <Sparkles className="w-3 h-3" />
-                      Generate Lab
-                    </>
+                    aiMode === 'import' ? (
+                      <><Upload className="w-3 h-3" /> Import Steps</>
+                    ) : (
+                      <><Sparkles className="w-3 h-3" /> Generate Lab</>
+                    )
                   )}
                 </button>
               </div>
@@ -973,9 +1032,18 @@ export default function GuidedLabEditor() {
             )}
 
             {generating && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-purple-600">
-                <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
-                Analyzing PDF and generating lab content... This may take 30-60 seconds.
+              <div className="mt-3 space-y-2">
+                <div className="w-full bg-purple-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-1000"
+                    style={{ width: `${Math.min(95, (genStage / GEN_STAGES.length) * 80 + (genElapsed / 240) * 20)}%` }} />
+                </div>
+                <div className="flex items-center gap-2 text-xs text-purple-600">
+                  <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                  {GEN_STAGES[genStage]}
+                  <span className="ml-auto text-[10px] text-slate-400">
+                    {Math.floor(genElapsed / 60)}:{String(genElapsed % 60).padStart(2, '0')}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -1012,8 +1080,14 @@ export default function GuidedLabEditor() {
               <label className="block text-xs font-medium text-slate-600 mb-1">Cloud *</label>
               <select value={lab.cloud} onChange={(e) => updateField('cloud', e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white outline-none">
-                {CLOUDS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                {CLOUDS.map(c => <option key={c} value={c}>{CLOUD_LABELS[c] || c}</option>)}
               </select>
+              {(lab.cloud === 'vm' || lab.cloud === 'azure') && lab.vmTemplateName && (
+                <p className="text-[10px] text-blue-600 mt-0.5">Template: {lab.vmTemplateName}</p>
+              )}
+              {lab.cloud === 'container' && lab.containerImage && (
+                <p className="text-[10px] text-purple-600 mt-0.5">Image: {lab.containerImage}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Difficulty</label>
@@ -1170,21 +1244,58 @@ export default function GuidedLabEditor() {
               </>
             )}
 
-            {lab.cloud === 'azure' && (
+            {(lab.cloud === 'azure' || lab.cloud === 'vm') && (
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">VM Template Name *</label>
-                <input type="text"
+                <label className="block text-xs font-medium text-slate-600 mb-1">VM Template *</label>
+                <select
                   value={lab.vmTemplateName || ''}
                   onChange={(e) => updateField('vmTemplateName', e.target.value)}
-                  placeholder="e.g., ubuntu-22, windows-server-2022"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-green-400" />
-                <p className="text-[10px] text-slate-400 mt-1">Must match a template name from the Templates page</p>
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-green-400"
+                >
+                  <option value="">Select VM template...</option>
+                  <option value="windows-server-2022">Windows Server 2022</option>
+                  <option value="ubuntu-22">Ubuntu 22.04 LTS</option>
+                  <option value="oracle-linux">Oracle Linux</option>
+                  <option value="rhel-9">RHEL 9</option>
+                </select>
+                {lab.vmTemplateName && (
+                  <p className="text-[10px] text-green-600 mt-1">Template: {lab.vmTemplateName}</p>
+                )}
               </div>
             )}
 
             {(lab.cloud === 'aws' || lab.cloud === 'gcp') && (
               <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3">
-                {lab.cloud.toUpperCase()} labs deploy as cloud sandboxes. No additional config needed — sandbox credentials are provisioned automatically.
+                {lab.cloud.toUpperCase()} labs require a cloud sandbox for students. Select a sandbox template below.
+              </div>
+            )}
+
+            {/* Cloud Sandbox Template (optional for container/vm, suggested for aws/gcp) */}
+            {sandboxTemplates.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Cloud Sandbox Template {(lab.cloud === 'aws' || lab.cloud === 'gcp') ? '*' : '(Optional)'}
+                </label>
+                <select
+                  value={lab.sandboxTemplateSlug || ''}
+                  onChange={(e) => updateField('sandboxTemplateSlug', e.target.value || undefined)}
+                  disabled={readOnly}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  <option value="">No cloud sandbox</option>
+                  {sandboxTemplates
+                    .filter(t => !lab.cloud || lab.cloud === 'container' || lab.cloud === 'vm' || t.cloud === lab.cloud)
+                    .map(t => (
+                      <option key={t.slug} value={t.slug}>
+                        {t.name} ({t.cloud.toUpperCase()}) — {t.serviceCount || 0} services
+                      </option>
+                    ))}
+                </select>
+                {lab.sandboxTemplateSlug && (
+                  <p className="text-[10px] text-amber-600 mt-1">
+                    Students will get cloud credentials alongside their lab environment
+                  </p>
+                )}
               </div>
             )}
           </div>
