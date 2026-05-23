@@ -25,6 +25,7 @@
     "@azure/arm-resources": "^7.0.0",
     "@azure/identity": "^4.13.1",
     "@kubernetes/client-node": "^1.4.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "bcrypt": "^6.0.0",
     "bull": "^4.16.0",
     "cookie-parser": "^1.4.6",
