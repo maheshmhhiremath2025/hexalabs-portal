@@ -1,5 +1,5 @@
 // Corporate enterprise login — clean, professional, trust-focused.
-// Split layout: dark left branding panel + light right login form.
+// Split layout: blue left branding panel + light right login form.
 // All logic unchanged: POST /user/login, localStorage, onLogin callback,
 // ?org=xxx public branding, caps-lock detection, demo modal.
 
@@ -17,19 +17,19 @@ import {
 } from 'react-icons/fa';
 
 const SUPPORTED_CLOUDS = [
-  { icon: FaAws,       label: 'AWS',               color: '#FF9900' },
-  { icon: FaMicrosoft, label: 'Azure',              color: '#0078D4' },
-  { icon: FaGoogle,    label: 'Google Cloud',       color: '#4285F4' },
-  { icon: FaCloud,     label: 'Oracle Cloud',       color: '#F80000' },
-  { icon: FaRedhat,    label: 'Red Hat OpenShift',  color: '#EE0000' },
-  { icon: FaDocker,    label: 'Containers',         color: '#2496ED' },
+  { icon: FaAws,       label: 'AWS',               color: '#fff' },
+  { icon: FaMicrosoft, label: 'Azure',              color: '#fff' },
+  { icon: FaGoogle,    label: 'Google Cloud',       color: '#fff' },
+  { icon: FaCloud,     label: 'Oracle Cloud',       color: '#fff' },
+  { icon: FaRedhat,    label: 'Red Hat OpenShift',  color: '#fff' },
+  { icon: FaDocker,    label: 'Containers',         color: '#fff' },
 ];
 
 const FEATURES = [
-  { icon: FaBolt,      title: 'Instant Provisioning', desc: 'Workspaces in seconds, VMs in minutes. No tickets, no waiting.' },
-  { icon: FaGlobe,     title: 'Multi-Cloud Support',  desc: 'AWS, Azure, GCP, OCI, and Red Hat OpenShift from one interface.' },
-  { icon: FaMicrochip, title: 'Cost Guardrails',      desc: 'Quotas, idle auto-shutdown, expiry cleanup, and budget caps built in.' },
-  { icon: FaUserLock,  title: 'Enterprise Security',  desc: 'ISO 9001 & 10004 certified. SSL everywhere, hardened IAM per sandbox.' },
+  { icon: FaBolt,      title: 'Instant Provisioning', desc: 'Deploy workspaces in seconds and VMs in minutes — zero tickets, zero waiting.' },
+  { icon: FaGlobe,     title: 'Multi-Cloud Support',  desc: 'One portal for AWS, Azure, GCP, OCI, and Red Hat OpenShift labs.' },
+  { icon: FaMicrochip, title: 'Cost Guardrails',      desc: 'Budget caps, idle auto-shutdown, expiry cleanup, and per-student quotas.' },
+  { icon: FaUserLock,  title: 'Enterprise Security',  desc: 'ISO 9001 & 10004 certified with SSL everywhere and hardened IAM.' },
 ];
 
 // Light-theme autofill override for the right panel
@@ -118,22 +118,19 @@ const Login = ({ onLogin, apiRoutes }) => {
       <div className="flex min-h-screen w-full">
 
         {/* ── Left Panel: Branding & Features (desktop only) ────────────── */}
-        <section className="relative hidden w-[52%] flex-col justify-between lg:flex overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
-          {/* Subtle background pattern */}
-          <div
-            className="absolute inset-0 opacity-[0.04]"
-            style={{
-              backgroundImage:
-                'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)',
-              backgroundSize: '32px 32px',
-            }}
-          />
+        <section className="relative hidden w-[52%] flex-col justify-between lg:flex overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800">
+          {/* Geometric background accent */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/[0.06]" />
+            <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-white/[0.04]" />
+            <div className="absolute top-1/2 right-1/4 w-64 h-64 rounded-full bg-indigo-500/10" />
+          </div>
 
           <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
             {/* Header: Logo + badges */}
-            <div className="flex items-center justify-between mb-12">
+            <div className="flex items-center justify-between mb-10">
               <div className="flex items-center gap-3.5">
-                <div className="h-11 w-11 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center overflow-hidden">
+                <div className="h-11 w-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden">
                   <img
                     src={logoUrl}
                     alt={companyName}
@@ -143,17 +140,17 @@ const Login = ({ onLogin, apiRoutes }) => {
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-tight">{companyName}</h1>
-                  <p className="text-[10px] font-semibold text-blue-300/70 uppercase tracking-[0.2em]">Cloud Portal</p>
+                  <p className="text-[10px] font-semibold text-blue-100/60 uppercase tracking-[0.2em]">Cloud Portal</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
-                  <FaShieldAlt className="text-emerald-400 w-3 h-3" />
-                  <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider">ISO 9001</span>
+                <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm px-3 py-1.5">
+                  <FaShieldAlt className="text-white/80 w-3 h-3" />
+                  <span className="text-[10px] font-semibold text-white/80 uppercase tracking-wider">ISO 9001</span>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Live</span>
+                <div className="flex items-center gap-1.5 rounded-lg bg-emerald-400/20 backdrop-blur-sm px-3 py-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                  <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-wider">Live</span>
                 </div>
               </div>
             </div>
@@ -166,18 +163,18 @@ const Login = ({ onLogin, apiRoutes }) => {
                 transition={{ duration: 0.6, ease: 'easeOut' }}
                 className="text-4xl xl:text-5xl font-extrabold leading-tight text-white"
               >
-                Enterprise Cloud
+                Cloud Training Labs,
                 <br />
-                <span className="text-blue-400">Training Platform</span>
+                Delivered at Scale.
               </motion.h2>
               <motion.p
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15, duration: 0.6 }}
-                className="mt-5 text-slate-400 text-[15px] leading-relaxed max-w-md"
+                className="mt-5 text-blue-100/70 text-[15px] leading-relaxed max-w-md"
               >
                 {branding.loginBanner ||
-                  'Provision per-student cloud sandboxes across AWS, Azure, GCP, and OCI in seconds. Enforce cost caps, auto-clean when the batch ends \u2014 all under your own brand.'}
+                  'Built for training companies running instructor-led cloud certification batches. Provision per-student sandboxes, enforce cost caps, and auto-clean when the batch ends.'}
               </motion.p>
             </div>
 
@@ -189,14 +186,14 @@ const Login = ({ onLogin, apiRoutes }) => {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 + i * 0.08, duration: 0.5 }}
-                  className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors"
+                  className="flex items-start gap-3 p-4 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/15 transition-colors"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
                     <Icon size={15} />
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-[13px] font-semibold text-white leading-tight">{title}</h3>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-1">{desc}</p>
+                    <p className="text-[11px] text-blue-100/50 leading-relaxed mt-1">{desc}</p>
                   </div>
                 </motion.div>
               ))}
@@ -204,19 +201,19 @@ const Login = ({ onLogin, apiRoutes }) => {
 
             {/* Cloud providers */}
             <div className="mb-auto">
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.15em] mb-3">Supported Platforms</p>
+              <p className="text-[10px] font-semibold text-blue-100/40 uppercase tracking-[0.15em] mb-3">Supported Platforms</p>
               <div className="flex items-center gap-5">
                 {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
                   <div key={label} className="flex items-center gap-1.5 group cursor-default" title={label}>
                     <Icon className="w-5 h-5 opacity-50 group-hover:opacity-90 transition-opacity" style={{ color }} />
-                    <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-300 transition-colors hidden xl:inline">{label}</span>
+                    <span className="text-[10px] font-medium text-blue-100/40 group-hover:text-white/80 transition-colors hidden xl:inline">{label}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Stats bar */}
-            <div className="grid grid-cols-4 gap-6 rounded-xl bg-white/[0.03] border border-white/[0.06] p-5 mb-6">
+            <div className="grid grid-cols-4 gap-6 rounded-xl bg-white/10 backdrop-blur-sm p-5 mb-6">
               {[
                 { label: 'Clouds', value: '5' },
                 { label: 'Lab Images', value: '103+' },
@@ -225,13 +222,13 @@ const Login = ({ onLogin, apiRoutes }) => {
               ].map(({ label, value }) => (
                 <div key={label} className="text-center">
                   <div className="text-xl font-bold text-white" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-                  <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mt-0.5">{label}</div>
+                  <div className="text-[10px] font-medium text-blue-100/50 uppercase tracking-wider mt-0.5">{label}</div>
                 </div>
               ))}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between text-[10px] text-slate-600 pt-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between text-[10px] text-blue-100/40 pt-4 border-t border-white/10">
               <span className="font-medium">HexaLabs Cloud Solutions Pvt Ltd</span>
               <span className="font-medium">SSL Secured &middot; ISO 9001 &middot; 10004</span>
             </div>
