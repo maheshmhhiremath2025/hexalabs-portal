@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import apiCaller from '../services/apiCaller';
 
 const DEFAULTS = {
-  logoUrl: '/logo/hexalabssoftware-logo.png',
+  logoUrl: '/logo/logo.png',
   primaryColor: '#2563eb',
   accentColor: '#1e40af',
   companyName: 'HexaLabs',

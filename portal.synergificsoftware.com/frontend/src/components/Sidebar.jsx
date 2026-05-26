@@ -101,7 +101,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
             <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-lg bg-white/10">
               <img
                 src={branding.logoUrl || `/logo/${org}-logo.png`}
-                onError={(e) => { e.currentTarget.src = '/logo/hexalabssoftware-logo.png'; }}
+                onError={(e) => { e.currentTarget.src = '/logo/logo.png'; }}
                 alt="Logo"
                 className="h-full w-full object-contain p-0.5"
               />
@@ -109,8 +109,8 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
           ) : (
             <>
               <img
-                src={branding.logoUrl || '/logo/hexalabssoftware-logo.png'}
-                onError={(e) => { e.currentTarget.src = '/logo/hexalabssoftware-logo.png'; }}
+                src={branding.logoUrl || '/logo/logo.png'}
+                onError={(e) => { e.currentTarget.src = '/logo/logo.png'; }}
                 alt={branding.companyName || 'HexaLabs'}
                 className="h-7 object-contain"
               />

@@ -202,7 +202,7 @@ const Login = ({ onLogin, apiRoutes }) => {
   };
 
   const companyName = branding.companyName || 'HexaLabs';
-  const logoUrl = branding.logoUrl || '/logo/hexalabssoftware-logo.png';
+  const logoUrl = branding.logoUrl || '/logo/logo.png';
 
   return (
     <div
