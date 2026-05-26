@@ -1,0 +1,50 @@
+services:
+  guacd:
+    image: guacamole/guacd:latest
+    restart: unless-stopped
+    networks:
+      - guac-net
+
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole
+    restart: unless-stopped
+    depends_on:
+      - guacd
+      - guac-db
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACD_PORT: "4822"
+      MYSQL_HOSTNAME: guac-db
+      MYSQL_DATABASE: guacamole_db
+      MYSQL_USER: guacamole_user
+      MYSQL_PASSWORD: guacamole_pass
+      TOTP_ENABLED: "false"
+      HEADER_ENABLED: "true"
+      WEBAPP_CONTEXT: ROOT
+    ports:
+      - "8085:8080"
+    networks:
+      - guac-net
+
+  guac-db:
+    image: mysql:8.0
+    container_name: guac-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: guacamole_db
+      MYSQL_USER: guacamole_user
+      MYSQL_PASSWORD: guacamole_pass
+    volumes:
+      - guac-db-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d
+    networks:
+      - guac-net
+
+volumes:
+  guac-db-data:
+
+networks:
+  guac-net:
+    driver: bridge

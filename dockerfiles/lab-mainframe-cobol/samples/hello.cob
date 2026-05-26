@@ -5,11 +5,11 @@
       ******************************************************************
        IDENTIFICATION DIVISION.
        PROGRAM-ID. HELLO.
-       AUTHOR.     GETLABS-MAINFRAME-COBOL.
+       AUTHOR.     HEXALABS-MAINFRAME-COBOL.
 
        DATA DIVISION.
        WORKING-STORAGE SECTION.
-       01 WS-MESSAGE   PIC X(30) VALUE "Hello from GnuCOBOL on GetLabs".
+       01 WS-MESSAGE   PIC X(30) VALUE "Hello from GnuCOBOL on HexaLabs".
 
        PROCEDURE DIVISION.
        MAIN-PARA.

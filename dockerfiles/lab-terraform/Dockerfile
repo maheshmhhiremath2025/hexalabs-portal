@@ -1,7 +1,7 @@
 # lab-terraform — Terraform + AWS/Azure/GCP CLIs + Python + code-server
 # Runtime: normal runc (no Docker needed inside)
 # Pairs with cloud sandbox — student provisions real infra via Terraform
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-terraform:1.0 .
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-terraform:1.0 .
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

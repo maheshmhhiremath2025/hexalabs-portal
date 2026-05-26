@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# GetLabs Cloud Portal -- Production Setup Script
+# HexaLabs Cloud Portal -- Production Setup Script
 # Idempotent: safe to run multiple times.
 #
 # Usage:
@@ -8,7 +8,7 @@
 #   sudo ./scripts/production-setup.sh
 #
 # Environment variables (set before running or edit inline):
-#   DOMAIN         - Your domain name (e.g. portal.getlabs.cloud)
+#   DOMAIN         - Your domain name (e.g. portal.hexalabs.online)
 #   INSTALL_DIR    - Installation directory (default: /opt/cloudportal)
 #   ADMIN_EMAIL    - Email for Let's Encrypt SSL certificate
 #   SKIP_SSL       - Set to "true" to skip SSL setup
@@ -253,7 +253,7 @@ fi
 # 13. Build custom Docker images
 # ------------------------------------------------------------------
 if [ "$SKIP_APP" = false ] && [ "$SKIP_IMAGES" != "true" ]; then
-  log "Building custom GetLabs Docker images..."
+  log "Building custom HexaLabs Docker images..."
   cd "$INSTALL_DIR/dockerfiles"
 
   CUSTOM_LABS=(
@@ -270,8 +270,8 @@ if [ "$SKIP_APP" = false ] && [ "$SKIP_IMAGES" != "true" ]; then
 
   for lab in "${CUSTOM_LABS[@]}"; do
     if [ -d "$lab" ] && [ -f "$lab/Dockerfile" ]; then
-      log "  Building getlabs/$lab:1.0..."
-      docker build -t "getlabs/$lab:1.0" "$lab" 2>&1 | tail -1 || warn "Build failed: $lab"
+      log "  Building hexalabs/$lab:1.0..."
+      docker build -t "hexalabs/$lab:1.0" "$lab" 2>&1 | tail -1 || warn "Build failed: $lab"
     else
       warn "  Skipping $lab (no Dockerfile found)."
     fi

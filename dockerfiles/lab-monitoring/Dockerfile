@@ -1,6 +1,6 @@
 # lab-monitoring — Prometheus + Grafana + Node Exporter + Alertmanager
 # Runtime: normal runc | Per-seat: 1 vCPU / 3 GB
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-monitoring:1.0 .
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-monitoring:1.0 .
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

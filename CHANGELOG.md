@@ -1,4 +1,4 @@
-# GetLabs Cloud Portal — Complete Development Changelog
+# HexaLabs Cloud Portal — Complete Development Changelog
 
 **Period:** April 9-10, 2026
 **Starting Point:** Existing cloud training portal with Azure VM management, basic billing, and Guacamole integration
@@ -344,7 +344,7 @@ Each active sandbox shows:
 
 ### 13.2 K8s Provisioning Service
 - Creates Pod + Service + Ingress rule per lab
-- Each user gets `https://lab-{name}.labs.getlabs.cloud`
+- Each user gets `https://lab-{name}.labs.hexalabs.online`
 - Pods schedule on Spot nodes (60-80% cheaper)
 - Auto-scales 1-20 nodes via AKS cluster autoscaler
 

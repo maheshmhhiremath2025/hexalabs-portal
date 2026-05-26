@@ -650,7 +650,7 @@ function OverviewTab({ template, slug }) {
       <Section title="Raw IAM policy">
         <p className="text-xs text-gray-500 mb-2">The generated {template.cloud.toUpperCase()} policy is fetched live from the API.</p>
         <a
-          href={`${import.meta.env.VITE_API_URL || 'https://api.getlabs.cloud'}/sandbox-templates/${slug}/policy`}
+          href={`${import.meta.env.VITE_API_URL || 'https://api.hexalabs.online'}/sandbox-templates/${slug}/policy`}
           target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-mono bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5"
         >

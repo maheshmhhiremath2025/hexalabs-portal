@@ -1,6 +1,6 @@
 # lab-elk-stack — Elasticsearch + Logstash + Kibana + Filebeat
 # Runtime: normal runc | Per-seat: 2 vCPU / 6 GB RAM (ES is memory-hungry)
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-elk-stack:1.0 .
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-elk-stack:1.0 .
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

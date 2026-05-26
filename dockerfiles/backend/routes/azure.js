@@ -252,7 +252,7 @@ router.post('/browser-access', async (req, res) => {
     // true). Otherwise fall through to Guacamole — Windows always does,
     // and Linux VMs without KasmVNC installed need Guacamole too.
     if (useVnc) {
-      const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
+      const apiBase = process.env.KASM_PROXY_BASE || 'https://api.hexalabs.online';
       const pw = encodeURIComponent(adminPassword || 'Welcome1234!');
       return res.json({
         accessUrl: `${apiBase}/kasm/${vmName}/?password=${pw}&autoconnect=1`,

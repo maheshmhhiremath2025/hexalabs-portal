@@ -51,7 +51,7 @@
            PERFORM LOAD-EMPLOYEES.
 
            DISPLAY "================================================".
-           DISPLAY "     WEEKLY PAYROLL REPORT - GETLABS INC.       ".
+           DISPLAY "     WEEKLY PAYROLL REPORT - HEXALABS INC.       ".
            DISPLAY "================================================".
            DISPLAY "   ID    NAME                    GROSS       "
                    "TAX         NET".

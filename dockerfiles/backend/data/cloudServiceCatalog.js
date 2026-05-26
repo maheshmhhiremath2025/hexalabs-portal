@@ -1,7 +1,7 @@
 /**
  * Cloud Service Catalog
  *
- * Single source of truth for which AWS/Azure/GCP services GetLabs supports
+ * Single source of truth for which AWS/Azure/GCP services HexaLabs supports
  * in B2B sandbox environments, their risk tier, baseline hourly cost (INR)
  * used for quote estimation, and any restrictions we enforce.
  *

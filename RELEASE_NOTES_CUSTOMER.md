@@ -1,10 +1,10 @@
-# GetLabs Cloud Portal — What's New 🚀
+# HexaLabs Cloud Portal — What's New 🚀
 
 **Release: April 2026 Major Update**
 
 Dear Valued Customer,
 
-We're excited to announce a major upgrade to the GetLabs Cloud Portal. This release brings significant new features, cost savings, and a completely refreshed experience. Here's everything that's new:
+We're excited to announce a major upgrade to the HexaLabs Cloud Portal. This release brings significant new features, cost savings, and a completely refreshed experience. Here's everything that's new:
 
 ---
 
@@ -240,10 +240,10 @@ All these features are available now in your portal. Here's how to try them:
 
 If you have any questions or need help with the new features, don't hesitate to reach out to our support team.
 
-Thank you for choosing GetLabs Cloud!
+Thank you for choosing HexaLabs Cloud!
 
 Best regards,
-**The GetLabs Team**
+**The HexaLabs Team**
 *portal.synergificsoftware.com*
 
 ---

@@ -503,7 +503,7 @@ function verifyOpenLink(connName, sig) {
 // Build an email-safe permanent URL that opens the given connection in
 // Guacamole. Verified + redirected by the GET /open/:conn route.
 function buildOpenInBrowserUrl(appBaseUrl, connName) {
-  const base = (appBaseUrl || process.env.APP_BASE_URL || 'https://getlabs.cloud').replace(/\/+$/, '');
+  const base = (appBaseUrl || process.env.APP_BASE_URL || 'https://hexalabs.online').replace(/\/+$/, '');
   return `${base}/open/${encodeURIComponent(connName)}?sig=${signOpenLink(connName)}`;
 }
 

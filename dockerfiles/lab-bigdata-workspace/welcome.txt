@@ -1,6 +1,6 @@
 
 =============================================================================
-              GetLabs Big Data Workspace — Welcome
+              HexaLabs Big Data Workspace — Welcome
 =============================================================================
 
 This container has the full big-data stack pre-installed and ready to use.

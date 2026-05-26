@@ -5,7 +5,7 @@ const User = require('../models/user');
 const { logger } = require('../plugins/logger');
 
 const NAMESPACE = process.env.K8S_NAMESPACE || 'lab-containers';
-const LABS_DOMAIN = process.env.LABS_DOMAIN || 'labs.getlabs.cloud';
+const LABS_DOMAIN = process.env.LABS_DOMAIN || 'labs.hexalabs.online';
 
 // K8s client setup
 const kc = new k8s.KubeConfig();
@@ -42,7 +42,7 @@ async function createK8sLab({ name, trainingName, organization, email, imageKey 
   const resources = RESOURCE_PRESETS[preset] || RESOURCE_PRESETS['medium'];
   const podName = `lab-${name}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const svcName = `${podName}-svc`;
-  const hostname = `${podName}.${LABS_DOMAIN}`; // e.g. lab-training1-c1.labs.getlabs.cloud
+  const hostname = `${podName}.${LABS_DOMAIN}`; // e.g. lab-training1-c1.labs.hexalabs.online
 
   logger.info(`Creating K8s lab ${podName} (${imageConfig.image}) for ${email}`);
 

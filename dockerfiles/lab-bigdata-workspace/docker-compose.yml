@@ -32,7 +32,7 @@ version: '3.8'
 
 services:
   workspace:
-    image: getlabs/lab-bigdata-workspace:latest
+    image: hexalabs/lab-bigdata-workspace:latest
     container_name: ${COMPOSE_PROJECT_NAME:-lab-student}-workspace
     hostname: workspace
     environment:

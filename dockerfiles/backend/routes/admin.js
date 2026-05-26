@@ -220,7 +220,7 @@ router.post("/build-image", async (req, res) => {
     if (!software.length) return res.status(400).json({ message: 'software array required' });
 
     const key = imageKey || `custom-${courseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}-${Date.now().toString(36)}`;
-    const imageName = `getlabs/${key}`;
+    const imageName = `hexalabs/${key}`;
     const jobId = `build-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     const job = {

@@ -315,7 +315,7 @@ async function handleSelfSandbox(req, res) {
       sandboxResult = { credentials: { username: awsResult.username, password: awsResult.password }, accessUrl: awsResult.accessUrl };
     } else if (cloud === 'gcp') {
       const { getOrCreateSharedProject, addUserToSharedProject } = require('../services/gcpSharedProject');
-      const org = req.user.organization || 'getlabs';
+      const org = req.user.organization || 'hexalabs';
 
       // Find or create a shared project (1 project per 5 users)
       const { projectId, isNew } = await getOrCreateSharedProject(org, ttlHours, budgetCap);

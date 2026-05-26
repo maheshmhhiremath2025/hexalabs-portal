@@ -26,7 +26,7 @@ mongoose.connect(uri).then(async () => {
     icon: '\uD83E\uDE9F',
     requiresSandbox: false,
     vmTemplateName: 'wi8ntest',
-    createdBy: 'superadmin@getlabs.cloud',
+    createdBy: 'superadmin@hexalabs.online',
     assignedOrgs: [],
     steps: [
       {

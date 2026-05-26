@@ -11,11 +11,11 @@ services:
       - REDIS_HOST=redis
       - MONGO_URI=mongodb://mongodb:27017/cloudportal
       - GUACAMOLE_URL=http://guacamole:8080/guacamole
-      - GUACAMOLE_PUBLIC_URL=${GUACAMOLE_PUBLIC_URL:-https://labs.getlabs.cloud/guacamole}
+      - GUACAMOLE_PUBLIC_URL=${GUACAMOLE_PUBLIC_URL:-https://labs.hexalabs.online/guacamole}
       - CONTAINER_HOST_IP=${CONTAINER_HOST_IP:-0.0.0.0}
       - DOCKER_SOCKET=/var/run/docker.sock
       - K8S_IN_CLUSTER=${K8S_IN_CLUSTER:-false}
-      - LABS_DOMAIN=${LABS_DOMAIN:-labs.getlabs.cloud}
+      - LABS_DOMAIN=${LABS_DOMAIN:-labs.hexalabs.online}
     ports:
       - "8001:8001"
     volumes:

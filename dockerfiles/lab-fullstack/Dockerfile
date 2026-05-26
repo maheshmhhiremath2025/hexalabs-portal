@@ -1,6 +1,6 @@
 # lab-fullstack — MEAN/MERN stack: Node.js + React + Angular + MongoDB + Redis + Nginx
 # Runtime: normal runc | Per-seat: 1 vCPU / 3 GB
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-fullstack:1.0 .
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-fullstack:1.0 .
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8
@@ -62,7 +62,7 @@ RUN mkdir -p /var/run/sshd /home/lab/projects && \
 
 # Sample starter project
 RUN su - lab -c "mkdir -p /home/lab/projects/hello-express && cd /home/lab/projects/hello-express && npm init -y" && \
-    printf 'const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.json({ message: "Hello from GetLabs!", stack: "MERN" }));\napp.listen(3001, () => console.log("Server on http://localhost:3001"));\n' \
+    printf 'const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.json({ message: "Hello from HexaLabs!", stack: "MERN" }));\napp.listen(3001, () => console.log("Server on http://localhost:3001"));\n' \
       > /home/lab/projects/hello-express/index.js && \
     cd /home/lab/projects/hello-express && npm install express && \
     chown -R lab:lab /home/lab/projects

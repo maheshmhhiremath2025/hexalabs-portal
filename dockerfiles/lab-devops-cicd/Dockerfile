@@ -1,7 +1,7 @@
 # lab-devops-cicd — Jenkins + GitLab Runner + ArgoCD CLI + Docker + K8s tools
 # Runtime: sysbox-runc (needs Docker inside for CI pipelines)
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-devops-cicd:1.0 .
-# Run:    docker run --runtime=sysbox-runc -d -p 7681:7681 -p 8080:8080 getlabs/lab-devops-cicd:1.0
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-devops-cicd:1.0 .
+# Run:    docker run --runtime=sysbox-runc -d -p 7681:7681 -p 8080:8080 hexalabs/lab-devops-cicd:1.0
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

@@ -414,7 +414,7 @@ function ContainerRow({ c, onAction }) {
       <td className="px-3 py-2.5">
         {c.isRunning ? (
           <div className="flex items-center gap-2 flex-wrap">
-            <a href={c.accessUrl || `https://getlabs.cloud/ws/${c.vncPort}/`} target="_blank" rel="noopener noreferrer"
+            <a href={c.accessUrl || `https://hexalabs.online/ws/${c.vncPort}/`} target="_blank" rel="noopener noreferrer"
               className="text-blue-600 hover:underline text-xs inline-flex items-center gap-1">
               <FaExternalLinkAlt className="w-2 h-2" /> {c.vncLabel || 'Desktop'}
             </a>

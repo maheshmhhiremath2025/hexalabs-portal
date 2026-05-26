@@ -1,10 +1,10 @@
-# Customer Welcome — GetLabs Big Data Lab
+# Customer Welcome — HexaLabs Big Data Lab
 
 > **For ops:** copy this file, fill in the `{{PLACEHOLDER}}` values from your deploy result, save as a PDF or paste into an email, and send to the customer. Each student gets one container — fill the table at the bottom with the per-student credentials from the deploy results.
 
 ---
 
-## Welcome to your GetLabs Big Data Lab
+## Welcome to your HexaLabs Big Data Lab
 
 You have access to a fully-configured Linux environment with everything pre-installed for the **{{COURSE_NAME}}** training. No setup, no installs, no waiting — just open your browser and start.
 
@@ -309,4 +309,4 @@ We monitor the lab health automatically. If a container crashes, we'll notice an
 
 **Have a great training!**
 
-— GetLabs Cloud Portal
+— HexaLabs Cloud Portal

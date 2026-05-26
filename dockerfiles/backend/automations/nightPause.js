@@ -111,7 +111,7 @@ async function nightPause() {
     // Notify ops (one summary, not per-student)
     if (sendEmail && process.env.GMAIL_USER) {
       sendEmail(process.env.GMAIL_USER,
-        `[GetLabs] Night pause — ${paused} containers stopped`,
+        `[HexaLabs] Night pause — ${paused} containers stopped`,
         `<p>${paused} containers were automatically stopped at ${PAUSE_HOUR}:00 IST to save costs.</p>
          <p>They will auto-resume at ${RESUME_HOUR}:00 IST.</p>
          <p>Containers: ${toPause.map(c => c.name).join(', ')}</p>`
@@ -158,7 +158,7 @@ async function nightPause() {
     // Notify ops
     if (sendEmail && process.env.GMAIL_USER) {
       sendEmail(process.env.GMAIL_USER,
-        `[GetLabs] Morning resume — ${resumed} containers restarted`,
+        `[HexaLabs] Morning resume — ${resumed} containers restarted`,
         `<p>${resumed} containers were automatically restarted at ${RESUME_HOUR}:00 IST.</p>
          <p>All labs are ready for the day.</p>`
       ).catch(() => {});

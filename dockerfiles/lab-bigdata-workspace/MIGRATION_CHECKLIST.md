@@ -105,7 +105,7 @@ If your container budget exceeds 8 GB or 4 vCPU per student, you're either:
 Before you sign the contract:
 
 1. Build the image on a dev host
-2. Run `docker run --rm -it getlabs/lab-bigdata-workspace:latest bash` and walk through the customer's first lab manually
+2. Run `docker run --rm -it hexalabs/lab-bigdata-workspace:latest bash` and walk through the customer's first lab manually
 3. Time how long the first hands-on exercise takes from "container start" to "first command run" — should be under 30 seconds
 4. Run the heaviest exercise from the course — does it complete in the per-seat resource budget?
 5. Send a screen recording to the customer with the line: "This is what your students will experience. Want to proceed?"

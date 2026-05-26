@@ -129,7 +129,7 @@ async function containerIdleShutdown() {
           // Email the student
           if (sendEmail && c.email) {
             sendEmail(c.email,
-              `[GetLabs] Lab paused — ${c.name} (idle for ${Math.round(idleDurationMins)} min)`,
+              `[HexaLabs] Lab paused — ${c.name} (idle for ${Math.round(idleDurationMins)} min)`,
               `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
                 <div style="background:#6b7280;padding:16px 20px;border-radius:8px 8px 0 0;">
                   <h2 style="color:white;margin:0;font-size:16px;">Lab Paused — Idle Timeout</h2>

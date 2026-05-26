@@ -8,7 +8,7 @@
 #   REGISTRY=myreg.azurecr.io ./push.sh 1.1
 #
 # The default REGISTRY is empty, which pushes to Docker Hub under the
-# 'getlabs' org. To push to ACR/ECR/GHCR, set REGISTRY explicitly.
+# 'hexalabs' org. To push to ACR/ECR/GHCR, set REGISTRY explicitly.
 #
 # Before running, make sure you're authenticated:
 #   Docker Hub:  docker login
@@ -21,7 +21,7 @@ set -euo pipefail
 
 VERSION="${1:-1.0}"
 REGISTRY="${REGISTRY:-}"   # empty = Docker Hub
-NAMESPACE="${NAMESPACE:-getlabs}"
+NAMESPACE="${NAMESPACE:-hexalabs}"
 IMAGE_NAME="${IMAGE_NAME:-lab-bigdata-workspace}"
 
 # Compose the full image reference
@@ -82,7 +82,7 @@ echo "  docker pull ${FULL}:${VERSION}"
 echo "============================================================"
 echo
 echo "Catalog entry in services/containerService.js currently uses:"
-echo "  image: 'getlabs/lab-bigdata-workspace:1.0'"
+echo "  image: 'hexalabs/lab-bigdata-workspace:1.0'"
 echo
 echo "If you pushed to a non-default registry, update that line to:"
 echo "  image: '${FULL}:${VERSION}'"

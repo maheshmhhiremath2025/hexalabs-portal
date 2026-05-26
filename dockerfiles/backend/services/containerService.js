@@ -60,7 +60,7 @@ function getDockerForContainer(containerDoc) {
 const CONTAINER_IMAGES = {
   // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
   // All desktops use kasmweb images: real OS, real desktop, real apps.
-  // Access via https://getlabs.cloud:<port+10000>/
+  // Access via https://hexalabs.online:<port+10000>/
   'ubuntu-desktop': {
     image: 'kasmweb/desktop:1.16.0', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
     category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
@@ -99,7 +99,7 @@ const CONTAINER_IMAGES = {
     env: ['RAM_SIZE=4G', 'CPU_CORES=2', 'DISK_SIZE=30G', 'VERSION=tiny11'],
     shmSize: '512m',
     requiresKvm: true,
-    // Route to dedicated Windows host, proxy via https://getlabs.cloud/win/<port>/
+    // Route to dedicated Windows host, proxy via https://hexalabs.online/win/<port>/
     windowsHost: true,
   },
 
@@ -896,7 +896,7 @@ async function captureContainerAsTemplate({ containerId, templateName, templateL
       repo: `kumar202699/custom-${sanitizedName}`,
       tag: '1.0',
       comment: `Custom template from ${containerDoc.name}`,
-      author: 'GetLabs Portal',
+      author: 'HexaLabs Portal',
     });
 
     logger.info(`Linux template saved: ${newImageName} from ${containerDoc.name}`);

@@ -103,7 +103,7 @@ router.get('/:conn', async (req, res) => {
         `<html><body style="font-family:sans-serif;padding:40px;max-width:480px;margin:0 auto;">
           <h2 style="color:#dc2626;">Link not valid</h2>
           <p>This lab link is either tampered with, or the lab has been deleted. Please log into your training portal at
-          <a href="${(process.env.APP_BASE_URL || 'https://getlabs.cloud')}/login">the portal</a>
+          <a href="${(process.env.APP_BASE_URL || 'https://hexalabs.online')}/login">the portal</a>
           and use "Open in Browser" from there.</p>
         </body></html>`);
     }

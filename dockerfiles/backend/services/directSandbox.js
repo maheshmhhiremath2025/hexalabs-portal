@@ -229,7 +229,7 @@ async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
 
   // 2. Grant the student access to the project via IAM policy binding.
   //    The userEmail MUST be a real Google account (Gmail or Google Workspace).
-  //    If it's not (e.g. admin@getlabs.cloud), the binding will fail and the
+  //    If it's not (e.g. admin@hexalabs.online), the binding will fail and the
   //    student won't be able to access the project. In that case, ops needs
   //    to provide the student's Google email explicitly.
   //

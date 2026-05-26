@@ -44,7 +44,7 @@ const generateEmail = (users) => {
 
         <h3 style="color: #3840b2;">📥 Getting Started – Quick Steps</h3>
         <ol style="font-size: 16px; color: #333; padding-left: 20px;">
-          <li>Login to <a href="https://getlabs.cloud/" style="color: #1a73e8;">Synergific Cloud Portal</a> using the credentials above.</li>
+          <li>Login to <a href="https://hexalabs.online/" style="color: #1a73e8;">Synergific Cloud Portal</a> using the credentials above.</li>
           <li>Navigate to <b>Access Sandbox</b> &gt; Check your credits &gt; Click <b>Create Sandbox</b>.</li>
           <li>Enter a sandbox name, click <b>Create</b>, then <b>Refresh</b> to view it.</li>
           <li>Once created, <b>copy your Sandbox Name</b>.</li>
@@ -69,7 +69,7 @@ const generateEmail = (users) => {
 
 <p style="font-size: 16px; color: #333;">
   📄 Please refer to the 
-  <a href="https://getlabs.cloud/azure-sandbox.pdf" style="color: #1a73e8; text-decoration: none;" target="_blank">
+  <a href="https://hexalabs.online/azure-sandbox.pdf" style="color: #1a73e8; text-decoration: none;" target="_blank">
     Azure Sandbox Guide (PDF)
   </a> 
   for full guidelines and allowed services.

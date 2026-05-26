@@ -121,14 +121,14 @@ async function handleInviteMember(req, res) {
 
     // Send invitation email
     if (sendEmail) {
-      sendEmail(email, `You've been invited to ${team.name} on GetLabs`,
+      sendEmail(email, `You've been invited to ${team.name} on HexaLabs`,
         `<div style="font-family: -apple-system, sans-serif; max-width: 500px;">
           <div style="background: #11192a; padding: 16px 20px; border-radius: 8px 8px 0 0;">
             <h2 style="color: white; margin: 0; font-size: 16px;">Team Invitation</h2>
           </div>
           <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <p>You've been invited to join <strong>${team.name}</strong> on GetLabs Cloud Portal.</p>
-            <p>Login at <a href="https://getlabs.cloud/login">getlabs.cloud/login</a> with your email: <strong>${email}</strong></p>
+            <p>You've been invited to join <strong>${team.name}</strong> on HexaLabs Cloud Portal.</p>
+            <p>Login at <a href="https://hexalabs.online/login">hexalabs.online/login</a> with your email: <strong>${email}</strong></p>
             <p>Default password: <strong>Welcome1234!</strong> (change it after first login)</p>
           </div>
         </div>`

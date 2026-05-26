@@ -1,4 +1,4 @@
-# GetLabs — COBOL Dev Workstation
+# HexaLabs — COBOL Dev Workstation
 
 Browser-based VS Code with GnuCOBOL, gdb, and COBOL language extensions pre-installed.
 Used by the **AWS Mainframe Modernization** lab to cover Day 3 "develop / modify / debug
@@ -11,7 +11,7 @@ Open the integrated terminal (`` Ctrl+` ``) and run:
 ```bash
 cd /home/coder/workspace/cobol-samples
 make              # compiles hello + payroll + inventory
-./hello           # "Hello from GnuCOBOL on GetLabs"
+./hello           # "Hello from GnuCOBOL on HexaLabs"
 ./payroll         # weekly payroll report (in-memory demo data)
 ./inventory       # creates STOCK.IDX, then updates SKU00002
 ```

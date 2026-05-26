@@ -1,8 +1,8 @@
 // KasmVNC reverse proxy — customers reach their VMs via the portal
-// domain (https://api.getlabs.cloud/kasm/<vmName>/...) instead of a raw
+// domain (https://api.hexalabs.online/kasm/<vmName>/...) instead of a raw
 // public IP, which many corporate firewalls block.
 //
-// Flow: browser -> nginx (api.getlabs.cloud) -> this Express route ->
+// Flow: browser -> nginx (api.hexalabs.online) -> this Express route ->
 //       http-proxy-middleware -> <vm.publicIp>:6901
 //
 // Notes:

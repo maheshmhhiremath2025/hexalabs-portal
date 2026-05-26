@@ -109,7 +109,7 @@ const handler = async (job) => {
       ? new Date(data.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
       : 'Contact your administrator';
     const portalLink = 'https://portal.synergificsoftware.com';
-    const welcomeSubject = `[GetLabs] ${data.trainingName || data.vmName} - Your Virtual Machine is Ready`;
+    const welcomeSubject = `[HexaLabs] ${data.trainingName || data.vmName} - Your Virtual Machine is Ready`;
     const welcomeHtml = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;">
       <div style="background:linear-gradient(135deg, #0078D4 0%, #00BCF2 100%);border-radius:12px 12px 0 0;padding:32px 24px;text-align:center;">
@@ -117,7 +117,7 @@ const handler = async (job) => {
           <span style="font-size:11px;font-weight:700;color:#ffffff;letter-spacing:1.5px;">VM</span>
         </div>
         <div style="font-size:24px;font-weight:700;color:#ffffff;margin-bottom:4px;">Your Virtual Machine is Ready</div>
-        <div style="font-size:14px;color:rgba(255,255,255,0.85);">${data.trainingName || 'GetLabs Cloud Training'}</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.85);">${data.trainingName || 'HexaLabs Cloud Training'}</div>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:24px;">
         <div style="font-size:15px;color:#374151;line-height:1.6;margin-bottom:20px;">

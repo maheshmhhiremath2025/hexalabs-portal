@@ -3,7 +3,7 @@
 A self-contained big-data training lab image for B2B courses that ask for
 "a Linux VM with Kafka, Spark, MySQL, Cassandra, JDK 17, Python 3.10."
 
-This is the GetLabs answer to the recurring customer spec:
+This is the HexaLabs answer to the recurring customer spec:
 
 ```
 Requested VM Specifications:
@@ -26,7 +26,7 @@ terminal. No cross-student networking, perfect isolation.
 ```bash
 # Build (one-time, ~10 min)
 cd dockerfiles/lab-bigdata-workspace
-docker build -t getlabs/lab-bigdata-workspace:latest .
+docker build -t hexalabs/lab-bigdata-workspace:latest .
 
 # Run for one student
 docker run -d --name lab-bd-student01 \
@@ -37,7 +37,7 @@ docker run -d --name lab-bd-student01 \
   -e ENABLE_CASSANDRA=false \
   -e ENABLE_SSH=false \
   -e LAB_PASSWORD='ChooseAGoodPassword!' \
-  getlabs/lab-bigdata-workspace:latest
+  hexalabs/lab-bigdata-workspace:latest
 ```
 
 Student opens `http://<host-ip>:7681` in a browser → drops into a
@@ -105,7 +105,7 @@ See `docs/HOST_SIZING_GUIDE.md` for the full sizing matrix and cost model.
 ## Tools verification (after build)
 
 ```bash
-docker run --rm getlabs/lab-bigdata-workspace:latest bash -c '
+docker run --rm hexalabs/lab-bigdata-workspace:latest bash -c '
   echo "--- Java ---"        && java -version 2>&1
   echo "--- Python ---"      && python3 --version
   echo "--- Kafka ---"       && kafka-topics.sh --version
@@ -120,7 +120,7 @@ All seven commands should print versions.
 
 ## Cleanup
 
-GetLabs' existing `containerService.js` already supports stop/start/delete on
+HexaLabs' existing `containerService.js` already supports stop/start/delete on
 arbitrary containers. The `lab-bigdata-workspace` image is registered in the
 catalog at `services/containerService.js` with key `bigdata-workspace`, and
 follows the same per-container TTL + idle-shutdown automation as every other

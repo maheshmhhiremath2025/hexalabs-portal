@@ -35,9 +35,9 @@ const RECIPIENTS = [
       auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
     });
     const info = await tr.sendMail({
-      from: `"GetLabs Monitor" <${process.env.GMAIL_USER}>`,
+      from: `"HexaLabs Monitor" <${process.env.GMAIL_USER}>`,
       to: RECIPIENTS.join(','),
-      subject: `[GetLabs Prod] ${subject}`,
+      subject: `[HexaLabs Prod] ${subject}`,
       text: `${body}\n\n-- \nFrom: ${require('os').hostname()}\nAt:   ${new Date().toISOString()}\n`,
     });
     console.log(`sent: ${info.messageId}`);

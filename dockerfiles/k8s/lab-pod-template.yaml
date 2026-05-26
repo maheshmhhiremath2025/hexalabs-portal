@@ -12,9 +12,9 @@ metadata:
     user: "${USER_EMAIL}"
     image-type: "${IMAGE_KEY}"
   annotations:
-    getlabs.cloud/rate: "${RATE}"
-    getlabs.cloud/azure-equivalent-rate: "${AZURE_RATE}"
-    getlabs.cloud/created-by: "getlabs-portal"
+    hexalabs.online/rate: "${RATE}"
+    hexalabs.online/azure-equivalent-rate: "${AZURE_RATE}"
+    hexalabs.online/created-by: "hexalabs-portal"
 spec:
   # Schedule on spot nodes for cost savings
   nodeSelector:

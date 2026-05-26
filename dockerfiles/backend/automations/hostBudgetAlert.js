@@ -60,7 +60,7 @@ async function hostBudgetAlert() {
         lastAlertTime = now;
         logger.info(`[host-budget] Alert: host running ${Math.round(uptimeHours)}h with 0 alive containers`);
         await sendEmail(ALERT_EMAIL,
-          `[GetLabs] Cost alert — Host running with no active labs`,
+          `[HexaLabs] Cost alert — Host running with no active labs`,
           `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
             <div style="background:#ef4444;padding:16px 20px;border-radius:8px 8px 0 0;">
               <h2 style="color:white;margin:0;font-size:16px;">Host Running with No Labs</h2>
@@ -82,7 +82,7 @@ async function hostBudgetAlert() {
         lastAlertTime = now;
         logger.info(`[host-budget] Alert: estimated cost ₹${estimatedCostInr} exceeds threshold ₹${BUDGET_THRESHOLD_INR}`);
         await sendEmail(ALERT_EMAIL,
-          `[GetLabs] Budget alert — Host cost ₹${estimatedCostInr} exceeds ₹${BUDGET_THRESHOLD_INR}`,
+          `[HexaLabs] Budget alert — Host cost ₹${estimatedCostInr} exceeds ₹${BUDGET_THRESHOLD_INR}`,
           `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
             <div style="background:#f59e0b;padding:16px 20px;border-radius:8px 8px 0 0;">
               <h2 style="color:white;margin:0;font-size:16px;">Host Budget Alert</h2>

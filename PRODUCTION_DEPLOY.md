@@ -1,6 +1,6 @@
-# GetLabs Cloud Portal -- Production Deployment Guide
+# HexaLabs Cloud Portal -- Production Deployment Guide
 
-This document covers everything needed to deploy the GetLabs cloud training portal
+This document covers everything needed to deploy the HexaLabs cloud training portal
 on a fresh Ubuntu 22.04+ server.
 
 ---
@@ -194,16 +194,16 @@ All container images used for workspace/lab provisioning:
 21. `jupyter/scipy-notebook:latest`
 22. `jupyter/tensorflow-notebook:latest`
 
-### GetLabs Custom Lab Images (build from dockerfiles/)
-23. `getlabs/lab-devops-cicd:1.0`
-24. `getlabs/lab-terraform:1.0`
-25. `getlabs/lab-elk-stack:1.0`
-26. `getlabs/lab-ai-ml:1.0`
-27. `getlabs/lab-ansible:1.0`
-28. `getlabs/lab-monitoring:1.0`
-29. `getlabs/lab-fullstack:1.0`
-30. `getlabs/lab-docker-k8s:1.0`
-31. `getlabs/lab-bigdata-workspace:1.0`
+### HexaLabs Custom Lab Images (build from dockerfiles/)
+23. `hexalabs/lab-devops-cicd:1.0`
+24. `hexalabs/lab-terraform:1.0`
+25. `hexalabs/lab-elk-stack:1.0`
+26. `hexalabs/lab-ai-ml:1.0`
+27. `hexalabs/lab-ansible:1.0`
+28. `hexalabs/lab-monitoring:1.0`
+29. `hexalabs/lab-fullstack:1.0`
+30. `hexalabs/lab-docker-k8s:1.0`
+31. `hexalabs/lab-bigdata-workspace:1.0`
 
 ### Sysbox / Docker-in-Docker
 32. `nestybox/ubuntu-jammy-systemd-docker:latest`
@@ -287,7 +287,7 @@ cd dockerfiles
 for lab in lab-bigdata-workspace lab-devops-cicd lab-terraform lab-elk-stack \
            lab-ai-ml lab-ansible lab-monitoring lab-fullstack lab-docker-k8s; do
   echo "Building $lab..."
-  cd $lab && docker build -t getlabs/$lab:1.0 . && cd ..
+  cd $lab && docker build -t hexalabs/$lab:1.0 . && cd ..
 done
 ```
 

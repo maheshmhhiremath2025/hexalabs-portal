@@ -19,10 +19,10 @@
 #   sudo dpkg -i sysbox-ce_0.6.4-0.linux_amd64.deb
 #   sudo systemctl restart docker
 #
-# Build:  docker build -t getlabs/lab-docker-k8s:1.0 .
+# Build:  docker build -t hexalabs/lab-docker-k8s:1.0 .
 # Run:    docker run --runtime=sysbox-runc -d --name lab-dk-student01 \
 #           -p 7681:7681 -p 2222:22 \
-#           getlabs/lab-docker-k8s:1.0
+#           hexalabs/lab-docker-k8s:1.0
 #
 # Image size: ~1.2 GB (Docker CE + kubectl + kind + helm + ttyd)
 # RAM at runtime: ~512 MB idle, ~2-4 GB when running a kind cluster
@@ -106,7 +106,7 @@ RUN printf '[Unit]\nDescription=ttyd browser terminal\nAfter=network.target\n\n[
 # Welcome message
 RUN printf '\n\
 =============================================================================\n\
-              GetLabs Docker + Kubernetes Lab\n\
+              HexaLabs Docker + Kubernetes Lab\n\
 =============================================================================\n\
 \n\
 USER:        lab (sudo + docker group)\n\

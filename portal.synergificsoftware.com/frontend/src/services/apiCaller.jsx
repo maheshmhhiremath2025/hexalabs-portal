@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create an Axios instance
 const apiCaller = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'https://api.getlabs.cloud',
+    baseURL: import.meta.env.VITE_API_URL || 'https://api.hexalabs.online',
     withCredentials: true, // Send cookies with requests if needed
 });
 

@@ -101,7 +101,7 @@ export default function OrgLanding() {
             </h1>
             <p className="text-base sm:text-lg text-white/90 mb-8 max-w-2xl">
               {companyName === branding.companyName
-                ? `${companyName} uses GetLabs to deliver hands-on AWS, Azure, GCP, Linux, and DevOps labs to learners — with quotas, idle auto-shutdown, and policy guardrails baked in.`
+                ? `${companyName} uses HexaLabs to deliver hands-on AWS, Azure, GCP, Linux, and DevOps labs to learners — with quotas, idle auto-shutdown, and policy guardrails baked in.`
                 : 'Hands-on AWS, Azure, GCP, Linux, and DevOps labs — with quotas, idle auto-shutdown, and policy guardrails baked in.'}
             </p>
             <div className="flex flex-wrap gap-3">
@@ -229,7 +229,7 @@ export default function OrgLanding() {
               <img src={branding.logoUrl} alt="" className="h-5 object-contain"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             )}
-            <span>© {new Date().getFullYear()} {companyName}. Powered by GetLabs.</span>
+            <span>© {new Date().getFullYear()} {companyName}. Powered by HexaLabs.</span>
           </div>
           <div className="flex items-center gap-3">
             {branding.supportEmail && (

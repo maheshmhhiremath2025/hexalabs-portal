@@ -41,8 +41,8 @@ spec:
 
                   # Scale spot pool to 1 node
                   az aks nodepool update \
-                    --resource-group getlabs-k8s \
-                    --cluster-name getlabs-aks \
+                    --resource-group hexalabs-k8s \
+                    --cluster-name hexalabs-aks \
                     --name labpool \
                     --min-count 1 \
                     --max-count 3 \
@@ -80,8 +80,8 @@ spec:
 
                   # Scale spot pool back up
                   az aks nodepool update \
-                    --resource-group getlabs-k8s \
-                    --cluster-name getlabs-aks \
+                    --resource-group hexalabs-k8s \
+                    --cluster-name hexalabs-aks \
                     --name labpool \
                     --min-count 3 \
                     --max-count 20 \

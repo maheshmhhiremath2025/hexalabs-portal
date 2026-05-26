@@ -139,13 +139,13 @@ async function createBudget(resourceGroupName, budgetAmountInr = 500) {
                enabled: true,
                operator: "GreaterThanOrEqualTo",
                threshold: 80,
-               contactEmails: [process.env.GMAIL_USER || "admin@getlabs.cloud"],
+               contactEmails: [process.env.GMAIL_USER || "admin@hexalabs.online"],
             },
             "at100": {
                enabled: true,
                operator: "GreaterThanOrEqualTo",
                threshold: 100,
-               contactEmails: [process.env.GMAIL_USER || "admin@getlabs.cloud"],
+               contactEmails: [process.env.GMAIL_USER || "admin@hexalabs.online"],
             },
          },
       });

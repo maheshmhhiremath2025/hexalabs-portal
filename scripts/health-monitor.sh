@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# GetLabs prod health monitor — runs from cron every 10 min.
+# HexaLabs prod health monitor — runs from cron every 10 min.
 #
 # Sends email alert on STATE CHANGE only (ok→fail OR fail→ok). Silent if
 # state hasn't changed since last tick — otherwise inbox floods when
 # something's broken for hours. First-ever run records baseline silently.
 #
-# Each check writes its current state to /var/lib/getlabs-monitor/state/<name>.
+# Each check writes its current state to /var/lib/hexalabs-monitor/state/<name>.
 # Changes trigger exactly one email. Recoveries also email (so you know
 # a problem cleared without having to check the dashboard).
 #
@@ -15,8 +15,8 @@ set +e  # never exit mid-script; always run all checks
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEND_ALERT="$SCRIPT_DIR/send-alert.js"
-STATE_DIR="/var/lib/getlabs-monitor/state"
-LOG="/var/log/getlabs-monitor.log"
+STATE_DIR="/var/lib/hexalabs-monitor/state"
+LOG="/var/log/hexalabs-monitor.log"
 mkdir -p "$STATE_DIR"
 
 # node needs to be on PATH for cron — nvm puts it outside the default cron PATH
@@ -56,16 +56,16 @@ fi
 
 # ─── check 1b: PUBLIC URL reachability (what customers actually see) ─────
 # Was added after a 2026-04-19 incident where /etc/nginx/sites-enabled/
-# getlabs.cloud.broken coexisted with the live config, causing
-# intermittent 404s on https://getlabs.cloud/. Local /health returned
+# hexalabs.online.broken coexisted with the live config, causing
+# intermittent 404s on https://hexalabs.online/. Local /health returned
 # healthy the whole time because it bypassed nginx. Now we also test
 # from the outside (via the public domain) to catch nginx-level issues.
-PUBLIC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 https://getlabs.cloud/ || echo "000")
+PUBLIC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 https://hexalabs.online/ || echo "000")
 if [ "$PUBLIC_STATUS" = "200" ]; then
-  alert_on_change public_site ok "Public site RECOVERED" "https://getlabs.cloud/ is returning 200 again."
+  alert_on_change public_site ok "Public site RECOVERED" "https://hexalabs.online/ is returning 200 again."
 else
   alert_on_change public_site fail "Public site BROKEN (HTTP $PUBLIC_STATUS)" \
-    "https://getlabs.cloud/ returned HTTP $PUBLIC_STATUS — customers cannot reach the login page. Check nginx first: nginx -t; nginx -T 2>&1 | grep -i warn; ls /etc/nginx/sites-enabled/"
+    "https://hexalabs.online/ returned HTTP $PUBLIC_STATUS — customers cannot reach the login page. Check nginx first: nginx -t; nginx -T 2>&1 | grep -i warn; ls /etc/nginx/sites-enabled/"
 fi
 
 # ─── check 1c: nginx config warnings (catches duplicate server_names) ────
@@ -153,7 +153,7 @@ fi
 DISK_FREE_GB=$(df / --output=avail | tail -1 | awk '{print int($1/1024/1024)}')
 if [ "${DISK_FREE_GB:-0}" -lt 50 ]; then
   alert_on_change disk fail "Disk LOW (${DISK_FREE_GB}GB free)" \
-    "Disk free is ${DISK_FREE_GB}GB. Auto-pruning docker images; check /var/log/getlabs-monitor.log for result."
+    "Disk free is ${DISK_FREE_GB}GB. Auto-pruning docker images; check /var/log/hexalabs-monitor.log for result."
   docker system prune -f --volumes 2>/dev/null | tail -3 >> "$LOG"
   docker image prune -a --filter 'until=72h' -f 2>/dev/null | tail -3 >> "$LOG"
 else

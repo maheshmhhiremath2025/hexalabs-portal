@@ -239,7 +239,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
       {/* Footer */}
       <div className="flex-shrink-0 border-t border-white/10 p-3 space-y-2">
         <a
-          href="https://getlabs.cloud/support"
+          href="https://hexalabs.online/support"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-surface-500 hover:text-white hover:bg-white/5 transition-colors"

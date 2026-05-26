@@ -1,7 +1,7 @@
 # lab-claude-code — VS Code Server (code-server) + Claude Code CLI
 # Browser-based VS Code with AI-powered coding via Claude
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-claude-code:1.0 .
-# Run:    docker run -d -p 8080:8080 -e PASSWORD=test123 -e ANTHROPIC_API_KEY=sk-... getlabs/lab-claude-code:1.0
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-claude-code:1.0 .
+# Run:    docker run -d -p 8080:8080 -e PASSWORD=test123 -e ANTHROPIC_API_KEY=sk-... hexalabs/lab-claude-code:1.0
 
 FROM codercom/code-server:latest
 

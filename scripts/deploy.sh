@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GetLabs portal deploy script — pulls latest, rebuilds frontend, reinstalls
+# HexaLabs portal deploy script — pulls latest, rebuilds frontend, reinstalls
 # backend deps, restarts PM2.
 #
 # Run on the prod server as root from the repo root:
@@ -141,9 +141,9 @@ fi
 # ─── 6. Public-URL sanity (what customers actually see) ──────────────────────
 # A local /health OK doesn't mean the public site is OK — nginx can still route
 # /, /login, /signup to the wrong server block (learned the hard way on
-# 2026-04-19 when getlabs.cloud.broken coexisted with the live config).
+# 2026-04-19 when hexalabs.online.broken coexisted with the live config).
 # Hit the public domain the same way a customer would.
-PUBLIC_BASE="${PUBLIC_BASE_URL:-https://getlabs.cloud}"
+PUBLIC_BASE="${PUBLIC_BASE_URL:-https://hexalabs.online}"
 log "Public-URL sanity on $PUBLIC_BASE ..."
 PUBLIC_FAIL=0
 for path in / /login /signup; do

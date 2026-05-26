@@ -343,7 +343,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
     setDeadVms(sortVms(data.filter(vm => !vm.isAlive)));
   }, []);
 
-  const getLabsData = useCallback(async () => {
+  const hexaLabsData = useCallback(async () => {
     if (!userDetails?.email || !selectedTraining) return;
     setLoading(true);
     try {
@@ -398,7 +398,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
       // Azure VMs are async (queue + Azure API), so we register a pendingOp
       // that the polling effect will watch until the DB reflects the target.
       if (!vmSel.length) {
-        await getLabsData();
+        await hexaLabsData();
         show(`${isStart ? 'Started' : 'Stopped'} ${containerSel.length} workspace${containerSel.length > 1 ? 's' : ''}`, 'success');
         return;
       }
@@ -413,7 +413,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
       };
       savePendingOp(selectedTraining, op);
       setPendingOp(op);
-      if (containerSel.length) setTimeout(getLabsData, 2000);
+      if (containerSel.length) setTimeout(hexaLabsData, 2000);
     } catch (err) {
       // Surface the backend's own message — in particular the 503 from the
       // queue-health guard ("Queue workers are not processing jobs right
@@ -425,7 +425,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         || `Failed to ${operation} ${label}`;
       show(msg, 'error');
     }
-  }, [pendingOp, aliveVms, apiRoutes, show, getLabsData, selectedTraining]);
+  }, [pendingOp, aliveVms, apiRoutes, show, hexaLabsData, selectedTraining]);
 
   const launchVM = useCallback(async (vm) => {
     if (!vm.isRunning) return show('VM must be running', 'error');
@@ -512,10 +512,10 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
         await apiCaller.delete('/azure/vm', { data: { vmName: vm.name, resourceGroup: vm.resourceGroup } });
       }
       show(`${vm.name} deleted`, 'success');
-      await getLabsData();
+      await hexaLabsData();
     } catch { show('Delete failed', 'error'); }
     finally { setLoading(false); }
-  }, [show, getLabsData]);
+  }, [show, hexaLabsData]);
 
   const toggleAll = useCallback(() => {
     const all = filtered.length > 0 && filtered.every(vm => vm.selected);
@@ -545,13 +545,13 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
   // that training (handles both refresh and switching trainings mid-op).
   useEffect(() => {
     if (!selectedTraining) { setAliveVms([]); setDeadVms([]); setPendingOp(null); return; }
-    getLabsData();
+    hexaLabsData();
     setPendingOp(loadPendingOp(selectedTraining));
     // Fetch guided lab linked to this training
     apiCaller.get(`/guided-labs/by-training/${selectedTraining}`)
       .then(res => setGuidedLab(res.data || null))
       .catch(() => setGuidedLab(null));
-  }, [selectedTraining, getLabsData]);
+  }, [selectedTraining, hexaLabsData]);
 
   // Polling loop — runs only while a pendingOp exists. Faster cadence than the
   // old 10s setInterval so the progress bar actually moves, and it resyncs
@@ -567,10 +567,10 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
     // First poll runs quickly (3s) — Azure often flips state in well under 30s.
     // Subsequent polls every 5s. A 1s tick keeps the elapsed counter moving.
     const tickId = setInterval(() => alive && setTick(t => t + 1), 1000);
-    const firstPoll = setTimeout(() => alive && getLabsData(), 3000);
-    const poll = setInterval(() => alive && getLabsData(), 5000);
+    const firstPoll = setTimeout(() => alive && hexaLabsData(), 3000);
+    const poll = setInterval(() => alive && hexaLabsData(), 5000);
     return () => { alive = false; clearInterval(tickId); clearInterval(poll); clearTimeout(firstPoll); };
-  }, [pendingOp, doneCount, getLabsData, clearPendingOp]);
+  }, [pendingOp, doneCount, hexaLabsData, clearPendingOp]);
 
   if (!selectedTraining) {
     return (
@@ -627,7 +627,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
                   try {
                     await apiCaller.patch('/azure/expiry', { trainingName: selectedTraining, extendHours: parseInt(hours) });
                     show(`Lab extended by ${hours} hours`, 'success');
-                    getLabsData();
+                    hexaLabsData();
                   } catch { show('Failed to extend', 'error'); }
                 }}
                 className="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors"
@@ -753,7 +753,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
             <FaPowerOff className="w-2.5 h-2.5" /> Stop
           </button>
 
-          <button onClick={getLabsData} disabled={loading || opActive}
+          <button onClick={hexaLabsData} disabled={loading || opActive}
             className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 transition-colors" title="Refresh">
             <FaArrowsSpin className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -772,7 +772,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
 
       {/* VM Settings — superadmin only */}
       {userDetails?.userType === 'superadmin' && aliveVms.length > 0 && (
-        <VmSettingsPanel trainingName={selectedTraining} vms={aliveVms} onUpdate={getLabsData} show={show} />
+        <VmSettingsPanel trainingName={selectedTraining} vms={aliveVms} onUpdate={hexaLabsData} show={show} />
       )}
 
       {/* Table */}

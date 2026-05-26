@@ -116,7 +116,7 @@ async function handleGetMachines(req,res){
          // corporate firewalls, hence the domain route. ?password=… &
          // autoconnect=1 skips the noVNC Connect button for a true
          // one-click login.
-         const apiBase = process.env.KASM_PROXY_BASE || 'https://api.getlabs.cloud';
+         const apiBase = process.env.KASM_PROXY_BASE || 'https://api.hexalabs.online';
          const vmList = (Array.isArray(vm) ? vm : []).map(v => {
            const obj = typeof v.toObject === 'function' ? v.toObject() : v;
            if (obj.kasmVnc && obj.name && !obj.accessUrl) {

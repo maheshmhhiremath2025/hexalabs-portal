@@ -264,7 +264,7 @@ router.post('/:slug/deploy', restrictToLoggedinUserOnly, async (req, res) => {
     if (!email) return res.status(400).json({ message: 'User email required' });
 
     // For GCP templates: require a Google email (Gmail or Google Workspace).
-    // The portal email (admin@getlabs.cloud) won't work for GCP console access.
+    // The portal email (admin@hexalabs.online) won't work for GCP console access.
     const googleEmail = req.body?.googleEmail || null;
     if (template.cloud === 'gcp' && !googleEmail) {
       return res.status(400).json({

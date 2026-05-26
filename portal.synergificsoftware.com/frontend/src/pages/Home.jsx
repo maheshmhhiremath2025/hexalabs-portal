@@ -171,7 +171,7 @@ export default function Home({ userDetails }) {
             </div>
             <div className="divide-y divide-gray-50">
               <NavRow to="/courses" icon={FaGraduationCap} label="Course Catalog" desc="Browse lab templates" />
-              <a href="https://getlabs.cloud/support" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+              <a href="https://hexalabs.online/support" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center">
                   <FaBook className="w-3.5 h-3.5 text-gray-500" />
                 </div>

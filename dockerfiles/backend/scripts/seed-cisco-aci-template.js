@@ -66,7 +66,7 @@ async function seed() {
   } else {
     await CourseAnalysis.create({
       originalFilename: 'cisco-aci-dc-training-labs.xlsx',
-      uploadedBy: 'admin@getlabs.cloud',
+      uploadedBy: 'admin@hexalabs.online',
       customerName: 'Demo Customer',
       status: 'analyzed',
       forceType: 'cloud_sandbox',

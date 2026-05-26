@@ -15,8 +15,8 @@ const credentials = new ClientSecretCredential(
 );
 const computeClient = new ComputeManagementClient(credentials, process.env.SUBSCRIPTION_ID);
 
-const MC_PUBLIC_URL = process.env.MESHCENTRAL_PUBLIC_URL || 'https://mesh.getlabs.cloud';
-const MC_DEVICE_GROUP = process.env.MESHCENTRAL_DEVICE_GROUP || 'getlabs-windows';
+const MC_PUBLIC_URL = process.env.MESHCENTRAL_PUBLIC_URL || 'https://mesh.hexalabs.online';
+const MC_DEVICE_GROUP = process.env.MESHCENTRAL_DEVICE_GROUP || 'hexalabs-windows';
 const MC_MESH_ID = process.env.MESHCENTRAL_MESH_ID || '';
 
 function generateMshContent(vmName) {

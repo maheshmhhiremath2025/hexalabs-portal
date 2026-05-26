@@ -104,7 +104,7 @@ async function generateReportPDF(trainingName, organization) {
     const dark = '#111827';
 
     // Header
-    doc.fontSize(10).fillColor(gray).text('GetLabs Cloud Portal', 50, 50);
+    doc.fontSize(10).fillColor(gray).text('HexaLabs Cloud Portal', 50, 50);
     doc.fontSize(10).fillColor(gray).text(`Generated: ${data.generatedAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`, 50, 50, { align: 'right' });
 
     doc.moveDown(2);
@@ -181,7 +181,7 @@ async function generateReportPDF(trainingName, organization) {
     doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor('#e5e7eb').stroke();
     doc.moveDown(0.5);
     doc.fontSize(8).fillColor(gray).text(
-      `This report was auto-generated from actual lab usage data recorded by GetLabs Cloud Portal. No manual input or self-reporting.`,
+      `This report was auto-generated from actual lab usage data recorded by HexaLabs Cloud Portal. No manual input or self-reporting.`,
       50, doc.y, { width: doc.page.width - 100, align: 'center' }
     );
 
@@ -199,7 +199,7 @@ async function generateReportPDF(trainingName, organization) {
 
       // Title
       doc.moveDown(4);
-      doc.fontSize(10).fillColor(blue).text('GETLABS CLOUD PORTAL', { align: 'center' });
+      doc.fontSize(10).fillColor(blue).text('HEXALABS CLOUD PORTAL', { align: 'center' });
       doc.moveDown(2);
       doc.fontSize(24).fillColor(dark).text('Certificate of Lab Completion', { align: 'center' });
 
@@ -233,7 +233,7 @@ async function generateReportPDF(trainingName, organization) {
         ['Period:', student.firstLogin && student.lastActivity
           ? `${student.firstLogin.toLocaleDateString('en-IN', { dateStyle: 'medium' })} — ${student.lastActivity.toLocaleDateString('en-IN', { dateStyle: 'medium' })}`
           : '—'],
-        ['Platform:', 'GetLabs Cloud Portal'],
+        ['Platform:', 'HexaLabs Cloud Portal'],
       ];
 
       for (const [label, value] of details) {
@@ -251,7 +251,7 @@ async function generateReportPDF(trainingName, organization) {
       doc.moveDown(3);
       const sigY = doc.y;
       doc.moveTo(doc.page.width / 2 - 80, sigY).lineTo(doc.page.width / 2 + 80, sigY).strokeColor('#9ca3af').lineWidth(0.5).stroke();
-      doc.fontSize(9).fillColor(gray).text('GetLabs Cloud Portal', doc.page.width / 2 - 80, sigY + 5, { width: 160, align: 'center' });
+      doc.fontSize(9).fillColor(gray).text('HexaLabs Cloud Portal', doc.page.width / 2 - 80, sigY + 5, { width: 160, align: 'center' });
     }
 
     doc.end();

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # provision-ubuntu22-kasm.sh
 #
-# Turns a fresh Ubuntu 22.04 VM into a GetLabs workspace template:
+# Turns a fresh Ubuntu 22.04 VM into a HexaLabs workspace template:
 #   1. KasmVNC (browser desktop, port 6901 HTTPS)
 #   2. XFCE4 + Firefox + dev tools pre-installed
 #   3. Performance sysctl tweaks (BBR, net buffers, swappiness)
@@ -69,7 +69,7 @@ EOF
 
 # ---------- 3. Performance sysctl tweaks ----------
 log "Applying performance sysctls"
-cat >/etc/sysctl.d/99-getlabs-perf.conf <<'EOF'
+cat >/etc/sysctl.d/99-hexalabs-perf.conf <<'EOF'
 # Network — BBR congestion control + larger buffers for snappy SSH/VNC
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
@@ -119,7 +119,7 @@ log "Enabling root SSH with password auth"
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 # Also clobber cloud-init's ssh_pwauth override that ships on Azure images
-cat >/etc/ssh/sshd_config.d/99-getlabs.conf <<'EOF'
+cat >/etc/ssh/sshd_config.d/99-hexalabs.conf <<'EOF'
 PasswordAuthentication yes
 PermitRootLogin yes
 ClientAliveInterval 120
@@ -135,20 +135,20 @@ log "Installing firstboot hook (grants NOPASSWD sudo + starts KasmVNC)"
 #   - Grant passwordless sudo to any user in the 'sudo' group
 #   - Start KasmVNC for the first non-system user we find (the Azure-
 #     provisioned admin), using that user's login password as the VNC pw
-cat >/usr/local/bin/getlabs-firstboot.sh <<'EOF'
+cat >/usr/local/bin/hexalabs-firstboot.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 # NOPASSWD sudo for any sudo-group member (Azure adds admin user here)
-echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-getlabs-nopw
-chmod 0440 /etc/sudoers.d/90-getlabs-nopw
+echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-hexalabs-nopw
+chmod 0440 /etc/sudoers.d/90-hexalabs-nopw
 
 # Find the Azure-provisioned admin user: first human uid >= 1000
 ADMIN_USER=$(awk -F: '$3>=1000 && $3<65000 && $1!="nobody" {print $1; exit}' /etc/passwd || true)
 if [[ -n "${ADMIN_USER:-}" ]]; then
   # KasmVNC needs its own password file; use the portal-provided VNC pw
-  # via env var GETLABS_VNC_PASS if given, otherwise match the linux pw.
-  VNC_PASS="${GETLABS_VNC_PASS:-}"
+  # via env var HEXALABS_VNC_PASS if given, otherwise match the linux pw.
+  VNC_PASS="${HEXALABS_VNC_PASS:-}"
   if [[ -z "$VNC_PASS" ]]; then
     # Fall back to a fixed default only for manual testing — operator
     # should rotate this via the portal flow.
@@ -163,21 +163,21 @@ if [[ -n "${ADMIN_USER:-}" ]]; then
   systemctl restart "kasmvncserver@$ADMIN_USER" 2>/dev/null || systemctl restart kasmvncserver@1 2>/dev/null || true
 fi
 EOF
-chmod +x /usr/local/bin/getlabs-firstboot.sh
+chmod +x /usr/local/bin/hexalabs-firstboot.sh
 
-cat >/etc/systemd/system/getlabs-firstboot.service <<'EOF'
+cat >/etc/systemd/system/hexalabs-firstboot.service <<'EOF'
 [Unit]
-Description=GetLabs first-boot initialisation
+Description=HexaLabs first-boot initialisation
 After=network-online.target
-ConditionPathExists=!/var/lib/getlabs-firstboot.done
+ConditionPathExists=!/var/lib/hexalabs-firstboot.done
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/getlabs-firstboot.sh
-ExecStartPost=/usr/bin/touch /var/lib/getlabs-firstboot.done
+ExecStart=/usr/local/bin/hexalabs-firstboot.sh
+ExecStartPost=/usr/bin/touch /var/lib/hexalabs-firstboot.done
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable getlabs-firstboot.service >/dev/null
+systemctl enable hexalabs-firstboot.service >/dev/null
 
 # ---------- 7. Sysprep (run LAST — VM is ready for capture after this) ----------
 log "Sysprep (clear logs, history, host keys, waagent)"

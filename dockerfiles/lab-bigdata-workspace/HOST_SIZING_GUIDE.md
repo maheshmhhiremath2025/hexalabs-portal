@@ -1,7 +1,7 @@
 # Host Sizing Guide — Container Lab Hosting
 
 A practical guide for picking the right Azure VM (or any cloud host) to run
-a container-based GetLabs training batch. Covers memory math, vCPU
+a container-based HexaLabs training batch. Covers memory math, vCPU
 allocation, the ratio of host capacity to student count, and the cost
 difference vs the equivalent per-student VM approach.
 
@@ -134,7 +134,7 @@ This is a heavy course. If the customer is price-sensitive, consider:
 1. **Always use Spot, never on-demand** for training that can tolerate the 1-2% eviction rate (most can — students reconnect to a new container in 30s).
 2. **Pre-pull the image** on the host before the batch starts. Add to your provisioning script:
    ```
-   docker pull getlabs/lab-bigdata-workspace:latest
+   docker pull hexalabs/lab-bigdata-workspace:latest
    ```
 3. **Set per-container limits explicitly** with `--memory` and `--cpus`. Don't rely on Docker defaults.
 4. **Use a dedicated data volume** mounted at `/var/lib/docker` on the Premium SSD. Don't put it on the OS disk.

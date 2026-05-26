@@ -1,8 +1,8 @@
 # lab-soc-analyst — SOC Analyst Training Lab
 # Wazuh Manager + Elasticsearch + Kibana + Suricata + Filebeat
 # Browser terminal via ttyd on port 7681, Kibana on 5601
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-soc-analyst:1.0 .
-# Run:    docker run -d -p 7681:7681 --cap-add NET_ADMIN getlabs/lab-soc-analyst:1.0
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-soc-analyst:1.0 .
+# Run:    docker run -d -p 7681:7681 --cap-add NET_ADMIN hexalabs/lab-soc-analyst:1.0
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

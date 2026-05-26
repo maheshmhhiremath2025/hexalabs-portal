@@ -1,6 +1,6 @@
 # lab-ai-ml — Python AI/ML lab with JupyterLab + TensorFlow + PyTorch + HuggingFace
 # Runtime: normal runc | Per-seat: 2 vCPU / 4 GB (CPU), 4 vCPU / 16 GB (GPU)
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-ai-ml:1.0 .
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-ai-ml:1.0 .
 
 FROM python:3.11-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8
@@ -69,7 +69,7 @@ RUN mkdir -p /var/run/sshd /home/lab/notebooks /home/lab/datasets && \
     chown -R lab:lab /home/lab
 
 # Sample notebook
-RUN printf '{\n "cells": [\n  {"cell_type": "markdown", "metadata": {}, "source": ["# GetLabs AI/ML Workspace\\n","\\n","Welcome! All frameworks are pre-installed:\\n","- TensorFlow, PyTorch, HuggingFace Transformers\\n","- scikit-learn, XGBoost, LightGBM\\n","- pandas, numpy, matplotlib, seaborn\\n","- spaCy, NLTK, OpenCV"]},\n  {"cell_type": "code", "metadata": {}, "source": ["import tensorflow as tf\\nimport torch\\nimport transformers\\nimport sklearn\\nprint(f\\"TF: {tf.__version__}, PyTorch: {torch.__version__}, HF: {transformers.__version__}, sklearn: {sklearn.__version__}\\")"], "execution_count": null, "outputs": []}\n ],\n "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python", "version": "3.11.0"}},\n "nbformat": 4, "nbformat_minor": 4\n}\n' \
+RUN printf '{\n "cells": [\n  {"cell_type": "markdown", "metadata": {}, "source": ["# HexaLabs AI/ML Workspace\\n","\\n","Welcome! All frameworks are pre-installed:\\n","- TensorFlow, PyTorch, HuggingFace Transformers\\n","- scikit-learn, XGBoost, LightGBM\\n","- pandas, numpy, matplotlib, seaborn\\n","- spaCy, NLTK, OpenCV"]},\n  {"cell_type": "code", "metadata": {}, "source": ["import tensorflow as tf\\nimport torch\\nimport transformers\\nimport sklearn\\nprint(f\\"TF: {tf.__version__}, PyTorch: {torch.__version__}, HF: {transformers.__version__}, sklearn: {sklearn.__version__}\\")"], "execution_count": null, "outputs": []}\n ],\n "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python", "version": "3.11.0"}},\n "nbformat": 4, "nbformat_minor": 4\n}\n' \
       > /home/lab/notebooks/welcome.ipynb && chown lab:lab /home/lab/notebooks/welcome.ipynb
 
 # Supervisor — JupyterLab as primary interface + ttyd + SSH

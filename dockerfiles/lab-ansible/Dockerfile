@@ -1,7 +1,7 @@
 # lab-ansible — Ansible controller + 3 simulated managed nodes (via SSH)
 # Runtime: sysbox-runc (runs multiple SSH targets inside via systemd)
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-ansible:1.0 .
-# Run:    docker run --runtime=sysbox-runc -d -p 7681:7681 getlabs/lab-ansible:1.0
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-ansible:1.0 .
+# Run:    docker run --runtime=sysbox-runc -d -p 7681:7681 hexalabs/lab-ansible:1.0
 
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Kolkata LANG=C.UTF-8

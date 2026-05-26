@@ -105,7 +105,7 @@ const LAB_GENERATION_TOOL = {
 
 // ─── System Prompts ───────────────────────────────────────────────────────
 
-const GENERATION_SYSTEM_PROMPT = `You are a senior DevOps engineer creating production-grade guided labs for GetLabs — a cloud training platform with real VMs, containers, and cloud sandboxes.
+const GENERATION_SYSTEM_PROMPT = `You are a senior DevOps engineer creating production-grade guided labs for HexaLabs — a cloud training platform with real VMs, containers, and cloud sandboxes.
 
 Read the input (PDF/CSV — syllabus, TOC, lab manual, or topics) and generate a COMPLETE guided lab executable start-to-finish on a fresh system.
 

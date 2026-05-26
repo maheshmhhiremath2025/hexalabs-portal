@@ -27,11 +27,11 @@
 #   => ~2.5 GB without Cassandra, ~3.7 GB with Cassandra
 # Recommend --memory=6g per container.
 #
-# Build:  docker build -t getlabs/lab-bigdata-workspace:latest .
+# Build:  docker build -t hexalabs/lab-bigdata-workspace:latest .
 # Run:    docker run -d --name lab-bd-student01 --memory=6g --cpus=2 \
 #             -p 7681:7681 -p 8888:8888 \
 #             -e ENABLE_SSH=true -e ENABLE_CASSANDRA=false \
-#             getlabs/lab-bigdata-workspace:latest
+#             hexalabs/lab-bigdata-workspace:latest
 # =============================================================================
 
 FROM ubuntu:22.04

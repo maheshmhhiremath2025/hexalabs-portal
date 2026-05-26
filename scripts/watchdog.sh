@@ -29,7 +29,7 @@ fi
 # 3. Workers — ALERT ONLY (auto-restart removed; was pointing at broken compose file)
 WORKERS_UP=$(docker ps --filter "name=dockerfiles-worker" --filter "status=running" -q | wc -l)
 if [ "$WORKERS_UP" -lt 5 ]; then
-  WSTATE=/var/lib/getlabs-monitor/state/watchdog_workers
+  WSTATE=/var/lib/hexalabs-monitor/state/watchdog_workers
   mkdir -p $(dirname "$WSTATE")
   if [ "$(cat "$WSTATE" 2>/dev/null)" != "low" ]; then
     echo "low" > "$WSTATE"
@@ -37,7 +37,7 @@ if [ "$WORKERS_UP" -lt 5 ]; then
     notify "Workers LOW ($WORKERS_UP/10)" "Only $WORKERS_UP of 10 dockerfiles-worker containers running. Manual restart needed. Check: docker ps --filter name=dockerfiles-worker"
   fi
 else
-  echo "ok" > /var/lib/getlabs-monitor/state/watchdog_workers 2>/dev/null
+  echo "ok" > /var/lib/hexalabs-monitor/state/watchdog_workers 2>/dev/null
 fi
 
 # 4. MongoDB

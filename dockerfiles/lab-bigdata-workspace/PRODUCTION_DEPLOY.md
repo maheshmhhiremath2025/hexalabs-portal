@@ -6,7 +6,7 @@ What you do tomorrow to push the image and have your customer test it.
 
 Pick a registry and authenticate. **Docker Hub is the simplest** — free,
 public, no infrastructure to manage. The catalog is currently configured for
-Docker Hub under the `getlabs` namespace.
+Docker Hub under the `hexalabs` namespace.
 
 ### Option A: Docker Hub (recommended for first push)
 
@@ -16,7 +16,7 @@ docker login
 # password: <your-dockerhub-password-or-PAT>
 ```
 
-If you don't have a `getlabs` org on Docker Hub yet, either:
+If you don't have a `hexalabs` org on Docker Hub yet, either:
 1. Create one at https://hub.docker.com/orgs (free), OR
 2. Push to your personal namespace and update the catalog entry's `image:`
    field accordingly (e.g. `kumar202699/lab-bigdata-workspace:1.0`).
@@ -25,25 +25,25 @@ If you don't have a `getlabs` org on Docker Hub yet, either:
 
 ```bash
 # One-time: create the registry
-az acr create --resource-group <rg> --name getlabsacr --sku Basic
+az acr create --resource-group <rg> --name hexalabsacr --sku Basic
 
 # Login
-az acr login --name getlabsacr
+az acr login --name hexalabsacr
 
 # Tell push.sh to use this registry
-export REGISTRY=getlabsacr.azurecr.io
+export REGISTRY=hexalabsacr.azurecr.io
 ```
 
 Then update the catalog entry in [services/containerService.js](../backend/services/containerService.js) to:
 ```js
-image: 'getlabsacr.azurecr.io/getlabs/lab-bigdata-workspace:1.0',
+image: 'hexalabsacr.azurecr.io/hexalabs/lab-bigdata-workspace:1.0',
 ```
 
 ### Option C: AWS ECR (if you prefer to keep it on AWS)
 
 ```bash
 # One-time: create the repo
-aws ecr create-repository --repository-name getlabs/lab-bigdata-workspace --region ap-south-1
+aws ecr create-repository --repository-name hexalabs/lab-bigdata-workspace --region ap-south-1
 
 # Login
 aws ecr get-login-password --region ap-south-1 | \
@@ -55,7 +55,7 @@ export REGISTRY=<account>.dkr.ecr.ap-south-1.amazonaws.com
 
 Update the catalog entry to:
 ```js
-image: '<account>.dkr.ecr.ap-south-1.amazonaws.com/getlabs/lab-bigdata-workspace:1.0',
+image: '<account>.dkr.ecr.ap-south-1.amazonaws.com/hexalabs/lab-bigdata-workspace:1.0',
 ```
 
 ## Push the image
@@ -84,13 +84,13 @@ To push a new version later:
 SSH to the production VM and pull the image to confirm registry access:
 
 ```bash
-docker pull getlabs/lab-bigdata-workspace:1.0
+docker pull hexalabs/lab-bigdata-workspace:1.0
 ```
 
 Or, if you used a custom registry:
 
 ```bash
-docker pull <your-registry>/getlabs/lab-bigdata-workspace:1.0
+docker pull <your-registry>/hexalabs/lab-bigdata-workspace:1.0
 ```
 
 You should see all 22 layers download and a final `Status: Downloaded newer image` line.
@@ -107,7 +107,7 @@ You should see all 22 layers download and a final `Status: Downloaded newer imag
 8. Click Deploy
 
 The backend will:
-1. Call `dockerode.pull('getlabs/lab-bigdata-workspace:1.0')` if not already cached
+1. Call `dockerode.pull('hexalabs/lab-bigdata-workspace:1.0')` if not already cached
 2. Create the container with the env vars from the catalog
 3. Bind a port from the 10000-11000 range to ttyd's port 7681
 4. Save to the `containers` collection
@@ -134,7 +134,7 @@ The whole experience is < 30 seconds from "click Deploy" to "running kafka-topic
 | `docker pull` works but container fails to start | First-run init script error | `docker logs <container>` and check for the supervisord errors |
 | Terminal opens but Kafka isn't running | `ENABLE_KAFKA` env var not passed through | Verify the catalog entry has `ENABLE_KAFKA=true` in `env[]` |
 | Port already in use | Container port range exhausted | Check `CONTAINER_PORT_END` in backend env, or stop dead containers |
-| Slow image pull | Image is 1.5 GB | Pre-pull on each host: `docker pull getlabs/lab-bigdata-workspace:1.0` |
+| Slow image pull | Image is 1.5 GB | Pre-pull on each host: `docker pull hexalabs/lab-bigdata-workspace:1.0` |
 | Customer says "kafka-topics command not found" | They're using sh, not bash | `bash` then re-run; the lab user defaults to bash |
 
 ## Pre-pull on production hosts (recommended)
@@ -145,7 +145,7 @@ deploy pipeline:
 
 ```bash
 # As part of your docker-compose up or host provisioning
-docker pull getlabs/lab-bigdata-workspace:1.0
+docker pull hexalabs/lab-bigdata-workspace:1.0
 ```
 
 You already have a pattern for this in [containerService.js:172](../backend/services/containerService.js#L172) where it pulls on demand if the image isn't cached, but the first student of each batch eats the cold-pull penalty. Pre-pulling makes student-1 as fast as student-25.
@@ -171,7 +171,7 @@ If `1.0` has a bug and you need to roll back:
 ## How to make the image private
 
 If you want the image private (only your hosts can pull it):
-1. Docker Hub: set the repo to private at https://hub.docker.com/r/getlabs/lab-bigdata-workspace/settings
+1. Docker Hub: set the repo to private at https://hub.docker.com/r/hexalabs/lab-bigdata-workspace/settings
 2. ACR: it's private by default (no action needed)
 3. ECR: it's private by default (no action needed)
 

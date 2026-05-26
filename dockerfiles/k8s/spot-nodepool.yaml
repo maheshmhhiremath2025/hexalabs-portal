@@ -3,8 +3,8 @@
 #
 # Create AKS cluster (one-time):
 # az aks create \
-#   --resource-group getlabs-k8s \
-#   --name getlabs-aks \
+#   --resource-group hexalabs-k8s \
+#   --name hexalabs-aks \
 #   --node-count 1 \
 #   --node-vm-size Standard_D2s_v3 \
 #   --generate-ssh-keys \
@@ -12,8 +12,8 @@
 #
 # Add Spot Node Pool for lab containers:
 # az aks nodepool add \
-#   --resource-group getlabs-k8s \
-#   --cluster-name getlabs-aks \
+#   --resource-group hexalabs-k8s \
+#   --cluster-name hexalabs-aks \
 #   --name labpool \
 #   --priority Spot \
 #   --eviction-policy Delete \

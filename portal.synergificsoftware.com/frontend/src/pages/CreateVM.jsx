@@ -408,7 +408,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   // Live deploy progress — persisted in localStorage so a page refresh
   // doesn't drop the progress card. Max 2h lifetime; stale entries
   // older than that are discarded on load.
-  const DEPLOY_PROGRESS_KEY = 'getlabs.deployProgress';
+  const DEPLOY_PROGRESS_KEY = 'hexalabs.deployProgress';
   const DEPLOY_PROGRESS_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
   const [deployProgress, setDeployProgress] = useState(() => {

@@ -87,7 +87,7 @@ const ANALYSIS_TOOL = {
       recommendedDeployment: {
         type: 'string',
         enum: ['cloud_sandbox', 'container_lab'],
-        description: 'How GetLabs should deliver this course. "cloud_sandbox" = real AWS/Azure/GCP accounts (for cert prep, cloud-services courses). "container_lab" = a Linux container preloaded with software (when the PDF asks for a VM with specific tools like Kafka/Spark/Hadoop/MEAN-stack/custom binaries, NOT cloud-service exposure).',
+        description: 'How HexaLabs should deliver this course. "cloud_sandbox" = real AWS/Azure/GCP accounts (for cert prep, cloud-services courses). "container_lab" = a Linux container preloaded with software (when the PDF asks for a VM with specific tools like Kafka/Spark/Hadoop/MEAN-stack/custom binaries, NOT cloud-service exposure).',
       },
       containerLab: {
         type: 'object',
@@ -110,11 +110,11 @@ const ANALYSIS_TOOL = {
           },
           recommendedImageKey: {
             type: 'string',
-            description: 'GetLabs catalog key for the matching container image. Use "bigdata-workspace" for Kafka/Spark/MySQL stacks, "bigdata-workspace-cassandra" if Cassandra is required, "ubuntu-xfce" for general Ubuntu desktop, "kali-desktop" for security/pentesting, "vscode-kasm" for dev-only courses, "jupyter-scipy" for data-science notebooks. Pick the closest match.',
+            description: 'HexaLabs catalog key for the matching container image. Use "bigdata-workspace" for Kafka/Spark/MySQL stacks, "bigdata-workspace-cassandra" if Cassandra is required, "ubuntu-xfce" for general Ubuntu desktop, "kali-desktop" for security/pentesting, "vscode-kasm" for dev-only courses, "jupyter-scipy" for data-science notebooks. Pick the closest match.',
           },
           proposedStack: {
             type: 'array',
-            description: 'The components GetLabs will provide pre-installed, mapped to customer needs.',
+            description: 'The components HexaLabs will provide pre-installed, mapped to customer needs.',
             items: {
               type: 'object',
               properties: {
@@ -149,7 +149,7 @@ const ANALYSIS_TOOL = {
   },
 };
 
-const SYSTEM_PROMPT = `You are the course analysis engine for GetLabs, a training lab provider that delivers TWO kinds of labs:
+const SYSTEM_PROMPT = `You are the course analysis engine for HexaLabs, a training lab provider that delivers TWO kinds of labs:
 
 1. **Cloud sandbox labs**: real AWS/Azure/GCP accounts for cert-prep and cloud-services courses (AWS Solutions Architect, Azure Administrator, GCP Data Engineer, etc.).
 2. **Container labs**: Linux containers preloaded with software stacks for courses that ask for "a VM with Kafka/Spark/Hadoop/MEAN/etc. installed" — these should NEVER be deployed as cloud accounts because the customer doesn't actually need cloud services, just a Linux machine with tools.

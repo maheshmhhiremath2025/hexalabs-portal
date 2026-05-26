@@ -1,7 +1,7 @@
 # lab-mainframe-cobol — VS Code Server + GnuCOBOL + gdb for mainframe modernization labs
 # Day 3 develop / modify / debug COBOL coverage without a Micro Focus license.
-# Build:  docker build --platform linux/amd64 -t getlabs/lab-mainframe-cobol:1.0 .
-# Run:    docker run -d -p 8080:8080 -e PASSWORD=test123 getlabs/lab-mainframe-cobol:1.0
+# Build:  docker build --platform linux/amd64 -t hexalabs/lab-mainframe-cobol:1.0 .
+# Run:    docker run -d -p 8080:8080 -e PASSWORD=test123 hexalabs/lab-mainframe-cobol:1.0
 
 FROM codercom/code-server:latest
 

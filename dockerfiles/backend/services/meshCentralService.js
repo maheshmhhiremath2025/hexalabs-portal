@@ -10,12 +10,12 @@ const { logger } = require('../plugins/logger');
 
 // ─── Environment config ─────────────────────────────────────────────────
 const MC_INTERNAL_URL = process.env.MESHCENTRAL_URL || 'wss://meshcentral:4443';
-const MC_PUBLIC_URL = process.env.MESHCENTRAL_PUBLIC_URL || 'https://mesh.getlabs.cloud';
+const MC_PUBLIC_URL = process.env.MESHCENTRAL_PUBLIC_URL || 'https://mesh.hexalabs.online';
 const MC_ADMIN_USER = process.env.MESHCENTRAL_ADMIN_USER || 'admin';
 const MC_ADMIN_PASS = process.env.MESHCENTRAL_ADMIN_PASS || 'admin';
 const MC_LOGIN_TOKEN = process.env.MESHCENTRAL_LOGIN_TOKEN || '';
 const MC_LOGIN_TOKEN_KEY = process.env.MESHCENTRAL_LOGIN_TOKEN_KEY || '';
-const MC_DEVICE_GROUP = process.env.MESHCENTRAL_DEVICE_GROUP || 'getlabs-windows';
+const MC_DEVICE_GROUP = process.env.MESHCENTRAL_DEVICE_GROUP || 'hexalabs-windows';
 const MC_MESH_ID = process.env.MESHCENTRAL_MESH_ID || '';
 
 // ─── WebSocket API wrapper ──────────────────────────────────────────────
