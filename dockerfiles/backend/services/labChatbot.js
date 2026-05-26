@@ -16,7 +16,7 @@ const MAX_TOKENS = 300;
 const RATE_LIMIT = 20;        // max messages per user per hour
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-const SYSTEM_PROMPT = `You are a lab assistant for Synergific Cloud Portal. Help students with their cloud training labs. You can help with: troubleshooting lab access issues, explaining cloud concepts (AWS/Azure/GCP), guiding through lab exercises, explaining error messages. Keep answers concise (under 200 words). Do not help with anything unrelated to cloud training.`;
+const SYSTEM_PROMPT = `You are a lab assistant for HexaLabs Cloud Portal. Help students with their cloud training labs. You can help with: troubleshooting lab access issues, explaining cloud concepts (AWS/Azure/GCP), guiding through lab exercises, explaining error messages. Keep answers concise (under 200 words). Do not help with anything unrelated to cloud training.`;
 
 // In-memory rate limiter: { email: { count, resetAt } }
 const rateLimits = new Map();

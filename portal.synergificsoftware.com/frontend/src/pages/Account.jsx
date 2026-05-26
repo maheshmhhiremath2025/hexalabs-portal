@@ -584,9 +584,9 @@ const Account = ({ userDetails, apiRoutes }) => {
         amount: orderData.amount * 100,
         currency: 'INR',
         order_id: orderId,
-        name: accountDetails.name || 'Synergific Software',
+        name: accountDetails.name || 'HexaLabs',
         description: `Payment for ${selectedInvoices.length} invoice(s): ${selectedInvoices.map(inv => inv.particular).join(', ')}`,
-        image: 'https://synergificsoftware.com/assets/images/logo.png',
+        image: 'https://hexalabs.online/assets/images/logo.png',
         handler: async (response) => {
           console.log('✅ Payment successful response:', response);
           const paymentDetails = {

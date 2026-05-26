@@ -104,7 +104,7 @@ const generateEmail = (vms, customer) => {
   const { html: renderedHtml, text: renderedText } = renderEmail({
     title: single ? 'Your lab is ready' : `Your ${count} labs are ready`,
     badge: 'VM',
-    intro: `Hi ${customer || 'there'}, the virtual machine${single ? '' : 's'} you requested ${single ? 'is' : 'are'} up and running on Synergific Cloud Portal. Share each row of the table below with the assigned student. The "Open in browser" button is a permanent one-click link — never expires, always works.`,
+    intro: `Hi ${customer || 'there'}, the virtual machine${single ? '' : 's'} you requested ${single ? 'is' : 'are'} up and running on HexaLabs Cloud Portal. Share each row of the table below with the assigned student. The "Open in browser" button is a permanent one-click link — never expires, always works.`,
     sections,
   });
 

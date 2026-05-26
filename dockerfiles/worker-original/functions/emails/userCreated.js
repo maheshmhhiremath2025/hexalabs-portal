@@ -30,10 +30,10 @@ const generateEmail = (users) => {
     <div style="max-width: 700px; margin: auto; font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
       <div style="background-color: #ffffff; border-radius: 8px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
         
-        <h2 style="color: #3840b2;">🚀 Welcome to Synergific Azure Sandbox!</h2>
+        <h2 style="color: #3840b2;">🚀 Welcome to HexaLabs Azure Sandbox!</h2>
 
         <p style="font-size: 16px; color: #333;">Dear User,</p>
-        <p style="font-size: 16px; color: #333;">We’re excited to have you on <b>Synergific Azure Sandbox</b> — your dedicated, secure, and high-performance cloud environment for hands-on Azure exploration.</p>
+        <p style="font-size: 16px; color: #333;">We’re excited to have you on <b>HexaLabs Azure Sandbox</b> — your dedicated, secure, and high-performance cloud environment for hands-on Azure exploration.</p>
 
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;" />
 
@@ -44,7 +44,7 @@ const generateEmail = (users) => {
 
         <h3 style="color: #3840b2;">📥 Getting Started – Quick Steps</h3>
         <ol style="font-size: 16px; color: #333; padding-left: 20px;">
-          <li>Login to <a href="https://portal.synergificsoftware.com/" style="color: #1a73e8;">Synergific Cloud Portal</a> using the credentials above.</li>
+          <li>Login to <a href="https://portal.hexalabs.online/" style="color: #1a73e8;">HexaLabs Cloud Portal</a> using the credentials above.</li>
           <li>Navigate to <b>Access Sandbox</b> &gt; Check your credits &gt; Click <b>Create Sandbox</b>.</li>
           <li>Enter a sandbox name, click <b>Create</b>, then <b>Refresh</b> to view it.</li>
           <li>Once created, <b>copy your Sandbox Name</b>.</li>
@@ -69,7 +69,7 @@ const generateEmail = (users) => {
 
 <p style="font-size: 16px; color: #333;">
   📄 Please refer to the 
-  <a href="https://portal.synergificsoftware.com/azure-sandbox.pdf" style="color: #1a73e8; text-decoration: none;" target="_blank">
+  <a href="https://portal.hexalabs.online/azure-sandbox.pdf" style="color: #1a73e8; text-decoration: none;" target="_blank">
     Azure Sandbox Guide (PDF)
   </a> 
   for full guidelines and allowed services.
@@ -78,14 +78,14 @@ const generateEmail = (users) => {
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;" />
 
         <h3 style="color: #3840b2;">💬 Need Help?</h3>
-        <p style="font-size: 16px; color: #333;">Our support team is here to assist you at <a href="mailto:itops@synergificsoftware.com" style="color: #1a73e8;">itops@synergificsoftware.com</a>.</p>
+        <p style="font-size: 16px; color: #333;">Our support team is here to assist you at <a href="mailto:itops@hexalabs.online" style="color: #1a73e8;">itops@hexalabs.online</a>.</p>
 
-        <p style="font-size: 16px; color: #333;">Thank you for choosing <b>Synergific Software</b>. We look forward to supporting your cloud journey!</p>
+        <p style="font-size: 16px; color: #333;">Thank you for choosing <b>HexaLabs</b>. We look forward to supporting your cloud journey!</p>
 
         <p style="font-size: 16px; color: #333;">Warm regards,<br/>
           <b>Mahesh Hiremath</b><br/>
-          Delivery Team | Synergific Software Pvt. Ltd.<br/>
-          📧 <a href="mailto:mahesh.hiremath@synergificsoftware.com" style="color: #1a73e8;">mahesh.hiremath@synergificsoftware.com</a>
+          Delivery Team | HexaLabs Pvt. Ltd.<br/>
+          📧 <a href="mailto:mahesh.hiremath@hexalabs.online" style="color: #1a73e8;">mahesh.hiremath@hexalabs.online</a>
         </p>
 
         <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;" />
@@ -103,7 +103,7 @@ const generateEmail = (users) => {
   const finalMessage = compiledTemplate(data);
 
   return {
-    subject: "Welcome to Synergific Azure Sandbox – Access Details Inside 🚀",
+    subject: "Welcome to HexaLabs Azure Sandbox – Access Details Inside 🚀",
     body: finalMessage
   };
 };

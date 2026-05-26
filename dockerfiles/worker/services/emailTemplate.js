@@ -1,7 +1,7 @@
 // Unified email template engine — used by ALL customer-facing emails.
 //
 // Goal: every customer email looks like it came from the same product.
-// Brand is fixed (Synergific Cloud Portal) — we intentionally do NOT pull
+// Brand is fixed (HexaLabs Cloud Portal) — we intentionally do NOT pull
 // per-org branding here. Reason: emails go through Gmail and end up in
 // reply chains, forwards, and screenshots; consistent brand identity
 // across organizations protects ours.
@@ -17,14 +17,14 @@
 // got to 848 lines in the first place.
 
 const BRAND = {
-  name: 'Synergific Cloud Portal',
+  name: 'HexaLabs Cloud Portal',
   tagline: 'Enterprise Cloud Training Labs',
   primary: '#2563eb',
   accent: '#1e40af',
   // Gradient used by the header
   headerGradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
   // Default support contact (visible in every email footer)
-  supportEmail: 'itops@synergificsoftware.com',
+  supportEmail: 'itops@hexalabs.online',
   portalUrl: 'https://hexalabs.online',
 };
 

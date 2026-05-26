@@ -60,9 +60,9 @@ const generateInvoicePDF = (invoiceData, organization) => {
         paintHeaderBar();
 
         // logo
-        const logoBuf = await fetchBufferFromUrl('https://synergificsoftware.com/assets/images/logo.png');
+        const logoBuf = await fetchBufferFromUrl('https://hexalabs.online/assets/images/logo.png');
         if (logoBuf) doc.image(logoBuf, 50, 20, { height: 60 });
-        else { setFont(true, 22, '#333333'); doc.text('SYNERGIFIC SOFTWARE', 50, 30); }
+        else { setFont(true, 22, '#333333'); doc.text('HEXALABS SOFTWARE', 50, 30); }
 
         // ===== Company + Invoice strip (FULL grey background) =====
         const stripY = 115;
@@ -72,12 +72,12 @@ const generateInvoicePDF = (invoiceData, organization) => {
         doc.restore();
 
         // Company text
-        setFont(true, 14, '#333333'); doc.text('SYNERGIFIC SOFTWARE PRIVATE LIMITED', 50, 120);
+        setFont(true, 14, '#333333'); doc.text('HEXALABS SOFTWARE PRIVATE LIMITED', 50, 120);
         setFont(false, 9, '#666666');
         doc.text('46/4, Novel Tech Park, GB Palya, Kudlu Gate', 50, 140)
             .text('Bengaluru - 560029', 50, 152)
             .text('KARNATAKA, INDIA', 50, 164)
-            .text('Email: muneeb@synergificsoftware.com', 50, 176)
+            .text('Email: muneeb@hexalabs.online', 50, 176)
             .text('Mobile: +91 9541551557', 50, 188)
             .text('GSTIN: 29ABDC56932Q1ZH', 50, 200);
 
@@ -201,7 +201,7 @@ const generateInvoicePDF = (invoiceData, organization) => {
         setFont(true, 10, '#333333'); doc.text('Bank Details', bankBoxX + 10, summaryY + 10);
         setFont(false, 9, '#666666');
         doc.text('Bank Name: ICICI BANK LIMITED', bankBoxX + 10, summaryY + 28)
-           .text('Account Name: SYNERGIFIC SOFTWARE PRIVATE LIMITED', bankBoxX + 10, summaryY + 40)
+           .text('Account Name: HEXALABS SOFTWARE PRIVATE LIMITED', bankBoxX + 10, summaryY + 40)
            .text('Account Number: 029705006065', bankBoxX + 10, summaryY + 52)
            .text('IFSC Code: ICIC0000297', bankBoxX + 10, summaryY + 64);
 
@@ -257,7 +257,7 @@ const generateInvoicePDF = (invoiceData, organization) => {
           footerY = bottomLimit - footerHeight;
         }
         setFont(true, 9, '#6c757d');
-        doc.text('For SYNERGIFIC SOFTWARE PRIVATE LIMITED', 0, footerY, { align: 'center' });
+        doc.text('For HEXALABS SOFTWARE PRIVATE LIMITED', 0, footerY, { align: 'center' });
         setFont(false, 9, '#6c757d');
         doc.text('Authorised Signatory', 0, footerY + 12, { align: 'center' });
         setFont(false, 7, '#999999');
@@ -646,14 +646,14 @@ async function handleDeleteLogs(req, res) {
                     We will be sending you a tax invoice shortly.
                 </p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">
-                    Thank you for choosing Synergific Software. We appreciate your trust in us and look forward to assisting you with any further requirements you may have.
+                    Thank you for choosing HexaLabs. We appreciate your trust in us and look forward to assisting you with any further requirements you may have.
                 </p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">Best regards,</p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">
                     Krishan Agarwal <br/>
                     Delivery Team <br/>
-                    Synergific Software Pvt. Ltd. <br/>
-                    <a href="mailto:mahesh.hiremath@synergificsoftware.com" style="color: #1a73e8; text-decoration: none;">mahesh.hiremath@synergificsoftware.com</a>
+                    HexaLabs Pvt. Ltd. <br/>
+                    <a href="mailto:mahesh.hiremath@hexalabs.online" style="color: #1a73e8; text-decoration: none;">mahesh.hiremath@hexalabs.online</a>
                 </p>
             `,
                 attachment: {
@@ -944,7 +944,7 @@ const handleAddTransaction = async (req, res) => {
                     <div style="display: flex; align-items: center;">
                         <div style="background: white; padding: 10px; border-radius: 8px; margin-right: 20px; display: flex; align-items: center; justify-content: center;">
                         <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
-                            <img src="https://synergificsoftware.com/assets/images/logo.png"
+                            <img src="https://hexalabs.online/assets/images/logo.png"
                                 style="width: 100%; height: 100%; object-fit: contain;"
                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                         </div>
@@ -959,12 +959,12 @@ const handleAddTransaction = async (req, res) => {
                     <div style="padding: 25px; background: #f8f9fa; border-bottom: 2px solid #e9ecef;">
                     <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
                         <div style="flex: 1; min-width: 300px;">
-                        <h3 style="color: #333; margin-bottom: 10px;">SYNERGIFIC SOFTWARE PRIVATE LIMITED</h3>
+                        <h3 style="color: #333; margin-bottom: 10px;">HEXALABS SOFTWARE PRIVATE LIMITED</h3>
                         <p style="margin: 5px 0; color: #666;">
                             46/4, Novel Tech Park, GB Palya, Kudlu Gate<br>
                             Bengaluru - 560029<br>
                             KARNATAKA, INDIA<br>
-                            Email: muneeb@synergificsoftware.com<br>
+                            Email: muneeb@hexalabs.online<br>
                             Mobile: +91 9541551557<br>
                             GSTIN: 29ABDC56932Q1ZH
                         </p>
@@ -1094,7 +1094,7 @@ const handleAddTransaction = async (req, res) => {
                             <h4 style="color: #333; margin-bottom: 10px;">Bank Details</h4>
                             <p style="margin: 5px 0; color: #666; font-size: 14px;">
                             <strong>Bank Name:</strong> ICICI BANK LIMITED<br>
-                            <strong>Account Name:</strong> SYNERGIFIC SOFTWARE PRIVATE LIMITED<br>
+                            <strong>Account Name:</strong> HEXALABS SOFTWARE PRIVATE LIMITED<br>
                             <strong>Account Number:</strong> 029705006065<br>
                             <strong>IFSC Code:</strong> ICIC0000297
                             </p>
@@ -1147,7 +1147,7 @@ const handleAddTransaction = async (req, res) => {
                     <!-- Footer -->
                     <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e9ecef; text-align: center;">
                         <p style="margin: 0; color: #6c757d;">
-                        <strong>For SYNERGIFIC SOFTWARE PRIVATE LIMITED</strong><br>
+                        <strong>For HEXALABS SOFTWARE PRIVATE LIMITED</strong><br>
                         Authorised Signatory
                         </p>
                         <p style="margin: 10px 0 0 0; color: #999; font-size: 12px;">

@@ -2,10 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import apiCaller from '../services/apiCaller';
 
 const DEFAULTS = {
-  logoUrl: '/logo/synergificsoftware-logo.png',
+  logoUrl: '/logo/hexalabssoftware-logo.png',
   primaryColor: '#2563eb',
   accentColor: '#1e40af',
-  companyName: 'Synergific',
+  companyName: 'HexaLabs',
   faviconUrl: '',
   loginBanner: '',
   supportEmail: '',

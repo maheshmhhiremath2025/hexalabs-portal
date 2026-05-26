@@ -1,5 +1,5 @@
 // Premium fintech-style login inspired by the "ApexTrade" glassmorphism design.
-// Adapted for Synergific Cloud Portal — core login flow is unchanged from the
+// Adapted for HexaLabs Cloud Portal — core login flow is unchanged from the
 // previous revision (POST /user/login, localStorage write, onLogin callback,
 // ?org=xxx public branding). Only visuals + copy changed.
 
@@ -201,8 +201,8 @@ const Login = ({ onLogin, apiRoutes }) => {
     }
   };
 
-  const companyName = branding.companyName || 'Synergific';
-  const logoUrl = branding.logoUrl || '/logo/synergificsoftware-logo.png';
+  const companyName = branding.companyName || 'HexaLabs';
+  const logoUrl = branding.logoUrl || '/logo/hexalabssoftware-logo.png';
 
   return (
     <div
@@ -219,7 +219,7 @@ const Login = ({ onLogin, apiRoutes }) => {
             {/* Logo + ISO badge */}
             <div className="flex items-center justify-between">
               {/* Brand: gradient icon tile (kept) + logo wordmark image
-                  (replaces the previous 'Synergific' text). Same logo file
+                  (replaces the previous 'HexaLabs' text). Same logo file
                   is used in both spots — object-contain prevents
                   distortion in the square tile. */}
               <div className="flex items-center gap-4">
@@ -323,7 +323,7 @@ const Login = ({ onLogin, apiRoutes }) => {
           {/* Footer */}
           <div className="relative z-10 flex items-center justify-between border-t border-white/5 pt-6 mt-6 text-slate-500 text-[10px]"
             style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-            <p className="tracking-[0.2em] uppercase">Synergific Software Pvt Ltd</p>
+            <p className="tracking-[0.2em] uppercase">HexaLabs Cloud Solutions Pvt Ltd</p>
             <div className="flex items-center gap-6 font-bold uppercase tracking-[0.2em]">
               <span className="text-emerald-500 flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
@@ -410,7 +410,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                 <p className="text-slate-400 font-medium">
                   {hasPriorLogin
                     ? 'Access your cloud training portal.'
-                    : 'New to Synergific? Use "Book demo" above — we\'ll walk you through it.'}
+                    : 'New to HexaLabs? Use "Book demo" above — we\'ll walk you through it.'}
                 </p>
               </div>
 

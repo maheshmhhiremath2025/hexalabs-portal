@@ -1,5 +1,5 @@
 // Customer-facing emails go through emailTemplate.js for consistent
-// "Synergific Cloud Portal" branding (gradient header, sections, plain-text
+// "HexaLabs Cloud Portal" branding (gradient header, sections, plain-text
 // fallback). Ops emails (notifyOpsDeploySummary) stay plain-tabular since
 // they're internal records, not customer-facing.
 //
@@ -25,7 +25,7 @@ const transporter = nodemailer.createTransport({
 
 const FROM = `"${BRAND.name}" <${process.env.GMAIL_USER}>`;
 // Always CC'd on EVERY email so we keep a central record.
-const INTERNAL_CC = ['itops@synergificsoftware.com'];
+const INTERNAL_CC = ['itops@hexalabs.online'];
 const CC_RECIPIENTS = INTERNAL_CC.join(', ');
 
 /**
@@ -546,7 +546,7 @@ async function notifyRdsLabReady({
 // >=3, and counter resets when VM actually stops via the reconciler).
 
 async function notifyStuckStop({ vmName, organization, trainingName, resourceGroup, attempts, idleMinutes }) {
-  const to = 'itops@synergificsoftware.com';
+  const to = 'itops@hexalabs.online';
   const subject = `[OPS] VM stop stuck — ${vmName} (${attempts} attempts)`;
   const { html, text } = renderEmail({
     title: `VM stop is stuck`,
@@ -563,7 +563,7 @@ async function notifyStuckStop({ vmName, organization, trainingName, resourceGro
       ]),
       steps('What to check', [
         { text: "docker ps --filter name=worker — all 10 replicas should be Up (healthy), not Restarting" },
-        { text: "pm2 logs synergific-backend --err — look for recurring errors" },
+        { text: "pm2 logs hexalabs-backend --err — look for recurring errors" },
         { text: "Azure portal: is the VM truly running or in a stuck state (e.g. deallocating for hours)?" },
         { text: "After fixing: db.vms.updateOne({name: '" + vmName + "'}, {$set: {stopAttempts: 0}}) to silence the alert and re-arm detection." },
       ]),
@@ -651,7 +651,7 @@ async function sendBulkDeploySummary({
       <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 6px 6px;padding:18px 22px;background:#fff;">
         <p style="font-size:13px;color:#374151;margin:0 0 14px;">
           The table below lists every ${kindLabel.slice(0, -1).toLowerCase()} provisioned for this training.
-          Please share the individual credentials with each learner ${orgAdmins.length ? '— only the org admin and the Synergific ops team are on this email.' : '.'}
+          Please share the individual credentials with each learner ${orgAdmins.length ? '— only the org admin and the HexaLabs ops team are on this email.' : '.'}
         </p>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -728,10 +728,10 @@ function escapeHtml(s) {
 //   2. Notification to internal ops (itops) with full details.
 //
 // Both use the unified email template so a demo request reads like any
-// other official Synergific email.
+// other official HexaLabs email.
 
 async function notifyDemoRequestConfirmation({ name, email, company, demoDate, preferredTiming }) {
-  const subject = `We received your demo request — Synergific Cloud Portal`;
+  const subject = `We received your demo request — HexaLabs Cloud Portal`;
 
   const sections = [
     info('What happens next',
@@ -752,7 +752,7 @@ async function notifyDemoRequestConfirmation({ name, email, company, demoDate, p
   const { html, text } = renderEmail({
     title: 'Demo request received',
     badge: 'DEMO',
-    intro: `Hi ${name.split(' ')[0] || 'there'},<br><br>Thanks for requesting a demo of Synergific Cloud Portal. We've got your details and one of our team will reach out shortly.`,
+    intro: `Hi ${name.split(' ')[0] || 'there'},<br><br>Thanks for requesting a demo of HexaLabs Cloud Portal. We've got your details and one of our team will reach out shortly.`,
     sections,
   });
 
@@ -760,7 +760,7 @@ async function notifyDemoRequestConfirmation({ name, email, company, demoDate, p
 }
 
 async function notifyDemoRequestOps({ name, email, company, demoDate, preferredTiming, ipAddress, userAgent }) {
-  const subject = `[Synergific Ops] New demo request — ${company} (${name})`;
+  const subject = `[HexaLabs Ops] New demo request — ${company} (${name})`;
   const to = joinEmails(INTERNAL_CC);  // itops
 
   // Plain-text body — easy to forward / paste into CRM
@@ -776,7 +776,7 @@ async function notifyDemoRequestOps({ name, email, company, demoDate, preferredT
     `User-Agent:       ${userAgent || '—'}`,
     `Submitted at:     ${new Date().toISOString()}`,
     '',
-    `Reply-to link:    mailto:${email}?subject=Re%3A%20Your%20Synergific%20demo%20request`,
+    `Reply-to link:    mailto:${email}?subject=Re%3A%20Your%20HexaLabs%20demo%20request`,
   ].join('\n');
 
   const html = `
@@ -795,7 +795,7 @@ async function notifyDemoRequestOps({ name, email, company, demoDate, preferredT
           <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">IP / UA</td><td style="color:#6b7280;font-size:11px;">${ipAddress || '—'}  ·  ${(userAgent || '').slice(0, 80)}</td></tr>
         </table>
         <div style="margin-top:16px;">
-          <a href="mailto:${email}?subject=Re%3A%20Your%20Synergific%20demo%20request" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">Reply to ${name.split(' ')[0]}</a>
+          <a href="mailto:${email}?subject=Re%3A%20Your%20HexaLabs%20demo%20request" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">Reply to ${name.split(' ')[0]}</a>
         </div>
         <p style="color:#9ca3af;font-size:11px;margin:16px 0 0;">Stored in DemoRequest collection. Update status from the admin panel once you've reached out.</p>
       </div>

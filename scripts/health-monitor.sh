@@ -51,7 +51,7 @@ if curl -s --max-time 5 http://127.0.0.1:8001/health | grep -q '"status":"health
   alert_on_change backend ok "Backend RECOVERED" "Backend /health is responding again."
 else
   alert_on_change backend fail "Backend DOWN" \
-    "Backend /health not responding at http://127.0.0.1:8001/health. Check: pm2 list; pm2 logs synergific-backend --err --lines 30"
+    "Backend /health not responding at http://127.0.0.1:8001/health. Check: pm2 list; pm2 logs hexalabs-backend --err --lines 30"
 fi
 
 # ─── check 1b: PUBLIC URL reachability (what customers actually see) ─────
@@ -109,7 +109,7 @@ CURR_RESTARTS=$(pm2 jlist 2>/dev/null | node -e '
   process.stdin.on("end", () => {
     try {
       const j = JSON.parse(d || "[]");
-      const p = j.find(x => x.name === "synergific-backend");
+      const p = j.find(x => x.name === "hexalabs-backend");
       console.log(p ? p.pm2_env.restart_time : 0);
     } catch (e) { console.log(0); }
   });
@@ -120,7 +120,7 @@ if [ -n "$PREV_RESTARTS" ] && [ "$CURR_RESTARTS" -gt "$PREV_RESTARTS" ]; then
   JUMP=$((CURR_RESTARTS - PREV_RESTARTS))
   log "ALERT pm2 restarts jumped $PREV_RESTARTS -> $CURR_RESTARTS"
   node "$SEND_ALERT" "Backend crashed $JUMP time(s) in last 10min" \
-    "PM2 restart count went from $PREV_RESTARTS to $CURR_RESTARTS. Likely a new bug or flaky client. Inspect: pm2 logs synergific-backend --err --lines 80" 2>&1 >> "$LOG"
+    "PM2 restart count went from $PREV_RESTARTS to $CURR_RESTARTS. Likely a new bug or flaky client. Inspect: pm2 logs hexalabs-backend --err --lines 80" 2>&1 >> "$LOG"
 fi
 echo "$CURR_RESTARTS" > "$STATE_DIR/pm2_restarts"
 

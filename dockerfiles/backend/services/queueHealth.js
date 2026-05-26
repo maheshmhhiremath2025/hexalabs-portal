@@ -55,7 +55,7 @@ function requireWorker(req, res, next) {
       error:
         'Queue workers are not processing jobs right now. ' +
         'Your request was NOT queued. Please contact ops ' +
-        '(itops@synergificsoftware.com) or try again in a minute.',
+        '(itops@hexalabs.online) or try again in a minute.',
     });
   }).catch(next);
 }

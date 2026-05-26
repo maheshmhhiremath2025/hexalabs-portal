@@ -122,11 +122,11 @@ const SupportPage = () => {
       icon: FaEnvelope,
       title: 'Email Support',
       description: 'Detailed technical assistance',
-      details: 'itops@synergificsoftware.com',
+      details: 'itops@hexalabs.online',
       availability: '24/7',
       action: 'Send Email',
       color: 'from-purple-500 to-pink-500',
-      link: 'mailto:itops@synergificsoftware.com'
+      link: 'mailto:itops@hexalabs.online'
     }
   ];
 
@@ -136,28 +136,28 @@ const SupportPage = () => {
       icon: FaBook,
       title: 'Documentation',
       description: 'Comprehensive guides and API references',
-      link: 'https://docs.synergificsoftware.com',
+      link: 'https://docs.hexalabs.online',
       category: 'Learning'
     },
     {
       icon: FaVideo,
       title: 'Video Tutorials',
       description: 'Step-by-step video guides',
-      link: 'https://youtube.com/synergific',
+      link: 'https://youtube.com/hexalabs',
       category: 'Learning'
     },
     {
       icon: FaFileAlt,
       title: 'Knowledge Base',
       description: 'Articles and troubleshooting guides',
-      link: 'https://help.synergificsoftware.com',
+      link: 'https://help.hexalabs.online',
       category: 'Self-Help'
     },
     {
       icon: FaRocket,
       title: 'Quick Start Guide',
       description: 'Get up and running in 10 minutes',
-      link: 'https://docs.synergificsoftware.com/quickstart',
+      link: 'https://docs.hexalabs.online/quickstart',
       category: 'Learning'
     }
   ];
@@ -536,7 +536,7 @@ const SupportPage = () => {
                 Contact Support Now
               </button>
               <button 
-                onClick={() => handleResourceClick('https://docs.synergificsoftware.com')}
+                onClick={() => handleResourceClick('https://docs.hexalabs.online')}
                 className="px-8 py-4 bg-white text-gray-700 border border-gray-300 rounded-xl font-semibold hover:bg-gray-50 transition-all duration-200 flex items-center gap-3"
               >
                 <FaBook />

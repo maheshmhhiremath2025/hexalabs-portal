@@ -3,17 +3,17 @@
 # Now also emails on recovery events so you know auto-healing happened.
 LOG=/var/log/watchdog.log
 TS=$(date '+%Y-%m-%d %H:%M:%S')
-SEND=/root/synergific-portal/scripts/send-alert.js
+SEND=/root/hexalabs-portal/scripts/send-alert.js
 
 notify() {
   /root/.nvm/versions/node/v22.22.2/bin/node "$SEND" "Auto-recovery: $1" "$2" >/dev/null 2>&1 &
 }
 
 # 1. Backend (PM2)
-if ! pm2 list 2>/dev/null | grep -q 'online.*synergific-backend'; then
+if ! pm2 list 2>/dev/null | grep -q 'online.*hexalabs-backend'; then
   echo "[$TS] Backend DOWN — restarting" >> $LOG
-  cd /root/synergific-portal/dockerfiles/backend && pm2 start index.js --name synergific-backend 2>&1 >> $LOG
-  notify "Backend" "Watchdog restarted synergific-backend. Check pm2 logs for crash cause."
+  cd /root/hexalabs-portal/dockerfiles/backend && pm2 start index.js --name hexalabs-backend 2>&1 >> $LOG
+  notify "Backend" "Watchdog restarted hexalabs-backend. Check pm2 logs for crash cause."
 fi
 
 # 2. Redis
@@ -62,9 +62,9 @@ if ! docker ps --format '{{.Names}}' | grep -q guacamole; then
 fi
 
 # 7. Frontend check
-if [ ! -f /var/www/portal.synergificsoftware.com/frontend/dist/index.html ]; then
+if [ ! -f /var/www/portal.hexalabs.online/frontend/dist/index.html ]; then
   echo "[$TS] Frontend MISSING — redeploying" >> $LOG
-  cd /root/synergific-portal/portal.synergificsoftware.com/frontend && npm run build 2>&1 >> $LOG
-  cp -r dist/* /var/www/portal.synergificsoftware.com/frontend/dist/
+  cd /root/hexalabs-portal/portal.hexalabs.online/frontend && npm run build 2>&1 >> $LOG
+  cp -r dist/* /var/www/portal.hexalabs.online/frontend/dist/
   notify "Frontend" "Watchdog rebuilt frontend because dist/index.html was missing."
 fi

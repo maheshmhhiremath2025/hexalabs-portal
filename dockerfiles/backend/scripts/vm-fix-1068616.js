@@ -1,4 +1,4 @@
-require("dotenv").config({ path: "/root/synergific-portal/dockerfiles/backend/.env" });
+require("dotenv").config({ path: "/root/hexalabs-portal/dockerfiles/backend/.env" });
 const { ClientSecretCredential } = require("@azure/identity");
 const { ComputeManagementClient } = require("@azure/arm-compute");
 

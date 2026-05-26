@@ -108,7 +108,7 @@ const handler = async (job) => {
     const vmExpiresStr = data.expiresAt
       ? new Date(data.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
       : 'Contact your administrator';
-    const portalLink = 'https://portal.synergificsoftware.com';
+    const portalLink = 'https://portal.hexalabs.online';
     const welcomeSubject = `[HexaLabs] ${data.trainingName || data.vmName} - Your Virtual Machine is Ready`;
     const welcomeHtml = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;">
@@ -159,7 +159,7 @@ const handler = async (job) => {
         <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;">
           <div style="font-size:12px;color:#9ca3af;">
             Need help? Reply to this email or contact your trainer.<br>
-            <strong>Synergific Cloud Portal</strong> - Enterprise Cloud Training Labs
+            <strong>HexaLabs Cloud Portal</strong> - Enterprise Cloud Training Labs
           </div>
         </div>
       </div>

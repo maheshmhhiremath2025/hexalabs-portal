@@ -6,7 +6,7 @@
 #   bash scripts/deploy.sh
 #
 # Per the project's server rules:
-#   - Frontend builds ONLY from /root/synergific-portal/.../frontend/
+#   - Frontend builds ONLY from /root/hexalabs-portal/.../frontend/
 #     The dist/ is symlinked to /var/www/. NEVER build from /var/www/.
 #   - Mongoose strict mode strips unknown fields, so model + DB must be in sync
 #     before deploying schema changes.
@@ -20,7 +20,7 @@ set -euo pipefail
 # Resolve script location → repo root, regardless of CWD when invoked
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-FRONTEND_DIR="$REPO_ROOT/portal.synergificsoftware.com/frontend"
+FRONTEND_DIR="$REPO_ROOT/portal.hexalabs.online/frontend"
 BACKEND_DIR="$REPO_ROOT/dockerfiles/backend"
 
 # Override these with env vars if your setup differs:

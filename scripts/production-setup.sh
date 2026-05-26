@@ -227,9 +227,9 @@ if [ "$SKIP_APP" = false ]; then
   cd "$INSTALL_DIR/dockerfiles/backend"
   npm install --production 2>&1 | tail -3
 
-  if [ -d "$INSTALL_DIR/portal.synergificsoftware.com/frontend" ]; then
+  if [ -d "$INSTALL_DIR/portal.hexalabs.online/frontend" ]; then
     log "Installing frontend dependencies..."
-    cd "$INSTALL_DIR/portal.synergificsoftware.com/frontend"
+    cd "$INSTALL_DIR/portal.hexalabs.online/frontend"
     npm install 2>&1 | tail -3
   fi
 fi
@@ -370,9 +370,9 @@ fi
 # 16. Build frontend
 # ------------------------------------------------------------------
 if [ "$SKIP_APP" = false ]; then
-  if [ -d "$INSTALL_DIR/portal.synergificsoftware.com/frontend" ]; then
+  if [ -d "$INSTALL_DIR/portal.hexalabs.online/frontend" ]; then
     log "Building frontend..."
-    cd "$INSTALL_DIR/portal.synergificsoftware.com/frontend"
+    cd "$INSTALL_DIR/portal.hexalabs.online/frontend"
     npm run build 2>&1 | tail -3 || warn "Frontend build failed."
   fi
 fi
@@ -400,7 +400,7 @@ server {
 
     # Frontend
     location / {
-        root ${INSTALL_DIR}/portal.synergificsoftware.com/frontend/dist;
+        root ${INSTALL_DIR}/portal.hexalabs.online/frontend/dist;
         try_files \$uri \$uri/ /index.html;
     }
 

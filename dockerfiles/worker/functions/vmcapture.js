@@ -44,7 +44,7 @@ const createImageDefinition = async (token, galleryName, imageDefinitionName, re
             osState: "Specialized",
             hyperVGeneration: "V2",
             identifier: {
-                publisher: "synergificsoftware",
+                publisher: "hexalabssoftware",
                 offer: `customOffer-${timestamp}`,  // Unique offer
                 sku: `customSku-${timestamp}`  // Unique SKU
             }

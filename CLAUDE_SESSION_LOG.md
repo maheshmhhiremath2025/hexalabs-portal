@@ -1,8 +1,8 @@
 # Claude Code Session Log - 2026-05-25
 
-## Project: HexaLabs Cloud Portal (Synergific Software)
+## Project: HexaLabs Cloud Portal (HexaLabs)
 **Repo:** `https://github.com/maheshmhhiremath2025/hexalabs-portal.git`
-**Local Path:** `d:\hexalabs\project_backup\synergific-portal`
+**Local Path:** `d:\hexalabs\project_backup\hexalabs-portal`
 **Server:** `20.235.11.151` (user: `Hexalabs9`, pass: `<REDACTED_ADMIN_PASS>#@`)
 **Server Project Path:** `/opt/hexalabs/`
 
@@ -30,8 +30,8 @@
 
 ### Directory Structure
 ```
-synergific-portal/
-├── portal.synergificsoftware.com/frontend/   # React SPA
+hexalabs-portal/
+├── portal.hexalabs.online/frontend/   # React SPA
 │   ├── src/pages/          (46 page components)
 │   ├── src/components/     (23 components incl. GuidedLab/, Modal/)
 │   ├── src/services/       (API call abstractions)
@@ -221,7 +221,7 @@ CLIENT_SECRET=<REDACTED_CLIENT_SECRET>
 TENANT_ID=4647b273-1b26-45e6-9fec-77680619a098
 SUBSCRIPTION_ID=ba7b8c9b-59c4-475a-a85c-fff76751215a
 NODE_ENV=production
-GMAIL_USER=cloudsynergificsoftware@gmail.com
+GMAIL_USER=cloudhexalabssoftware@gmail.com
 GMAIL_PASS=<REDACTED_GMAIL_APP_PASSWORD>
 RAZORPAY_ID=<REDACTED_RAZORPAY_ID>
 RAZORPAY_KEY=<REDACTED_RAZORPAY_KEY>
@@ -235,7 +235,7 @@ OCI_PARENT_COMPARTMENT_OCID=<REDACTED_OCI_COMPARTMENT>
 KEYFILENAME=./gcp-service-account.json
 PARENTID=organizations/628552726767
 GCP_BILLING_ACCOUNT=<REDACTED_GCP_BILLING>
-CORS_ORIGINS=http://localhost:3000,https://portal.hexalabs.online,https://portal.synergificsoftware.com,https://www.hexalabs.online,https://hexalabs.online
+CORS_ORIGINS=http://localhost:3000,https://portal.hexalabs.online,https://portal.hexalabs.online,https://www.hexalabs.online,https://hexalabs.online
 REDIS_HOST=127.0.0.1
 MONGO_URI=mongodb://127.0.0.1:27017/userdb
 CONTAINER_HOST_IP=20.235.11.151
@@ -246,8 +246,8 @@ IDENTITY_TENANT_ID=4647b273-1b26-45e6-9fec-77680619a098
 IDENTITY_DOMAIN=hexalabs.online
 AWS_ACCESS_KEY=<REDACTED_AWS_KEY>
 AWS_ACCESS_SECRET=<REDACTED_AWS_SECRET>
-GUACAMOLE_URL=https://labs.synergificsoftware.com
-GUACAMOLE_PUBLIC_URL=https://labs.synergificsoftware.com
+GUACAMOLE_URL=https://labs.hexalabs.online
+GUACAMOLE_PUBLIC_URL=https://labs.hexalabs.online
 GUACAMOLE_ADMIN_USER=guacadmin
 GUACAMOLE_ADMIN_PASS=<REDACTED_GUAC_PASS>
 CONTAINER_SSL_PORT_OFFSET=0
@@ -459,7 +459,7 @@ docker ps --filter "ancestor=guacamole/guacd"
 ## Session 4: Gmail Update + Full Rebranding (2026-05-26)
 
 ### 16. Gmail Credentials Updated
-- **Old:** `cloudsynergificsoftware@gmail.com` / `<REDACTED_GMAIL_APP_PASSWORD>`
+- **Old:** `cloudhexalabssoftware@gmail.com` / `<REDACTED_GMAIL_APP_PASSWORD>`
 - **New:** `hexalabscloud@gmail.com` / `<REDACTED_GMAIL_APP_PASSWORD>`
 - Updated on both local `.env` and server `.env`
 - SMTP verified: connection OK, test email sent successfully
@@ -511,16 +511,16 @@ docker ps --filter "ancestor=guacamole/guacd"
 - Backend .env: `/opt/hexalabs/dockerfiles/backend/.env`
 - Backend code: `/opt/hexalabs/dockerfiles/backend/`
 - Worker code: `/opt/hexalabs/dockerfiles/worker/`
-- Frontend dist: `/opt/hexalabs/portal.synergificsoftware.com/frontend/dist/`
+- Frontend dist: `/opt/hexalabs/portal.hexalabs.online/frontend/dist/`
 - Backend logs: `pm2 logs hexalabs-backend`
 - Worker logs: `pm2 logs hexalabs-worker`
 - MongoDB data: Docker volume
 - Nginx config: `/etc/nginx/`
 
 ### Local
-- Project: `d:\hexalabs\project_backup\synergific-portal\`
+- Project: `d:\hexalabs\project_backup\hexalabs-portal\`
 - Backend .env: `dockerfiles/backend/.env`
-- Frontend: `portal.synergificsoftware.com/frontend/`
+- Frontend: `portal.hexalabs.online/frontend/`
 
 ### GitHub
 - Repo: `https://github.com/maheshmhhiremath2025/hexalabs-portal.git`

@@ -61,7 +61,7 @@ export default function DemoRequestModal({ open, onClose }) {
       });
       setResult({ type: 'success', message: res.data?.message || 'Request received. Check your email.' });
     } catch (err) {
-      setResult({ type: 'error', message: err.response?.data?.message || 'Something went wrong. Please try again or email itops@synergificsoftware.com' });
+      setResult({ type: 'error', message: err.response?.data?.message || 'Something went wrong. Please try again or email itops@hexalabs.online' });
     } finally {
       setSubmitting(false);
     }

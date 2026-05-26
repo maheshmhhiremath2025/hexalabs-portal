@@ -55,7 +55,7 @@ const handler = async (job) => {
             }
         };
         const Login = {
-            organization: "synergificsoftware",
+            organization: "hexalabssoftware",
             email: userPrincipalName,
             password: password,
             userType: 'sandboxuser'

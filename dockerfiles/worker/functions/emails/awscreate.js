@@ -30,7 +30,7 @@ const generateEmail = (users) => {
       <div style="width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); font-family: Arial, sans-serif; background-color: #f4f4f4;">
         <div style="padding: 20px; background-color: #ffffff; border-radius: 8px;">
           <p style="font-size: 16px; color: #333;"><b>Dear User,</b></p>
-          <p style="font-size: 16px; color: #333;">Congratulations on signing up for <b>Synergific AWS Sandbox!</b> We are excited to have you onboard and look forward to providing you with a <b>secure, flexible, and high-performance AWS cloud environment.</b></p>
+          <p style="font-size: 16px; color: #333;">Congratulations on signing up for <b>HexaLabs AWS Sandbox!</b> We are excited to have you onboard and look forward to providing you with a <b>secure, flexible, and high-performance AWS cloud environment.</b></p>
           
           <p style="font-size: 16px; color: #333;">To get started, please find below your login credentials:</p>
           {{{credentialsTable}}}
@@ -39,7 +39,7 @@ const generateEmail = (users) => {
 
           <b style="font-size: 16px; color: #333;">Access Instructions:</b>
           <ul style="font-size: 16px; color: #333;">
-            <li>Log in to your AWS Console at <a href="https://synergificsoftware.signin.aws.amazon.com/console" style="color: #1a73e8;">AWS Console</a> using the credentials provided above.</li>
+            <li>Log in to your AWS Console at <a href="https://hexalabssoftware.signin.aws.amazon.com/console" style="color: #1a73e8;">AWS Console</a> using the credentials provided above.</li>
             <li>If you encounter any issues, feel free to contact our support team.</li>
           </ul>
 
@@ -61,15 +61,15 @@ const generateEmail = (users) => {
             <li>Need Assistance? Our support team is here to help you navigate and make the most of your AWS Sandbox.</li>
           </ol>
 
-          <p style="font-size: 16px; color: #333;"><b>Support Contact:</b> <a href="mailto:itops@synergificsoftware.com" style="color: #1a73e8;">itops@synergificsoftware.com</a></p>
+          <p style="font-size: 16px; color: #333;"><b>Support Contact:</b> <a href="mailto:itops@hexalabs.online" style="color: #1a73e8;">itops@hexalabs.online</a></p>
           
-          <p style="font-size: 16px; color: #333;">Thank you for choosing <b>Synergific Software.</b> We look forward to supporting you on your cloud journey! 🚀</p>
+          <p style="font-size: 16px; color: #333;">Thank you for choosing <b>HexaLabs.</b> We look forward to supporting you on your cloud journey! 🚀</p>
           
           <p style="font-size: 16px; color: #333;">Best regards,</p>
           <p style="font-size: 16px; color: #333;"><b>Krishan Agarwal</b> <br/>
             Delivery Team <br/>
-            Synergific Software Pvt. Ltd. <br/>
-            <a href="mailto:krishan@synergificsoftware.com" style="color: #1a73e8;">krishan@synergificsoftware.com</a>
+            HexaLabs Pvt. Ltd. <br/>
+            <a href="mailto:krishan@hexalabs.online" style="color: #1a73e8;">krishan@hexalabs.online</a>
           </p>
 
           <hr style="border-top: 1px solid #ddd; margin: 20px 0;">
@@ -87,7 +87,7 @@ const generateEmail = (users) => {
   const finalMessage = compiledTemplate(data);
 
   return {
-    subject: "Welcome to Synergific AWS Sandbox – Your Cloud Journey Begins! 🚀",
+    subject: "Welcome to HexaLabs AWS Sandbox – Your Cloud Journey Begins! 🚀",
     body: finalMessage
   };
 };

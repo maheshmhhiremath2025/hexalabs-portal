@@ -244,7 +244,7 @@ Thank you for choosing HexaLabs Cloud!
 
 Best regards,
 **The HexaLabs Team**
-*portal.synergificsoftware.com*
+*portal.hexalabs.online*
 
 ---
 

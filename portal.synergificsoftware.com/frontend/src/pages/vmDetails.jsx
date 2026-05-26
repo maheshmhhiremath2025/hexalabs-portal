@@ -452,7 +452,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
       // Fallback: direct KasmVNC URL if available, else old Guacamole
       const fallbackUrl = vm.kasmVnc
         ? `http://${vm.publicIp}:6901`
-        : `https://labs.synergificsoftware.com/#/?username=${encodeURIComponent(vm.name)}&password=${encodeURIComponent(vm.adminPass)}`;
+        : `https://labs.hexalabs.online/#/?username=${encodeURIComponent(vm.name)}&password=${encodeURIComponent(vm.adminPass)}`;
       if (guidedLab) {
         navigate(`/lab-view?url=${encodeURIComponent(fallbackUrl)}&training=${encodeURIComponent(selectedTraining)}&instance=${encodeURIComponent(vm.name)}`);
       } else {

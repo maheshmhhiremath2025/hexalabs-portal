@@ -242,7 +242,7 @@ cd dockerfiles/backend
 npm install
 
 # Frontend
-cd ../../portal.synergificsoftware.com/frontend
+cd ../../portal.hexalabs.online/frontend
 npm install
 ```
 
@@ -335,7 +335,7 @@ pm2 startup
 ### Step 10: Build and Serve Frontend
 
 ```bash
-cd /opt/cloudportal/portal.synergificsoftware.com/frontend
+cd /opt/cloudportal/portal.hexalabs.online/frontend
 npm run build
 # The dist/ folder will be served by Nginx
 ```
@@ -360,7 +360,7 @@ server {
 
     # Frontend (Vite build output)
     location / {
-        root /opt/cloudportal/portal.synergificsoftware.com/frontend/dist;
+        root /opt/cloudportal/portal.hexalabs.online/frontend/dist;
         try_files $uri $uri/ /index.html;
     }
 

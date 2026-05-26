@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build and push all 11 lab images to Docker Hub (kumar202699)
-# Run from: /path/to/synergific-portal/dockerfiles/
+# Run from: /path/to/hexalabs-portal/dockerfiles/
 # Usage: chmod +x build-and-push-all.sh && ./build-and-push-all.sh
 
 set -e

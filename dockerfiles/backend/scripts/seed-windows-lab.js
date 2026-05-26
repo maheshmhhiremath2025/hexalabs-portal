@@ -2,7 +2,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/synergific';
+const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/hexalabs';
 
 mongoose.connect(uri).then(async () => {
   const GuidedLab = require('../models/guidedLab');

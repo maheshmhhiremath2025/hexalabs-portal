@@ -23,7 +23,7 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
   let azureUsername = '';
   let azurePassword = '';
   let azureObjectId = '';
-  const domain = process.env.IDENTITY_DOMAIN || process.env.AZURE_DOMAIN || 'synergificsoftware.com';
+  const domain = process.env.IDENTITY_DOMAIN || process.env.AZURE_DOMAIN || 'hexalabs.online';
 
   try {
     // Use identity credential (separate app with User.ReadWrite.All permission)

@@ -15,7 +15,7 @@
 const axios = require('axios');
 const { logger } = require('./../plugins/logger');
 
-const GUAC_URL = process.env.GUACAMOLE_URL || 'https://labs.synergificsoftware.com';
+const GUAC_URL = process.env.GUACAMOLE_URL || 'https://labs.hexalabs.online';
 const GUAC_USER = process.env.GUACAMOLE_ADMIN_USER || 'guacadmin';
 const GUAC_PASS = process.env.GUACAMOLE_ADMIN_PASS || 'guacadmin';
 

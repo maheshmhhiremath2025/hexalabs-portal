@@ -37,8 +37,8 @@ import {
 } from "recharts";
 
 /**
- * Light-themed Synergific Dashboard
- * Fetches real data from https://portal.synergificsoftware.com/overview
+ * Light-themed HexaLabs Dashboard
+ * Fetches real data from https://portal.hexalabs.online/overview
  * Professional, clean design with real metrics
  */
 
@@ -89,7 +89,7 @@ const KpiCard = ({ icon: Icon, title, value, subtitle, accent = 'blue', loading:
 
 const Dashboard = ({ apiOpenRoutes, userDetails }) => {
   const [data, setData] = useState({
-    // Core metrics from Synergific portal
+    // Core metrics from HexaLabs portal
     totalUsers: 0,
     totalOrganizations: 0,
     totalTemplates: 0,
