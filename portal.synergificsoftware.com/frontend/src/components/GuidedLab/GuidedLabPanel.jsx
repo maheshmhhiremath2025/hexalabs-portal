@@ -29,38 +29,144 @@ function fallbackCopy(text) {
   return Promise.resolve();
 }
 
-/* ===== Code block with copy button ===== */
-function CodeBlock({ children }) {
-  const [copied, setCopied] = useState(false);
-  const code = String(children).replace(/\n$/, '');
+/* ===== Parse code into logical commands =====
+ * Groups heredocs (cat << EOF ... EOF), line continuations (trailing \),
+ * and piped/chained commands as single copyable units.
+ * Blank lines between commands are treated as separators. */
+function parseCommands(code) {
   const lines = code.split('\n');
-  const isMultiLine = lines.length > 1;
+  const commands = [];
+  let current = [];
+  let heredocDelim = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Inside a heredoc — accumulate until we hit the closing delimiter
+    if (heredocDelim) {
+      current.push(line);
+      if (line.trim() === heredocDelim) {
+        commands.push(current.join('\n'));
+        current = [];
+        heredocDelim = null;
+      }
+      continue;
+    }
+
+    // Blank line between commands — flush any accumulated lines, skip blank
+    if (!line.trim() && current.length === 0) continue;
+    if (!line.trim() && current.length > 0) {
+      commands.push(current.join('\n'));
+      current = [];
+      continue;
+    }
+
+    current.push(line);
+
+    // Line continuation (trailing backslash) — keep accumulating
+    if (line.trimEnd().endsWith('\\')) continue;
+
+    // Check if this line opens a heredoc (<<EOF, << 'EOF', <<-EOF, etc.)
+    const heredocMatch = line.match(/<<-?\s*['"]?(\w+)['"]?/);
+    if (heredocMatch) {
+      heredocDelim = heredocMatch[1];
+      continue;
+    }
+
+    // Regular command complete
+    commands.push(current.join('\n'));
+    current = [];
+  }
+
+  // Flush remaining
+  if (current.length > 0) commands.push(current.join('\n'));
+  return commands.filter(c => c.trim());
+}
+
+/* ===== Code block with per-command copy buttons ===== */
+function CodeBlock({ children }) {
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(null);
+  const code = String(children).replace(/\n$/, '');
+  const commands = parseCommands(code);
+  const hasMultipleCommands = commands.length > 1;
 
   const handleCopyAll = (e) => {
     e.stopPropagation();
     copyToClipboard(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 3000);
       window.dispatchEvent(new CustomEvent('lab-clipboard', { detail: { text: code } }));
+    });
+  };
+
+  const handleCopyCmd = (cmdText, idx, e) => {
+    e.stopPropagation();
+    copyToClipboard(cmdText).then(() => {
+      setCopiedCmd(idx);
+      setTimeout(() => setCopiedCmd(null), 2000);
+      window.dispatchEvent(new CustomEvent('lab-clipboard', { detail: { text: cmdText } }));
     });
   };
 
   return (
     <div className="relative my-2 group/block">
-      {/* Top-right copy button */}
-      <button
-        onClick={handleCopyAll}
-        className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors z-10 flex items-center gap-1.5"
-        title="Copy entire command"
-      >
-        {copied ? (
-          <><FaCheck className="w-3 h-3 text-green-400" /><span className="text-[10px] font-medium text-green-400">Copied!</span></>
-        ) : (
-          <><FaCopy className="w-3 h-3" /><span className="text-[10px] font-medium">{isMultiLine ? 'Copy All' : 'Copy'}</span></>
-        )}
-      </button>
-      <pre className="bg-slate-800 text-slate-100 text-[11px] rounded-md p-3 pr-20 overflow-x-auto whitespace-pre-wrap">
-        <code>{code}</code>
+      {/* Copy All — only shown when multiple commands exist */}
+      {hasMultipleCommands && (
+        <button
+          onClick={handleCopyAll}
+          className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors z-10 flex items-center gap-1.5"
+          title="Copy all commands"
+        >
+          {copiedAll ? (
+            <><FaCheck className="w-3 h-3 text-green-400" /><span className="text-[10px] font-medium text-green-400">Copied!</span></>
+          ) : (
+            <><FaCopy className="w-3 h-3" /><span className="text-[10px] font-medium">Copy All</span></>
+          )}
+        </button>
+      )}
+      <pre className={`bg-slate-800 text-slate-100 text-[11px] rounded-md overflow-x-auto ${hasMultipleCommands ? 'pt-8 pb-2 px-0' : 'p-3 pr-16'}`}>
+        <code>
+          {hasMultipleCommands ? commands.map((cmd, idx) => (
+            <div
+              key={idx}
+              className="group/cmd relative flex items-start hover:bg-slate-700/40 px-3 py-1 transition-colors"
+            >
+              <span className="flex-1 whitespace-pre-wrap">{cmd}</span>
+              <button
+                onClick={(e) => handleCopyCmd(cmd, idx, e)}
+                className={`sticky top-0 ml-2 flex-shrink-0 px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
+                  copiedCmd === idx
+                    ? 'opacity-100 bg-green-600/30 text-green-400'
+                    : 'opacity-0 group-hover/cmd:opacity-100 bg-slate-600 text-slate-300 hover:bg-blue-600 hover:text-white'
+                }`}
+                title="Copy this command"
+              >
+                {copiedCmd === idx ? (
+                  <FaCheck className="w-2.5 h-2.5" />
+                ) : (
+                  <><FaCopy className="w-2.5 h-2.5" /><span className="text-[9px]">Copy</span></>
+                )}
+              </button>
+            </div>
+          )) : (
+            /* Single command — just show text + one copy button */
+            <div className="relative flex items-start">
+              <span className="flex-1 whitespace-pre-wrap">{code}</span>
+              <button
+                onClick={handleCopyAll}
+                className="sticky top-0 ml-2 flex-shrink-0 px-1.5 py-0.5 rounded bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors flex items-center gap-1"
+                title="Copy command"
+              >
+                {copiedAll ? (
+                  <FaCheck className="w-2.5 h-2.5 text-green-400" />
+                ) : (
+                  <><FaCopy className="w-2.5 h-2.5" /><span className="text-[9px]">Copy</span></>
+                )}
+              </button>
+            </div>
+          )}
+        </code>
       </pre>
     </div>
   );
