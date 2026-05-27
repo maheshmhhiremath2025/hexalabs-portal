@@ -1,7 +1,7 @@
-// Corporate enterprise login — clean, professional, trust-focused.
-// Split layout: blue left branding panel + light right login form.
-// All logic unchanged: POST /user/login, localStorage, onLogin callback,
-// ?org=xxx public branding, caps-lock detection, demo modal.
+// HexaLabs Cloud Portal — premium login page.
+// Split layout: dark showcase left + clean white form right.
+// Logic preserved: POST /user/login, localStorage, onLogin, ?org=xxx branding,
+// caps-lock detection, demo modal.
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -11,34 +11,35 @@ import { useBranding } from '../contexts/BrandingContext';
 import DemoRequestModal from '../components/DemoRequestModal';
 import {
   FaEnvelope, FaLock, FaArrowRight, FaShieldAlt,
-  FaBolt, FaGlobe, FaMicrochip, FaUserLock,
+  FaBolt, FaGlobe, FaMicrochip, FaUserLock, FaCheck,
   FaEye, FaEyeSlash, FaCertificate, FaCheckCircle,
   FaAws, FaMicrosoft, FaGoogle, FaRedhat, FaCloud, FaDocker,
 } from 'react-icons/fa';
 
-const SUPPORTED_CLOUDS = [
-  { icon: FaAws,       label: 'AWS',               color: '#fff' },
-  { icon: FaMicrosoft, label: 'Azure',              color: '#fff' },
-  { icon: FaGoogle,    label: 'Google Cloud',       color: '#fff' },
-  { icon: FaCloud,     label: 'Oracle Cloud',       color: '#fff' },
-  { icon: FaRedhat,    label: 'Red Hat OpenShift',  color: '#fff' },
-  { icon: FaDocker,    label: 'Containers',         color: '#fff' },
+const CLOUDS = [
+  { icon: FaAws,       label: 'AWS',              color: '#FF9900' },
+  { icon: FaMicrosoft, label: 'Azure',             color: '#00A4EF' },
+  { icon: FaGoogle,    label: 'Google Cloud',      color: '#4285F4' },
+  { icon: FaCloud,     label: 'Oracle Cloud',      color: '#F80000' },
+  { icon: FaRedhat,    label: 'OpenShift',         color: '#EE0000' },
+  { icon: FaDocker,    label: 'Containers',        color: '#2496ED' },
 ];
 
-const FEATURES = [
-  { icon: FaBolt,      title: 'Instant Provisioning', desc: 'Deploy workspaces in seconds and VMs in minutes — zero tickets, zero waiting.' },
-  { icon: FaGlobe,     title: 'Multi-Cloud Support',  desc: 'One portal for AWS, Azure, GCP, OCI, and Red Hat OpenShift labs.' },
-  { icon: FaMicrochip, title: 'Cost Guardrails',      desc: 'Budget caps, idle auto-shutdown, expiry cleanup, and per-student quotas.' },
-  { icon: FaUserLock,  title: 'Enterprise Security',  desc: 'ISO 9001 & 10004 certified with SSL everywhere and hardened IAM.' },
+const CAPABILITIES = [
+  'Instant sandbox provisioning across 5 clouds',
+  'Per-student cost caps and budget guardrails',
+  'Auto-cleanup when training batches end',
+  'White-label portal under your own brand',
+  'ISO 9001 & 10004 certified infrastructure',
+  '100+ pre-built lab images ready to deploy',
 ];
 
-// Light-theme autofill override for the right panel
 const AUTOFILL_CSS = `
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
   input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #f9fafb inset !important;
+    -webkit-box-shadow: 0 0 0 30px #fff inset !important;
     -webkit-text-fill-color: #111827 !important;
     caret-color: #111827 !important;
     transition: background-color 5000s ease-in-out 0s;
@@ -117,138 +118,135 @@ const Login = ({ onLogin, apiRoutes }) => {
       <style>{AUTOFILL_CSS}</style>
       <div className="flex min-h-screen w-full">
 
-        {/* ── Left Panel: Branding & Features (desktop only) ────────────── */}
-        <section className="relative hidden w-[52%] flex-col justify-between lg:flex overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800">
-          {/* Geometric background accent */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/[0.06]" />
-            <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-white/[0.04]" />
-            <div className="absolute top-1/2 right-1/4 w-64 h-64 rounded-full bg-indigo-500/10" />
+        {/* ── Left Panel ───────────────────────────────────────────────── */}
+        <section className="relative hidden w-[54%] lg:flex flex-col overflow-hidden" style={{ background: '#0c1222' }}>
+          {/* Ambient gradient mesh */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] rounded-full opacity-40" style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }} />
+            <div className="absolute bottom-[-15%] right-[-5%] w-[55%] h-[55%] rounded-full opacity-30" style={{ background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)' }} />
+            <div className="absolute top-[40%] right-[20%] w-[40%] h-[40%] rounded-full opacity-20" style={{ background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)' }} />
           </div>
+          {/* Fine grid overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(255,255,255,.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.15) 1px, transparent 1px)',
+              backgroundSize: '48px 48px',
+            }}
+          />
 
           <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
-            {/* Header: Logo + badges */}
-            <div className="flex items-center justify-between mb-10">
-              <div className="flex items-center gap-3.5">
-                <div className="h-11 w-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden">
-                  <img
-                    src={logoUrl}
-                    alt={companyName}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    className="h-7 w-7 object-contain"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-white tracking-tight">{companyName}</h1>
-                  <p className="text-[10px] font-semibold text-blue-100/60 uppercase tracking-[0.2em]">Cloud Portal</p>
-                </div>
+
+            {/* Logo row */}
+            <div className="flex items-center gap-3 mb-16">
+              <div className="h-10 w-10 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center overflow-hidden backdrop-blur-sm">
+                <img
+                  src={logoUrl}
+                  alt={companyName}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="h-6 w-6 object-contain"
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm px-3 py-1.5">
-                  <FaShieldAlt className="text-white/80 w-3 h-3" />
-                  <span className="text-[10px] font-semibold text-white/80 uppercase tracking-wider">ISO 9001</span>
-                </div>
-                <div className="flex items-center gap-1.5 rounded-lg bg-emerald-400/20 backdrop-blur-sm px-3 py-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                  <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-wider">Live</span>
-                </div>
+              <div>
+                <h1 className="text-base font-semibold text-white/90 tracking-tight leading-none">{companyName}</h1>
+                <p className="text-[10px] font-medium text-white/30 uppercase tracking-[0.15em] mt-0.5">Cloud Portal</p>
               </div>
             </div>
 
-            {/* Headline */}
-            <div className="mb-10 max-w-xl">
-              <motion.h2
+            {/* Hero copy */}
+            <div className="flex-1 flex flex-col justify-center max-w-lg -mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <p className="text-[11px] font-semibold text-blue-400 uppercase tracking-[0.2em] mb-4">Enterprise-Grade Platform</p>
+                <h2 className="text-[40px] xl:text-[46px] font-extrabold leading-[1.1] text-white tracking-tight">
+                  Cloud training labs,{' '}
+                  <span className="bg-gradient-to-r from-blue-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
+                    delivered at scale.
+                  </span>
+                </h2>
+                <p className="mt-5 text-[15px] text-slate-400 leading-relaxed max-w-md">
+                  {branding.loginBanner ||
+                    'The platform training companies trust to run instructor-led cloud certification batches across AWS, Azure, GCP, and OCI.'}
+                </p>
+              </motion.div>
+
+              {/* Capability checklist */}
+              <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-                className="text-4xl xl:text-5xl font-extrabold leading-tight text-white"
+                transition={{ delay: 0.2, duration: 0.6 }}
+                className="mt-10 grid grid-cols-1 gap-2.5"
               >
-                Cloud Training Labs,
-                <br />
-                Delivered at Scale.
-              </motion.h2>
-              <motion.p
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.6 }}
-                className="mt-5 text-blue-100/70 text-[15px] leading-relaxed max-w-md"
-              >
-                {branding.loginBanner ||
-                  'Built for training companies running instructor-led cloud certification batches. Provision per-student sandboxes, enforce cost caps, and auto-clean when the batch ends.'}
-              </motion.p>
+                {CAPABILITIES.map((item) => (
+                  <div key={item} className="flex items-center gap-2.5">
+                    <div className="h-5 w-5 rounded-full bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                      <FaCheck className="w-2.5 h-2.5 text-blue-400" />
+                    </div>
+                    <span className="text-[13px] text-slate-300 font-medium">{item}</span>
+                  </div>
+                ))}
+              </motion.div>
             </div>
 
-            {/* Feature cards */}
-            <div className="grid grid-cols-2 gap-3 mb-10">
-              {FEATURES.map(({ icon: Icon, title, desc }, i) => (
-                <motion.div
-                  key={title}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 + i * 0.08, duration: 0.5 }}
-                  className="flex items-start gap-3 p-4 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/15 transition-colors"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
-                    <Icon size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-[13px] font-semibold text-white leading-tight">{title}</h3>
-                    <p className="text-[11px] text-blue-100/50 leading-relaxed mt-1">{desc}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Cloud providers */}
-            <div className="mb-auto">
-              <p className="text-[10px] font-semibold text-blue-100/40 uppercase tracking-[0.15em] mb-3">Supported Platforms</p>
-              <div className="flex items-center gap-5">
-                {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
-                  <div key={label} className="flex items-center gap-1.5 group cursor-default" title={label}>
-                    <Icon className="w-5 h-5 opacity-50 group-hover:opacity-90 transition-opacity" style={{ color }} />
-                    <span className="text-[10px] font-medium text-blue-100/40 group-hover:text-white/80 transition-colors hidden xl:inline">{label}</span>
+            {/* Bottom section */}
+            <div className="mt-auto pt-8">
+              {/* Cloud logos */}
+              <div className="flex items-center gap-6 mb-8">
+                {CLOUDS.map(({ icon: Icon, label, color }) => (
+                  <div key={label} className="group cursor-default" title={label}>
+                    <Icon className="w-[22px] h-[22px] text-white/20 group-hover:text-white/60 transition-colors duration-200" />
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* Stats bar */}
-            <div className="grid grid-cols-4 gap-6 rounded-xl bg-white/10 backdrop-blur-sm p-5 mb-6">
-              {[
-                { label: 'Clouds', value: '5' },
-                { label: 'Lab Images', value: '103+' },
-                { label: 'Deploy Time', value: '< 3s' },
-                { label: 'White Label', value: 'Ready' },
-              ].map(({ label, value }) => (
-                <div key={label} className="text-center">
-                  <div className="text-xl font-bold text-white" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-                  <div className="text-[10px] font-medium text-blue-100/50 uppercase tracking-wider mt-0.5">{label}</div>
+              {/* Stats row */}
+              <div className="flex items-center gap-8 py-5 border-t border-white/[0.06]">
+                {[
+                  { value: '5', label: 'Cloud Providers' },
+                  { value: '103+', label: 'Lab Images' },
+                  { value: '<3s', label: 'Deploy Time' },
+                  { value: '99.9%', label: 'Uptime SLA' },
+                ].map(({ value, label }) => (
+                  <div key={label}>
+                    <div className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+                    <div className="text-[10px] text-slate-500 font-medium mt-0.5">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-4 border-t border-white/[0.06]">
+                <span className="text-[10px] text-slate-600 font-medium">HexaLabs Cloud Solutions Pvt Ltd</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
+                    <FaShieldAlt className="w-2.5 h-2.5 text-slate-500" /> ISO 9001 &middot; 10004
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> All Systems Live
+                  </span>
                 </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between text-[10px] text-blue-100/40 pt-4 border-t border-white/10">
-              <span className="font-medium">HexaLabs Cloud Solutions Pvt Ltd</span>
-              <span className="font-medium">SSL Secured &middot; ISO 9001 &middot; 10004</span>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ── Right Panel: Login Form ───────────────────────────────────── */}
-        <section className="flex w-full flex-col lg:w-[48%] bg-white relative">
+        <section className="flex w-full flex-col lg:w-[46%] bg-[#fafbfc] relative">
           {/* Top-right actions */}
-          <div className="absolute top-5 right-5 lg:top-6 lg:right-8 z-20 flex items-center gap-2.5">
+          <div className="absolute top-5 right-5 lg:top-7 lg:right-8 z-20 flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setDemoOpen(true)}
-              className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+              className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 bg-white hover:bg-blue-50 rounded-lg transition-colors shadow-sm"
             >
               Book a Demo
             </button>
             <Link
               to="/signup"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg transition-colors shadow-sm"
             >
               Create Account
               <FaArrowRight className="w-2.5 h-2.5" />
@@ -256,15 +254,15 @@ const Login = ({ onLogin, apiRoutes }) => {
           </div>
 
           <div className="flex flex-1 items-center justify-center px-8 py-16 lg:px-16">
-            <div className="w-full max-w-[400px]">
+            <div className="w-full max-w-[380px]">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
               >
                 {/* Mobile logo */}
-                <div className="lg:hidden flex items-center gap-3 mb-8">
-                  <div className="h-10 w-10 rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden">
+                <div className="lg:hidden flex items-center gap-3 mb-10">
+                  <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center overflow-hidden">
                     <img src={logoUrl} alt={companyName} className="h-6 w-6 object-contain"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   </div>
@@ -276,21 +274,21 @@ const Login = ({ onLogin, apiRoutes }) => {
 
                 {/* Heading */}
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+                  <h2 className="text-[26px] font-bold text-gray-900 tracking-tight leading-tight">
                     {hasPriorLogin
                       ? `Welcome back${priorEmailFirstName ? `, ${priorEmailFirstName}` : ''}`
                       : 'Sign in to your account'}
                   </h2>
-                  <p className="mt-2 text-sm text-gray-500">
+                  <p className="mt-2 text-[14px] text-gray-500 leading-relaxed">
                     {hasPriorLogin
                       ? 'Access your cloud training portal.'
-                      : 'Enter your credentials to access the portal.'}
+                      : 'Enter your credentials to continue to the portal.'}
                   </p>
                 </div>
 
                 {/* Error */}
                 {loginError && (
-                  <div className="flex items-start gap-2.5 p-3.5 mb-6 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <div className="flex items-start gap-2.5 p-3.5 mb-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                     <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-red-500 text-xs font-bold">!</span>
                     </div>
@@ -299,13 +297,13 @@ const Login = ({ onLogin, apiRoutes }) => {
                 )}
 
                 {/* Form */}
-                <form onSubmit={loginUser} className="space-y-5">
+                <form onSubmit={loginUser} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[13px] font-medium text-gray-700">
                       Email address
                     </label>
                     <div className="relative">
-                      <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-[15px] h-[15px]" />
                       <input
                         ref={emailRef}
                         type="email"
@@ -314,14 +312,14 @@ const Login = ({ onLogin, apiRoutes }) => {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="you@company.com"
-                        className="w-full h-11 bg-gray-50 border border-gray-300 rounded-lg pl-11 pr-4 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400"
+                        className="w-full h-[46px] bg-white border border-gray-200 rounded-xl pl-11 pr-4 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400 shadow-sm"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-[13px] font-medium text-gray-700">
                         Password
                       </label>
                       {capsLockOn && (
@@ -332,7 +330,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                       )}
                     </div>
                     <div className="relative">
-                      <FaLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <FaLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-[15px] h-[15px]" />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required
@@ -343,7 +341,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                         onKeyUp={handleCapsCheck}
                         onBlur={() => setCapsLockOn(false)}
                         placeholder="Enter your password"
-                        className="w-full h-11 bg-gray-50 border border-gray-300 rounded-lg pl-11 pr-11 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400"
+                        className="w-full h-[46px] bg-white border border-gray-200 rounded-xl pl-11 pr-11 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400 shadow-sm"
                       />
                       <button
                         type="button"
@@ -359,7 +357,7 @@ const Login = ({ onLogin, apiRoutes }) => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full h-[46px] bg-gray-900 hover:bg-gray-800 text-white font-semibold text-sm rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm mt-2"
                   >
                     {isLoading ? (
                       <>
@@ -369,39 +367,39 @@ const Login = ({ onLogin, apiRoutes }) => {
                     ) : (
                       <>
                         <span>Sign in</span>
-                        <FaArrowRight className="w-3.5 h-3.5" />
+                        <FaArrowRight className="w-3 h-3" />
                       </>
                     )}
                   </button>
                 </form>
 
-                {/* Cloud providers */}
-                <div className="mt-8 pt-6 border-t border-gray-100">
-                  <p className="text-center text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-4">
-                    Deploy across leading cloud platforms
-                  </p>
-                  <div className="flex items-center justify-center gap-5">
-                    {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
-                      <div key={label} title={label} className="opacity-40 hover:opacity-80 transition-opacity cursor-default">
-                        <Icon className="w-6 h-6" style={{ color }} />
-                      </div>
-                    ))}
-                  </div>
+                {/* Divider */}
+                <div className="flex items-center gap-3 my-7">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Trusted by training companies</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+
+                {/* Cloud provider logos */}
+                <div className="flex items-center justify-between px-2">
+                  {CLOUDS.map(({ icon: Icon, label, color }) => (
+                    <div key={label} title={label} className="opacity-30 hover:opacity-70 transition-opacity cursor-default">
+                      <Icon className="w-6 h-6" style={{ color }} />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Trust badges */}
-                <div className="mt-6 pt-5 border-t border-gray-100">
-                  <div className="flex items-center justify-center gap-5 text-[11px] text-gray-400 font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <FaLock className="w-3 h-3 text-green-500" /> 256-bit SSL
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <FaCertificate className="w-3 h-3 text-green-500" /> ISO Certified
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <FaCheckCircle className="w-3 h-3 text-green-500" /> SOC 2
-                    </span>
-                  </div>
+                <div className="mt-8 flex items-center justify-center gap-5 text-[11px] text-gray-400 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <FaLock className="w-3 h-3 text-gray-400" /> 256-bit SSL
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <FaCertificate className="w-3 h-3 text-gray-400" /> ISO Certified
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <FaCheckCircle className="w-3 h-3 text-gray-400" /> SOC 2
+                  </span>
                 </div>
               </motion.div>
             </div>
