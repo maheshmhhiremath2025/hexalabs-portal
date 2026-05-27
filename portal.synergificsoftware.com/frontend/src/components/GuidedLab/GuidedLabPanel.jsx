@@ -29,10 +29,9 @@ function fallbackCopy(text) {
   return Promise.resolve();
 }
 
-/* ===== Code block with copy button (per-line + full block) ===== */
+/* ===== Code block with copy button ===== */
 function CodeBlock({ children }) {
   const [copied, setCopied] = useState(false);
-  const [copiedLine, setCopiedLine] = useState(null);
   const code = String(children).replace(/\n$/, '');
   const lines = code.split('\n');
   const isMultiLine = lines.length > 1;
@@ -46,43 +45,22 @@ function CodeBlock({ children }) {
     });
   };
 
-  const handleCopyLine = (line, idx, e) => {
-    e.stopPropagation();
-    copyToClipboard(line).then(() => {
-      setCopiedLine(idx);
-      setTimeout(() => setCopiedLine(null), 2000);
-      window.dispatchEvent(new CustomEvent('lab-clipboard', { detail: { text: line } }));
-    });
-  };
-
   return (
     <div className="relative my-2 group/block">
+      {/* Top-right copy button */}
       <button
         onClick={handleCopyAll}
-        className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-600 text-slate-200 hover:bg-slate-500 hover:text-white transition-colors z-10 flex items-center gap-1"
-        title="Copy all to clipboard"
+        className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors z-10 flex items-center gap-1.5"
+        title="Copy entire command"
       >
         {copied ? (
-          <><FaCheck className="w-2.5 h-2.5 text-green-400" /><span className="text-[9px] text-green-400">Copied!</span></>
+          <><FaCheck className="w-3 h-3 text-green-400" /><span className="text-[10px] font-medium text-green-400">Copied!</span></>
         ) : (
-          <><FaCopy className="w-2.5 h-2.5" /><span className="text-[9px]">Copy</span></>
+          <><FaCopy className="w-3 h-3" /><span className="text-[10px] font-medium">{isMultiLine ? 'Copy All' : 'Copy'}</span></>
         )}
       </button>
-      <pre className="bg-slate-800 text-slate-100 text-[11px] rounded-md p-3 pr-16 overflow-x-auto">
-        <code>{isMultiLine ? lines.map((line, idx) => (
-          <span key={idx} className="group/line flex items-center hover:bg-slate-700/50 -mx-3 px-3 rounded relative">
-            <span className="flex-1">{line}{idx < lines.length - 1 ? '\n' : ''}</span>
-            {line.trim() && (
-              <button
-                onClick={(e) => handleCopyLine(line, idx, e)}
-                className={`absolute right-1 flex-shrink-0 p-0.5 rounded transition-all ${copiedLine === idx ? 'opacity-100 text-green-400' : 'opacity-0 group-hover/line:opacity-100 text-slate-400 hover:text-white'}`}
-                title="Copy this command"
-              >
-                {copiedLine === idx ? <FaCheck className="w-2.5 h-2.5" /> : <FaCopy className="w-2.5 h-2.5" />}
-              </button>
-            )}
-          </span>
-        )) : code}</code>
+      <pre className="bg-slate-800 text-slate-100 text-[11px] rounded-md p-3 pr-20 overflow-x-auto whitespace-pre-wrap">
+        <code>{code}</code>
       </pre>
     </div>
   );
