@@ -78,7 +78,7 @@ const generateEmail = (users) => {
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;" />
 
         <h3 style="color: #3840b2;">💬 Need Help?</h3>
-        <p style="font-size: 16px; color: #333;">Our support team is here to assist you at <a href="mailto:itops@hexalabs.online" style="color: #1a73e8;">itops@hexalabs.online</a>.</p>
+        <p style="font-size: 16px; color: #333;">Our support team is here to assist you at <a href="mailto:labs@hexalabs.online" style="color: #1a73e8;">labs@hexalabs.online</a>.</p>
 
         <p style="font-size: 16px; color: #333;">Thank you for choosing <b>HexaLabs</b>. We look forward to supporting your cloud journey!</p>
 

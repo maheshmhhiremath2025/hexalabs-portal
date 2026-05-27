@@ -25,7 +25,7 @@ const transporter = nodemailer.createTransport({
 
 const FROM = `"${BRAND.name}" <${process.env.GMAIL_USER}>`;
 // Always CC'd on EVERY email so we keep a central record.
-const INTERNAL_CC = ['itops@hexalabs.online'];
+const INTERNAL_CC = ['labs@hexalabs.online'];
 const CC_RECIPIENTS = INTERNAL_CC.join(', ');
 
 /**
@@ -546,7 +546,7 @@ async function notifyRdsLabReady({
 // >=3, and counter resets when VM actually stops via the reconciler).
 
 async function notifyStuckStop({ vmName, organization, trainingName, resourceGroup, attempts, idleMinutes }) {
-  const to = 'itops@hexalabs.online';
+  const to = 'labs@hexalabs.online';
   const subject = `[OPS] VM stop stuck — ${vmName} (${attempts} attempts)`;
   const { html, text } = renderEmail({
     title: `VM stop is stuck`,

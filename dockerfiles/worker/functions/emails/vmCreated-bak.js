@@ -41,7 +41,7 @@ const generateEmail = (vms, customer) => {
             <li>Login to <a href="https://www.cloudportal.co.in" style="color: #1a73e8;">Integrated Cloud Portal</a>.</li>
             <li>You can find the Public IP and other details once you log in to the portal.</li>
             <li>You can access your VMs via [SSH, RDP, BROWSER (if opted)].</li>
-            <li>If you encounter any issues, feel free to contact our support team (<a href="mailto:itops@hexalabs.online" style="color: #1a73e8;">itops@hexalabs.online</a>).</li>
+            <li>If you encounter any issues, feel free to contact our support team (<a href="mailto:labs@hexalabs.online" style="color: #1a73e8;">labs@hexalabs.online</a>).</li>
           </ol>
           <p style="font-size: 16px; color: #333;">For security reasons, please store this information in a secure place.</p>
           <p style="font-size: 16px; color: #333;">Thank you for choosing HexaLabs. We look forward to assisting you with any further requirements.</p>

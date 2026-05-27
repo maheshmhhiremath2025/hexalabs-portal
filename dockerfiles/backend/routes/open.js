@@ -69,7 +69,7 @@ router.post('/demo-request', async (req, res) => {
     return res.status(201).json({ message: 'Request received. Check your email for confirmation.' });
   } catch (err) {
     logger.error(`[demo-request] error: ${err.message}`);
-    return res.status(500).json({ message: 'Something went wrong. Please email itops@hexalabs.online directly.' });
+    return res.status(500).json({ message: 'Something went wrong. Please email labs@hexalabs.online directly.' });
   }
 });
 

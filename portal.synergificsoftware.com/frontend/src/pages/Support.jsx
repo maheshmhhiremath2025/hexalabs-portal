@@ -122,11 +122,11 @@ const SupportPage = () => {
       icon: FaEnvelope,
       title: 'Email Support',
       description: 'Detailed technical assistance',
-      details: 'itops@hexalabs.online',
+      details: 'labs@hexalabs.online',
       availability: '24/7',
       action: 'Send Email',
       color: 'from-purple-500 to-pink-500',
-      link: 'mailto:itops@hexalabs.online'
+      link: 'mailto:labs@hexalabs.online'
     }
   ];
 

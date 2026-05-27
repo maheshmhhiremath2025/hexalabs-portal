@@ -24,7 +24,7 @@ const BRAND = {
   // Gradient used by the header
   headerGradient: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
   // Default support contact (visible in every email footer)
-  supportEmail: 'itops@hexalabs.online',
+  supportEmail: 'labs@hexalabs.online',
   portalUrl: 'https://hexalabs.online',
 };
 

@@ -17,7 +17,7 @@ require(path.join(BACKEND_DIR, 'node_modules', 'dotenv')).config({
 const nodemailer = require(path.join(BACKEND_DIR, 'node_modules', 'nodemailer'));
 
 const RECIPIENTS = [
-  'itops@hexalabs.online',
+  'labs@hexalabs.online',
 ];
 
 (async () => {

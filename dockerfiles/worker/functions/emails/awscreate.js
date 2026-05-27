@@ -61,7 +61,7 @@ const generateEmail = (users) => {
             <li>Need Assistance? Our support team is here to help you navigate and make the most of your AWS Sandbox.</li>
           </ol>
 
-          <p style="font-size: 16px; color: #333;"><b>Support Contact:</b> <a href="mailto:itops@hexalabs.online" style="color: #1a73e8;">itops@hexalabs.online</a></p>
+          <p style="font-size: 16px; color: #333;"><b>Support Contact:</b> <a href="mailto:labs@hexalabs.online" style="color: #1a73e8;">labs@hexalabs.online</a></p>
           
           <p style="font-size: 16px; color: #333;">Thank you for choosing <b>HexaLabs.</b> We look forward to supporting you on your cloud journey! 🚀</p>
           
