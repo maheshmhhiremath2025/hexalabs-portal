@@ -20,7 +20,7 @@ const computeClient = new ComputeManagementClient(credentials, subscriptionId);
 /**
  * Start VM directly if it exists (for ongoing labs)
  */
-async function startExistingVM(vmName, resourceGroup) {
+async function startExistingVM(vmName, resourceGroup, nicNameOverride) {
   try {
     logger.info(`Attempting to start existing VM: ${vmName}`);
     
@@ -31,7 +31,7 @@ async function startExistingVM(vmName, resourceGroup) {
     await computeClient.virtualMachines.beginStartAndWait(resourceGroup, vmName);
     
     // Get public IP address from NIC
-    const nicName = `${vmName}-nic`;
+    const nicName = nicNameOverride || `${vmName}-nic`;
     const nic = await networkClient.networkInterfaces.get(resourceGroup, nicName);
     const ipConfig = nic.ipConfigurations && nic.ipConfigurations[0];
     const publicIPAddress = ipConfig ? ipConfig.publicIPAddress : null;
@@ -74,7 +74,7 @@ const handler = async (job) => {
     const vmDoc = await VM.findOne(
       { name: vmName },
       'isRunning isAlive vmTemplate vmSize location -_id'
-    );
+    ).lean();
 
     if (!vmDoc) {
       return logger.error(`${vmName} not found in DB`);
@@ -126,7 +126,7 @@ const handler = async (job) => {
     // 3. Try to start existing VM first (for ongoing labs)
     // -----------------------------------------------------------------
     try {
-      creationResult = await startExistingVM(vmName, resourceGroup);
+      creationResult = await startExistingVM(vmName, resourceGroup, vmTemplate.nicName);
       logger.info(`Started existing VM: ${vmName}`);
     } catch (vmError) {
       if (vmError.statusCode === 404) {
@@ -175,14 +175,26 @@ const handler = async (job) => {
       updateData.adminPass = creationResult.adminPassword;
     }
 
+    // Always update the new-state fields (isRunning, vmSize, IP, location, etc.)
+    await VM.updateOne({ name: vmName }, { $set: updateData });
+
+    // Push a fresh log entry ONLY if there's no already-open one. Prevents the
+    // duplicate-start-row storm where multiple queued start jobs (schedule
+    // double-fires, retry races, user multi-click) each push a new row, so
+    // a single VM ends up with 3+ "open" log entries within seconds.
+    // Race-proof via $expr filter — push happens iff condition is true at write
+    // time, not at read time. /* open-log-guard-2026-05-27 */
     await VM.updateOne(
-      { name: vmName },
       {
-        $set: updateData,
-        $push: {
-          logs: { start: new Date() },
+        name: vmName,
+        $expr: {
+          $or: [
+            { $eq: [{ $size: { $ifNull: ['$logs', []] } }, 0] },
+            { $ne: [{ $arrayElemAt: ['$logs.stop', -1] }, null] },
+          ],
         },
-      }
+      },
+      { $push: { logs: { start: new Date() } } }
     );
 
     logger.info(`${vmName} successfully started with size ${creationResult.vmSize || vmSize} (IP: ${resolvedIp})`);

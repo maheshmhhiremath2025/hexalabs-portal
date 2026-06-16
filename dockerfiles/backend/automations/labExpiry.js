@@ -3,7 +3,6 @@ const Container = require('../models/container');
 const Training = require('../models/training');
 const { logger } = require('../plugins/logger');
 const { cascadeRdsSessions } = require('../services/rdsCascade');
-const { cleanupTrainingSandboxes } = require('../services/sandboxCleanup');
 
 let sendEmail;
 try { sendEmail = require('../services/emailNotifications').sendEmail; } catch {}
@@ -77,9 +76,22 @@ async function labExpiryChecker() {
       logger.info(`Expiry warning sent for VM ${vm.name} (${minsLeft}m left)`);
     }
 
-    // Expired: delete from Azure + DB
-    if (expiresAt <= now) {
-      logger.info(`VM ${vm.name} expired — auto-deleting from Azure`);
+    // Expired: delete from Azure + DB.
+    // 24h grace before destructive cleanup — protects against admin-extends-expiry
+    // race where labExpiry fires right as old expiresAt crosses, before Mongo update lands.
+    // Pattern mirrors the young-VM guard in vmStateReconciler (post-25-May EY cohort fix).
+    const twentyFourHoursAgoVm = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    if (expiresAt > twentyFourHoursAgoVm && expiresAt <= now) {
+      // Just expired (<24h) — soft-mark only, keep Azure resources alive so an extend can recover.
+      if (vm.isAlive) {
+        vm.isAlive = false; vm.isRunning = false; vm.remarks = 'Expired — awaiting 24h grace';
+        await vm.save();
+        logger.info(`VM ${vm.name} soft-expired, deferring Azure delete until 24h past expiry`);
+      }
+      continue;
+    }
+    if (expiresAt <= twentyFourHoursAgoVm) {
+      logger.info(`VM ${vm.name} expired >24h — auto-deleting from Azure`);
 
       // Delete from Azure
       if (azureCleanup && vm.resourceGroup !== 'docker') {
@@ -123,11 +135,22 @@ async function labExpiryChecker() {
       await c.save();
     }
 
-    // Expired: delete Docker container
-    if (expiresAt <= now) {
+    // Expired: delete Docker container — 24h grace before destructive docker rm.
+    // Mirrors VM guard above. Protects against the labExpiry vs admin-extend race that
+    // wiped 11 linuxvibe containers on 2026-05-26 (data unrecoverable, no snapshot).
+    const twentyFourHoursAgoC = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    if (expiresAt > twentyFourHoursAgoC && expiresAt <= now) {
+      if (c.isAlive) {
+        c.isAlive = false; c.isRunning = false; c.remarks = 'Expired — awaiting 24h grace';
+        await c.save();
+        logger.info(`Container ${c.name} soft-expired, deferring docker rm until 24h past expiry`);
+      }
+      continue;
+    }
+    if (expiresAt <= twentyFourHoursAgoC) {
       if (dockerCleanup) { try { await dockerCleanup(c.containerId); } catch {} }
-      else { c.isAlive = false; c.isRunning = false; c.remarks = 'Auto-deleted (expired)'; await c.save(); }
-      logger.info(`Container ${c.name} expired and cleaned up`);
+      else { c.isAlive = false; c.isRunning = false; c.remarks = 'Auto-deleted (expired >24h)'; await c.save(); }
+      logger.info(`Container ${c.name} expired >24h — cleaned up`);
     }
   }
 
@@ -138,6 +161,42 @@ async function labExpiryChecker() {
   });
 
   for (const training of expiringTrainings) {
+    // Guard 1: refuse to purge if ANY child VM or container has its own expiresAt extended
+    // beyond the training-level expiry. Admins extend container.expiresAt via portal UI but
+    // training.expiresAt is often missed — without this guard, training-level purge wipes
+    // containers that were explicitly extended (data loss incident on 2026-05-27).
+    // Guard 2: 24h grace before destructive purge even if everything is aligned — safety net
+    // against admin-extend race where the new expiresAt lands milliseconds after this cron tick.
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    if (new Date(training.expiresAt) > twentyFourHoursAgo) {
+      logger.info(`Training ${training.name} expired but within 24h grace — deferring purge`);
+      continue;
+    }
+
+    const liveChildVm = await VM.findOne({
+      trainingName: training.name,
+      isAlive: true,
+      expiresAt: { $gt: now },
+    });
+    const liveChildContainer = await Container.findOne({
+      trainingName: training.name,
+      isAlive: true,
+      expiresAt: { $gt: now },
+    });
+    if (liveChildVm || liveChildContainer) {
+      logger.warn(`Training ${training.name} marked expired but ${liveChildVm ? 'VM ' + liveChildVm.name : ''}${liveChildVm && liveChildContainer ? ' + ' : ''}${liveChildContainer ? 'container ' + liveChildContainer.name : ''} has extended expiresAt > now — auto-aligning training.expiresAt and skipping purge`);
+      // Auto-align: extend training.expiresAt to match the latest child expiry so subsequent
+      // ticks don't keep re-flagging this training as expired.
+      const maxVm = await VM.find({ trainingName: training.name, isAlive: true }).sort({ expiresAt: -1 }).limit(1).toArray ? null : await VM.findOne({ trainingName: training.name, isAlive: true }).sort({ expiresAt: -1 });
+      const maxContainer = await Container.findOne({ trainingName: training.name, isAlive: true }).sort({ expiresAt: -1 });
+      const candidates = [maxVm && maxVm.expiresAt, maxContainer && maxContainer.expiresAt].filter(Boolean).map(d => new Date(d).getTime());
+      if (candidates.length) {
+        training.expiresAt = new Date(Math.max(...candidates));
+        await training.save();
+      }
+      continue;
+    }
+
     logger.info(`Training ${training.name} expired — auto-purging all resources`);
 
     // Delete all VMs in this training
@@ -156,15 +215,10 @@ async function labExpiryChecker() {
       c.isAlive = false; c.isRunning = false; c.remarks = 'Training expired'; await c.save();
     }
 
-    // Clean up cloud sandboxes provisioned via guided lab
-    cleanupTrainingSandboxes(training.name).catch(err =>
-      logger.error(`[expiry] Sandbox cleanup failed for ${training.name}: ${err.message}`)
-    );
-
     training.status = 'expired';
     await training.save();
 
-    logger.info(`Training ${training.name} fully purged (${vms.length} VMs, ${containers.length} containers + sandboxes)`);
+    logger.info(`Training ${training.name} fully purged (${vms.length} VMs, ${containers.length} containers)`);
   }
 }
 

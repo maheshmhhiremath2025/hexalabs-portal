@@ -48,6 +48,7 @@ export const costApiRoutes = {
     costOrgLabs: `/admin/costs/labs`,
     costSync: `/admin/costs/sync`,
     costSyncLab: `/admin/costs/sync-lab`,
+    costCenter: `/admin/costs/center`,
 };
 
 export const superadminApiRoutes = {
@@ -65,20 +66,4 @@ export const gcpUserApiRoutes = {
     trainingApi: `/gcp/training`,
     projectsApi: `/gcp/projects`,
     getLogsApi: `/open/gcpLogs`
-};
-
-export const guidedLabApiRoutes = {
-    list: `/guided-labs`,
-    byTraining: `/guided-labs/by-training`,
-    single: `/guided-labs`,
-    create: `/guided-labs`,
-    update: `/guided-labs`,
-    delete: `/guided-labs`,
-    link: `/guided-labs/link`,
-    progress: `/guided-labs`,
-    allProgress: `/guided-labs`,
-    generate: `/guided-labs/generate`,
-    improveStep: `/guided-labs/improve-step`,
-    deploy: `/guided-labs`,
-    deployStatus: `/guided-labs`,
 };

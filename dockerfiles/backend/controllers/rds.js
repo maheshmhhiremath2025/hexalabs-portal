@@ -113,13 +113,36 @@ async function handleRdsDeployStatus(req, res) {
 }
 
 async function handleRdsCostCompare(req, res) {
+  // Cost-compare reveals our raw cloud cost basis (Spot vs on-demand) — superadmin only.
+  if (req.user?.userType !== 'superadmin') {
+    return res.status(403).json({ message: 'Superadmin access required' });
+  }
   const users = parseInt(req.query.users || '10');
   const vmSize = req.query.vmSize || 'medium';
   res.json(await getRdsCostComparison(users, vmSize));
 }
 
 async function handleGetRdsOptions(req, res) {
-  res.json({ vmSizes: RDS_VM_SIZES });
+  // Sanitize cost-bearing fields for non-superadmins.
+  // Org-admins see size + maxUsers only; the " — Spot ₹X/hr" suffix and the
+  // numeric cost/onDemandCost fields are stripped so partners can't reverse
+  // our margin from the cloud cost basis.
+  const isSuper = req.user?.userType === 'superadmin';
+  const out = {};
+  for (const [key, cfg] of Object.entries(RDS_VM_SIZES)) {
+    if (isSuper) {
+      out[key] = cfg;
+    } else {
+      // Strip the " — Spot ₹..." suffix (and any " — ..." after the user count)
+      const sanitizedLabel = (cfg.label || '').replace(/\s*[—-]\s*(Spot|On-?demand|₹)[^]*$/i, '').trim();
+      out[key] = {
+        vmSize: cfg.vmSize,
+        maxUsers: cfg.maxUsers,
+        label: sanitizedLabel,
+      };
+    }
+  }
+  res.json({ vmSizes: out });
 }
 
 module.exports = { handleCreateRds, handleRdsDeployStatus, handleRdsCostCompare, handleGetRdsOptions };

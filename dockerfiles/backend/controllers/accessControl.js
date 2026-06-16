@@ -15,6 +15,12 @@ function canManageAccess(req) {
   return t === 'admin' || t === 'superadmin';
 }
 
+// Org-admins are scoped to their own organization; superadmins see everything.
+// Returns the org name to constrain to, or null for unrestricted.
+function orgScope(req) {
+  return req.user?.userType === 'superadmin' ? null : (req.user?.organization || null);
+}
+
 function buildFilter(scope, target) {
   const t = String(target || '').trim();
   if (!t) return null;
@@ -35,6 +41,12 @@ function validateWeekdays(arr) {
   return arr.every(d => Number.isInteger(d) && d >= 0 && d <= 6);
 }
 
+function validateDates(arr) {
+  if (arr == null) return true;
+  if (!Array.isArray(arr)) return false;
+  return arr.every(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
+}
+
 /**
  * PATCH /admin/user-schedule
  * Body: {
@@ -51,16 +63,27 @@ async function handleUpdateUserSchedule(req, res) {
   try {
     if (!canManageAccess(req)) return res.status(403).json({ message: 'Admin access required' });
 
-    const { scope, target, loginStart, loginStop, allowedWeekdays, accessExpiresAt, clearAll } = req.body || {};
+    const { scope, target, loginStart, loginStop, allowedWeekdays, allowedDates, accessExpiresAt, clearAll } = req.body || {};
     const filter = buildFilter(scope, target);
     if (!filter) return res.status(400).json({ message: 'Valid scope (email|organization|trainingName) and target are required.' });
+
+    // Tenant scoping: org admins can only act on users in their own org.
+    // For scope='organization', reject any target other than their own org outright
+    // (cleaner error than letting the update silently match zero docs).
+    const scopeOrg = orgScope(req);
+    if (scopeOrg) {
+      if (scope === 'organization' && target !== scopeOrg) {
+        return res.status(403).json({ message: 'You can only manage users in your own organization.' });
+      }
+      filter.organization = scopeOrg;
+    }
 
     // Build Mongo update doc — set + unset
     const $set = {};
     const $unset = {};
 
     if (clearAll) {
-      Object.assign($unset, { loginStart: '', loginStop: '', allowedWeekdays: '', accessExpiresAt: '' });
+      Object.assign($unset, { loginStart: '', loginStop: '', allowedWeekdays: '', allowedDates: '', accessExpiresAt: '' });
     } else {
       // loginStart/Stop — empty string means clear
       if (loginStart !== undefined) {
@@ -78,6 +101,15 @@ async function handleUpdateUserSchedule(req, res) {
           $set.allowedWeekdays = allowedWeekdays;
         } else {
           return res.status(400).json({ message: 'allowedWeekdays must be an array of integers 0-6 (0=Sun, 6=Sat).' });
+        }
+      }
+      if (allowedDates !== undefined) {
+        if (allowedDates === null || (Array.isArray(allowedDates) && allowedDates.length === 0)) {
+          $unset.allowedDates = '';
+        } else if (validateDates(allowedDates)) {
+          $set.allowedDates = allowedDates;
+        } else {
+          return res.status(400).json({ message: 'allowedDates must be an array of YYYY-MM-DD strings.' });
         }
       }
       if (accessExpiresAt !== undefined) {
@@ -119,14 +151,18 @@ async function handleListRestrictedUsers(req, res) {
   try {
     if (!canManageAccess(req)) return res.status(403).json({ message: 'Admin access required' });
 
-    const users = await User.find({
+    const findFilter = {
       $or: [
         { loginStart:     { $exists: true, $ne: null, $ne: '' } },
         { loginStop:      { $exists: true, $ne: null, $ne: '' } },
         { allowedWeekdays:{ $exists: true, $ne: null, $not: { $size: 0 } } },
         { accessExpiresAt:{ $exists: true, $ne: null } },
       ],
-    })
+    };
+    const scopeOrg = orgScope(req);
+    if (scopeOrg) findFilter.organization = scopeOrg;
+
+    const users = await User.find(findFilter)
       .select('email organization trainingName userType loginStart loginStop allowedWeekdays accessExpiresAt')
       .sort({ organization: 1, email: 1 })
       .lean();
@@ -153,10 +189,15 @@ async function handleScheduleSuggestions(req, res) {
     if (!q || q.length < 2) return res.json({ emails: [], organizations: [], trainings: [] });
 
     const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const scopeOrg = orgScope(req);
+    const emailFilter    = scopeOrg ? { email: rx, organization: scopeOrg } : { email: rx };
+    const orgFilter      = scopeOrg ? { organization: scopeOrg }            : { organization: rx };
+    const trainingFilter = scopeOrg ? { trainingName: rx, organization: scopeOrg } : { trainingName: rx };
+
     const [emails, orgsRaw, trainingsRaw] = await Promise.all([
-      User.find({ email: rx }).limit(8).select('email organization').lean(),
-      User.distinct('organization', { organization: rx }),
-      User.distinct('trainingName', { trainingName: rx }),
+      User.find(emailFilter).limit(8).select('email organization').lean(),
+      User.distinct('organization', orgFilter),
+      User.distinct('trainingName', trainingFilter),
     ]);
 
     return res.json({

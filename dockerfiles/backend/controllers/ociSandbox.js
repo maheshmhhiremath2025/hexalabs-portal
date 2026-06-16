@@ -2,13 +2,98 @@ const { logger } = require('./../plugins/logger');
 const OciSandboxUser = require('./../models/ociSandboxUser');
 const SandboxTemplate = require('./../models/sandboxTemplate');
 const User = require('./../models/user');
-const { createOciSandbox, deleteOciSandbox } = require('./../services/ociSandbox');
+const { createOciSandbox, deleteOciSandbox, grantOacServiceAdminByUsername } = require('./../services/ociSandbox');
 const { notifySandboxWelcomeEmail } = require('./../services/emailNotifications');
+
+// ─── IDCS access-token helper (for OAC provisioning) ───────────────────
+// OAC's CreateAnalyticsInstance API requires an `idcsAccessToken` to bind
+// the new instance to a federated IDCS identity. We fetch one via OAuth2
+// client_credentials grant against the tenancy's Identity Domain endpoint.
+//
+// Required env vars:
+//   OCI_IDCS_URL           — e.g. https://idcs-xxxxx.identity.oraclecloud.com
+//                             (or the Identity Domain URL for newer tenancies)
+//   OCI_IDCS_CLIENT_ID     — Confidential App client_id from IDCS
+//   OCI_IDCS_CLIENT_SECRET — same app's client_secret
+//
+// The Confidential App must have "Client Credentials" grant enabled and
+// hold an admin role (e.g. Identity Domain Administrator) so OAC accepts
+// the token as authorized to provision instances.
+async function getIdcsAccessToken() {
+  const idcsUrl = process.env.OCI_IDCS_URL;
+  const clientId = process.env.OCI_IDCS_CLIENT_ID;
+  const clientSecret = process.env.OCI_IDCS_CLIENT_SECRET;
+  if (!idcsUrl || !clientId || !clientSecret) {
+    throw new Error('IDCS env vars missing — set OCI_IDCS_URL, OCI_IDCS_CLIENT_ID, OCI_IDCS_CLIENT_SECRET in backend .env');
+  }
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const url = `${idcsUrl.replace(/\/+$/, '')}/oauth2/v1/token`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials&scope=urn:opc:idm:__myscopes__',
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`IDCS token fetch failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (!data.access_token) throw new Error(`IDCS token response had no access_token: ${JSON.stringify(data).slice(0, 200)}`);
+  return data.access_token;
+}
+
+// USER-context token via OAuth2 Resource Owner Password Credentials.
+// Required by OAC's createAnalyticsInstance — it rejects app-context tokens
+// (sub_type=client) issued by the client_credentials helper above.
+//
+// Service user creds:
+//   OCI_OAC_PROVISIONER_USER     — e.g. oac-provisioner@... (username field in IDCS)
+//   OCI_OAC_PROVISIONER_PASSWORD — set via SCIM putUserPasswordChanger
+//
+// The IDCS Confidential App must have BOTH grant types enabled (Client
+// Credentials + Resource Owner) for this to succeed.
+async function getIdcsUserAccessToken() {
+  const idcsUrl = process.env.OCI_IDCS_URL;
+  const clientId = process.env.OCI_IDCS_CLIENT_ID;
+  const clientSecret = process.env.OCI_IDCS_CLIENT_SECRET;
+  const username = process.env.OCI_OAC_PROVISIONER_USER;
+  const password = process.env.OCI_OAC_PROVISIONER_PASSWORD;
+  if (!idcsUrl || !clientId || !clientSecret || !username || !password) {
+    throw new Error('OAC ROPC env vars missing — set OCI_OAC_PROVISIONER_USER and OCI_OAC_PROVISIONER_PASSWORD in backend .env');
+  }
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const url = `${idcsUrl.replace(/\/+$/, '')}/oauth2/v1/token`;
+  const body = new URLSearchParams({
+    grant_type: 'password',
+    username,
+    password,
+    scope: 'urn:opc:idm:__myscopes__',
+  }).toString();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`IDCS user token fetch failed: HTTP ${res.status} — ${t.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (!data.access_token) throw new Error(`IDCS user token response had no access_token: ${JSON.stringify(data).slice(0, 200)}`);
+  return data.access_token;
+}
 
 async function handleGetOciUsers(req, res) {
     try {
-        if (req.user?.userType !== 'superadmin' && req.user?.userType !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
-        const users = await OciSandboxUser.find({ status: { $ne: 'deleted' } }).sort({ createdAt: -1 }).lean();
+        const { userType, organization } = req.user || {};
+        if (userType !== 'superadmin' && userType !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+        const filter = { status: { $ne: 'deleted' } };
+        if (userType === 'admin') filter.organization = organization;
+        else if (userType === 'superadmin' && req.query.organization) filter.organization = req.query.organization;
+        const users = await OciSandboxUser.find(filter).sort({ createdAt: -1 }).lean();
         res.json(users || []);
     } catch (err) {
         logger.error('OCI sandbox get users error:', err.message);
@@ -27,10 +112,22 @@ async function handleBulkDeployOci(req, res) {
         if (!emails || !Array.isArray(emails) || emails.length === 0) {
             return res.status(400).json({ message: 'emails array required' });
         }
+        if (req.user.userType === 'admin' && emails.length > 200) {
+            return res.status(400).json({ message: `Batch size of ${emails.length} exceeds the 200-student cap for admin role.` });
+        }
+        // admin is locked to their own org; superadmin may target any org via body
+        const targetOrg = req.user.userType === 'superadmin' && req.body.organization
+            ? req.body.organization
+            : req.user.organization;
         if (!ttlHours || ttlHours < 1) return res.status(400).json({ message: 'ttlHours required (minimum 1)' });
 
         const template = await SandboxTemplate.findOne({ slug: templateSlug, isActive: true, cloud: 'oci' });
         if (!template) return res.status(404).json({ message: 'OCI template not found' });
+
+        // Org-template entitlement: auto-associate for superadmin; clear 403 for admin.
+        const { ensureTemplateAssociation } = require('../services/orgTemplateAssociation');
+        const _assoc = await ensureTemplateAssociation({ targetOrg, templateSlug, userType: req.user.userType, adminEmail: req.user.email });
+        if (!_assoc.ok) return res.status(_assoc.status).json({ message: _assoc.error });
 
         const results = [];
 
@@ -49,6 +146,15 @@ async function handleBulkDeployOci(req, res) {
                 // Create OCI compartment + user + policy
                 const ociResult = await createOciSandbox(compartmentName, region, trimmed);
 
+                // Grant OAC ServiceAdministrator so the student actually has
+                // data access inside Oracle Analytics — createOciSandbox
+                // provisions the IDCS user but does not assign any OAC role.
+                try {
+                    await grantOacServiceAdminByUsername(ociResult.username);
+                } catch (e) {
+                    logger.warn(`[bulk-deploy-oci] OAC role grant failed for ${ociResult.username}: ${e.message}`);
+                }
+
                 const expiresAt = req.body.expiresAt
                     ? new Date(req.body.expiresAt)
                     : new Date(Date.now() + ttlHours * 60 * 60 * 1000);
@@ -66,10 +172,13 @@ async function handleBulkDeployOci(req, res) {
                     user.region = region;
                     user.accessUrl = ociResult.accessUrl;
                     user.expiresAt = expiresAt;
+                    if (req.body.batchExpiresAt) user.batchExpiresAt = new Date(req.body.batchExpiresAt);
+                    user.organization = targetOrg;
                     user.status = 'active';
                 } else {
                     user = new OciSandboxUser({
                         email: trimmed,
+                        organization: targetOrg,
                         compartmentId: ociResult.compartmentId,
                         compartmentName,
                         userId: ociResult.userId,
@@ -83,6 +192,7 @@ async function handleBulkDeployOci(req, res) {
                         startDate: new Date(),
                         endDate: expiresAt,
                         expiresAt,
+                        batchExpiresAt: req.body.batchExpiresAt ? new Date(req.body.batchExpiresAt) : null,
                         templateId: template._id,
                         allowedServices: (template.allowedServices || []).map(s => ({
                             service: s.service, category: s.category, restrictions: s.restrictions,
@@ -206,13 +316,22 @@ async function handleDeleteOciUser(req, res) {
 // OAC Shared Instance Management
 // =============================================================================
 
-// In-memory tracker for OAC instances (persists across requests, lost on restart)
+// In-memory tracker for OAC instances (persists across requests, lost on restart).
+// Each entry is org-tagged so org-admins only see/manage their own org's batches.
 const oacInstances = new Map();
+
+// Tenant scope helper for OAC handlers.
+function _oacOrgScope(req) {
+    return req.user?.userType === 'superadmin' ? null : (req.user?.organization || null);
+}
 
 async function handleOacList(req, res) {
     try {
         if (req.user?.userType !== 'superadmin' && req.user?.userType !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
-        res.json(Array.from(oacInstances.values()));
+        const scopeOrg = _oacOrgScope(req);
+        const all = Array.from(oacInstances.values());
+        const filtered = scopeOrg ? all.filter(i => i.organization === scopeOrg) : all;
+        res.json(filtered);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -226,9 +345,14 @@ async function handleOacProvision(req, res) {
         if (!batchName) return res.status(400).json({ message: 'batchName required' });
         if (oacInstances.has(batchName)) return res.status(400).json({ message: `Batch "${batchName}" already exists` });
 
+        // Tag the batch with caller's organization for tenant isolation.
+        const ownerOrg = req.user?.organization || null;
+
         // Mark as provisioning immediately
         oacInstances.set(batchName, {
             batchName,
+            organization: ownerOrg,
+            createdBy: req.user?.email,
             status: 'provisioning',
             ocpus,
             startedAt: new Date().toISOString(),
@@ -287,7 +411,11 @@ async function handleOacProvision(req, res) {
                 const identityClient = new ociIdentity.IdentityClient({ authenticationDetailsProvider: provider });
                 const analyticsClient = new ociAnalytics.AnalyticsClient({ authenticationDetailsProvider: provider });
                 const parentCompartmentId = process.env.OCI_PARENT_COMPARTMENT_OCID || process.env.OCI_TENANCY_OCID;
-                const compartmentName = `oac-lab-${batchName}`;
+                // Random suffix so a retry doesn't collide with a still-purging
+                // compartment from a prior failed attempt (OCI compartments take
+                // a few minutes to fully delete after the API accepts the request)
+                const suffix = Math.random().toString(36).slice(2, 6);
+                const compartmentName = `oac-lab-${batchName}-${suffix}`.slice(0, 100);
 
                 // 1. Create compartment
                 const compResp = await identityClient.createCompartment({
@@ -297,12 +425,49 @@ async function handleOacProvision(req, res) {
                         description: `OAC lab — ${batchName}`,
                     },
                 });
-                const compartmentId = compResp.compartment.id;
+                var compartmentId = compResp.compartment.id;
+                // Track the compartmentId in the in-memory map immediately so a
+                // failure after this point can be cleaned up by the destroy button
+                oacInstances.set(batchName, { ...oacInstances.get(batchName), compartmentId, compartmentName });
                 logger.info(`[oac] Compartment created: ${compartmentId}`);
+
+                // Wait for compartment to become visible at parent scope before creating
+                // a policy that references it (compartments are eventually consistent).
+                await new Promise(r => setTimeout(r, 10000));
+
+                // Grant sandbox students permission to USE the analytics instance
+                // in this compartment. Without this, when students navigate to OCI
+                // Console with their sandbox creds, they get "Authorization failed"
+                // because their per-user policy is scoped to their OWN compartment.
+                // We restrict to usernames starting with 'sb-' so non-sandbox identities
+                // don't pick up cross-compartment access.
+                try {
+                    const tenancyId = process.env.OCI_TENANCY_OCID;
+                    const policyName = `oac-student-access-${batchName}-${suffix}`.slice(0, 99);
+                    await identityClient.createPolicy({
+                        createPolicyDetails: {
+                            compartmentId: tenancyId,
+                            name: policyName,
+                            description: `Student access to shared OAC instance for batch ${batchName}`,
+                            statements: [
+                                `Allow any-user to use analytics-instances in compartment ${compartmentName}`,
+                                `Allow any-user to read all-resources in compartment ${compartmentName}`,
+                            ],
+                        },
+                    });
+                    logger.info(`[oac] Student-access policy created: ${policyName}`);
+                } catch (polErr) {
+                    logger.warn(`[oac] student-access policy creation failed: ${polErr.message}`);
+                }
 
                 await new Promise(r => setTimeout(r, 30000)); // wait for propagation
 
-                // 2. Provision OAC
+                // 2. Fetch USER-context IDCS token (OAC requires sub_type=user;
+                // app-context client_credentials tokens are rejected with OAC-DAL-001041).
+                logger.info(`[oac] fetching IDCS user-context access token for ${batchName}`);
+                const idcsAccessToken = await getIdcsUserAccessToken();
+
+                // 3. Provision OAC
                 await analyticsClient.createAnalyticsInstance({
                     createAnalyticsInstanceDetails: {
                         name: `oaclab${batchName.replace(/[^a-z0-9]/gi, '')}`.slice(0, 30),
@@ -312,6 +477,7 @@ async function handleOacProvision(req, res) {
                         licenseType: 'LICENSE_INCLUDED',
                         description: `Training batch: ${batchName}`,
                         networkEndpointDetails: { networkEndpointType: 'PUBLIC' },
+                        idcsAccessToken,
                     },
                 });
 
@@ -351,6 +517,12 @@ async function handleOacDestroy(req, res) {
         const { batchName } = req.params;
         const instance = oacInstances.get(batchName);
         if (!instance) return res.status(404).json({ message: `Batch "${batchName}" not found` });
+
+        // Tenant scoping: org-admin can only destroy own org's batches.
+        const scopeOrg = _oacOrgScope(req);
+        if (scopeOrg && instance.organization !== scopeOrg) {
+            return res.status(403).json({ message: 'Cannot destroy a batch outside your organization' });
+        }
 
         oacInstances.set(batchName, { ...instance, status: 'destroying' });
         res.json({ message: `OAC destruction started for "${batchName}"` });

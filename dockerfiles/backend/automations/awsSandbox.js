@@ -71,7 +71,9 @@ const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const awsCleanup = async () => {
   try {
     logger.info("Running AWS sandbox cleanup...");
-    const users = await awsUser.find({});
+    // P1-11: skip docs already in-flight to avoid the same user being
+    // processed by two overlapping cron ticks.
+    const users = await awsUser.find({ deletionStatus: { $ne: 'deleting' } });
     const now = new Date();
 
     for (const user of users) {
@@ -93,6 +95,10 @@ const awsCleanup = async () => {
       try {
         logger.info(`AWS user ${user.userId} expired, cleaning up resources + deleting...`);
 
+        // P1-11: mark in-flight before any cloud call. Cleared on success
+        // (set to 'none'), or on failure the catch block lets a future tick retry.
+        await awsUser.updateOne({ _id: user._id }, { $set: { deletionStatus: 'deleting' } });
+
         // 0. If this user was on the Connect (US) account, clean up Connect instances first
         const isConnectAccount = user.usageSessions?.some(s => s.templateSlug === 'aws-connect-fundamentals');
         if (isConnectAccount && process.env.AWS_CONNECT_ACCESS_KEY) {
@@ -103,10 +109,49 @@ const awsCleanup = async () => {
               credentials: { accessKeyId: process.env.AWS_CONNECT_ACCESS_KEY, secretAccessKey: process.env.AWS_CONNECT_ACCESS_SECRET },
             });
             const instances = await connectClient.send(new ListInstancesCommand({}));
+            // Determine ownership before deleting. The Connect lab account is shared
+            // across all aws-connect-fundamentals students, so we MUST scope by user
+            // — otherwise one student's TTL expiry wipes another student's live instance.
+            // Match strategies (any one is sufficient):
+            //   1. Instance alias contains the user's email local-part (preferred)
+            //   2. Instance alias contains the IAM userId fragment (legacy)
+            //   3. Instance was created during this user's current session window
+            const emailLocal = (user.email || '').split('@')[0].toLowerCase();
+            const userPrefix = (user.userId || '').split('-').slice(2, 4).join('-').toLowerCase();
+
+            // Trainer-provisioned persistent instances — never touch.
+            // The 11 instances pre-created on 2026-05-05 for the iskillbox
+            // Connect cohort must persist for the duration of the training,
+            // independent of any single student's session lifecycle. Tagged
+            // with LabRole=trainerPersistent in AWS, but we also pattern-match
+            // on alias here so the skip is robust without a tag round-trip.
+            const TRAINER_PERSISTENT_ALIASES = [
+              /^connectusr-inst-\d+$/i,
+              /^mahajanrajeev$/i,
+              /^aldricinstance$/i,
+            ];
+
             for (const inst of (instances.InstanceSummaryList || [])) {
-              // Delete any Connect instances created by this user (match by alias containing username prefix)
-              const userPrefix = user.userId?.split('-').slice(2, 4).join('-') || '';
-              if (inst.InstanceAlias?.includes(userPrefix) || inst.InstanceStatus === 'ACTIVE') {
+              const aliasOriginal = inst.InstanceAlias || '';
+              const aliasL = aliasOriginal.toLowerCase();
+              const created = inst.CreatedTime ? new Date(inst.CreatedTime) : null;
+
+              if (TRAINER_PERSISTENT_ALIASES.some(rx => rx.test(aliasOriginal))) {
+                logger.info(`[connect-cleanup] SKIP ${aliasOriginal} (${inst.Id}) — trainer-persistent (LabRole=trainerPersistent)`);
+                continue;
+              }
+
+              // P2-14: alias match ONLY. The 12-hour-fallback time window
+              // wrongly claimed instances the cron-tick happened to overlap
+              // with another active student's session, killing live work.
+              const ownsByAlias = (emailLocal && aliasL.includes(emailLocal))
+                || (userPrefix && aliasL.includes(userPrefix));
+
+              if (!ownsByAlias) {
+                logger.warn(`[connect-cleanup] SKIP ${aliasOriginal} (${inst.Id}) — alias does not match ${user.userId} / ${emailLocal} (created=${created?.toISOString() || 'unknown'})`);
+                continue;
+              }
+              if (inst.InstanceStatus === 'ACTIVE') {
                 try {
                   await connectClient.send(new DeleteInstanceCommand({ InstanceId: inst.Id }));
                   logger.info(`[connect-cleanup] Deleted Connect instance ${inst.InstanceAlias} (${inst.Id}) for ${user.userId}`);
@@ -125,18 +170,23 @@ const awsCleanup = async () => {
             : undefined;
           try { await fullAwsCleanup(user.userId, cleanupCreds); } catch (e) { logger.error(`AWS resource cleanup for ${user.userId}: ${e.message}`); }
         }
-        // 2. Check if student still has remaining quota (totalCapHours)
+        // 2. Check if student still has remaining quota (totalCapHours).
+        // Also: if endDate has passed, treat as final cohort end → no relaunch
+        // allowed → full cleanup (deletes IAM user + DB record). Without this
+        // gate, unlimited-quota users (totalCap=0) would loop forever in the
+        // cleanup cron because expiresAt is reset to null but endDate stays past.
         const totalCap = user.totalCapHours || 0;
         const sessionsUsed = (user.usageSessions || []).length;
         const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
-        const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
+        const endDatePassed = user.endDate && new Date(user.endDate) < now;
+        const hasQuotaLeft = !endDatePassed && (totalCap === 0 || hoursUsed < totalCap);
 
         if (hasQuotaLeft) {
           // Student has remaining quota — keep IAM user + DB record, just mark session expired
           // They can re-launch from the portal to get a new session
           logger.info(`AWS user ${user.userId}: session expired but ${totalCap > 0 ? (totalCap - hoursUsed) + 'h quota remaining' : 'unlimited quota'} — keeping IAM user for re-launch`);
           await awsUser.updateOne({ _id: user._id }, {
-            $set: { expiresAt: null, cleanupAttempts: 0, cleanupError: null },
+            $set: { expiresAt: null, cleanupAttempts: 0, cleanupError: null, deletionStatus: 'none' },
           });
         } else {
           // Quota exhausted — full cleanup: delete IAM user + DB record
@@ -173,11 +223,11 @@ const awsCleanup = async () => {
         }
       } catch (e) {
         logger.error(`Failed to clean up AWS user ${user.userId}: ${e.message}`);
-        // Track the failure for retry on next cron run
+        // Track the failure for retry on next cron run + clear in-flight flag
         try {
           await awsUser.updateOne({ _id: user._id }, {
             $inc: { cleanupAttempts: 1 },
-            $set: { cleanupError: e.message, cleanupFailedAt: now },
+            $set: { cleanupError: e.message, cleanupFailedAt: now, deletionStatus: 'none' },
           });
         } catch (dbErr) {
           logger.error(`Failed to update cleanup status for ${user.userId}: ${dbErr.message}`);

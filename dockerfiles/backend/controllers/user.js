@@ -5,6 +5,24 @@ const { recordLoginFailure, recordLoginSuccess } = require('../middlewares/login
 
 const moment = require('moment-timezone');
 
+const Organization = require('../models/organization');
+
+function getRequestHost(req) {
+  const origin = req.get('origin') || req.get('referer') || '';
+  try {
+    if (origin) return new URL(origin).hostname.toLowerCase();
+  } catch (_) {}
+  return (req.get('host') || '').split(':')[0].toLowerCase();
+}
+
+const CANONICAL_HOSTS = new Set(['hexalabs.online', 'www.hexalabs.online', 'hsdf.hexalabs.online', 'hexalabs.online', 'www.hexalabs.online', 'localhost']);
+
+async function lookupTenantByHost(host) {
+  if (!host || CANONICAL_HOSTS.has(host)) return null;
+  const org = await Organization.findOne({ customDomain: host }).lean();
+  return org?.organization || null;
+}
+
 async function handleUserLogin(req, res) {
     // Check if the user is already logged in
     if (req.user) {
@@ -23,6 +41,25 @@ async function handleUserLogin(req, res) {
         if (!user || !(await user.comparePassword(password))) {
             recordLoginFailure(req);
             return res.status(400).json({ message: "Invalid Credentials" });
+        }
+
+        // ─── Whitelabel tenant-scoped login ──────────────────────────────────
+        // If the request came from a custom-domain host (e.g. labs.azatech.co.in),
+        // require the user to belong to that tenant. Superadmins MUST log in via
+        // the canonical host (hexalabs.online), never a whitelabel URL.
+        const requestHost = getRequestHost(req);
+        const tenantOrg = await lookupTenantByHost(requestHost);
+        if (tenantOrg) {
+            if (user.userType === 'superadmin') {
+                recordLoginFailure(req);
+                logger.warn('superadmin ' + email + ' attempted login on whitelabel host ' + requestHost + ' — rejected');
+                return res.status(400).json({ message: "Invalid Credentials" });
+            }
+            if ((user.organization || '').toLowerCase() !== tenantOrg.toLowerCase()) {
+                recordLoginFailure(req);
+                logger.warn(email + ' (org=' + (user.organization||'?') + ') attempted login on whitelabel host ' + requestHost + ' (tenant=' + tenantOrg + ') — rejected');
+                return res.status(400).json({ message: "Invalid Credentials" });
+            }
         }
 
         // ─── Hard access expiry (batches with a fixed end date) ───────
@@ -69,8 +106,18 @@ async function handleUserLogin(req, res) {
             }
         }
 
+        // ─── Date allow-list (YYYY-MM-DD IST) — for one-off training schedules ───
+        if (Array.isArray(user.allowedDates) && user.allowedDates.length > 0) {
+            const todayIst = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+            if (!user.allowedDates.includes(todayIst)) {
+                recordLoginFailure(req);
+                logger.warn(`${email} attempted to log in on ${todayIst} (allowed dates: ${user.allowedDates.join(", ")}) from ${req.ip}`);
+                return res.status(403).json({ message: `Access is only allowed on these dates: ${user.allowedDates.join(", ")}.` });
+            }
+        }
+
         // Generate token
-        const token = setUser(user);
+        const token = setUser(user, tenantOrg ? requestHost : null);
 
         // Determine userCode based on user type
         let userCode;

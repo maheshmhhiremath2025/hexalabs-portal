@@ -73,16 +73,44 @@ export default function Home({ userDetails }) {
         </div>
       )}
 
-      {/* Alerts — only show if there are issues */}
+      {/* Alerts — inline VM/project list so superadmin can see WHO is over without drilling */}
       {stats && ((stats.azureQuotaExceeded || 0) > 0 || (stats.gcpQuotaExceeded || 0) > 0) && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 flex items-center gap-3">
-          <FaExclamationTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <div className="flex-1 text-sm text-amber-800">
-            <span className="font-semibold">{(stats.azureQuotaExceeded || 0) + (stats.gcpQuotaExceeded || 0)} quota alert{((stats.azureQuotaExceeded || 0) + (stats.gcpQuotaExceeded || 0)) !== 1 ? 's' : ''}</span>
-            {stats.azureQuotaExceeded > 0 && <span> · {stats.azureQuotaExceeded} Azure VMs exceeded quota</span>}
-            {stats.gcpQuotaExceeded > 0 && <span> · {stats.gcpQuotaExceeded} GCP projects over budget</span>}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
+          <div className="flex items-center gap-3 mb-2">
+            <FaExclamationTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <div className="flex-1 text-sm text-amber-800">
+              <span className="font-semibold">{(stats.azureQuotaExceeded || 0) + (stats.gcpQuotaExceeded || 0)} quota alert{((stats.azureQuotaExceeded || 0) + (stats.gcpQuotaExceeded || 0)) !== 1 ? 's' : ''}</span>
+              {stats.azureQuotaExceeded > 0 && <span> · {stats.azureQuotaExceeded} Azure VMs exceeded quota</span>}
+              {stats.gcpQuotaExceeded > 0 && <span> · {stats.gcpQuotaExceeded} GCP projects over budget</span>}
+            </div>
+            <Link to="/vm/quota" className="text-xs font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">Adjust quota →</Link>
           </div>
-          <Link to="/vm/quota" className="text-xs font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">View →</Link>
+          {(stats.azureQuotaExceededList?.length > 0 || stats.gcpQuotaExceededList?.length > 0) && (
+            <div className="mt-2 space-y-1 text-[12px] text-amber-900">
+              {stats.azureQuotaExceededList?.map((v, i) => (
+                <div key={'az-' + i} className="flex items-center justify-between bg-white/60 rounded px-2.5 py-1.5 border border-amber-200/60">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono font-semibold text-amber-800">{v.vmName}</span>
+                    <span className="text-amber-600/80 truncate">{v.email}</span>
+                    <span className="text-amber-600/70 hidden sm:inline">· {v.organization}</span>
+                    <span className="text-amber-600/70 hidden md:inline">· {v.trainingName}</span>
+                  </div>
+                  <span className="font-mono text-amber-700 whitespace-nowrap ml-2">{v.consumed}/{v.total} min</span>
+                </div>
+              ))}
+              {stats.gcpQuotaExceededList?.map((p, i) => (
+                <div key={'gcp-' + i} className="flex items-center justify-between bg-white/60 rounded px-2.5 py-1.5 border border-amber-200/60">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono font-semibold text-amber-800">{p.projectName || p.projectId}</span>
+                    <span className="text-amber-600/80 truncate">{p.email}</span>
+                    <span className="text-amber-600/70 hidden sm:inline">· {p.organization}</span>
+                    <span className="text-amber-600/70 hidden md:inline">· {p.trainingName}</span>
+                  </div>
+                  <span className="font-mono text-amber-700 whitespace-nowrap ml-2">${p.consumed}/{p.budget}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

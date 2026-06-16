@@ -3,7 +3,6 @@ const Container = require('./../models/container');
 const Training = require('./../models/training');
 const { logger } = require('./../plugins/logger');
 const queues = require('./newQueues');
-const { cleanupTrainingSandboxes } = require('../services/sandboxCleanup');
 
 // Container service for Docker cleanup
 let containerService;
@@ -102,12 +101,7 @@ async function handleKillTraining(req, res) {
             }
         }
 
-        // 4. Clean up cloud sandboxes provisioned via guided lab
-        cleanupTrainingSandboxes(trainingName).catch(err =>
-            logger.error(`Sandbox cleanup failed for ${trainingName}: ${err.message}`)
-        );
-
-        // 5. Update training status
+        // 4. Update training status
         await Training.findOneAndUpdate({ name: trainingName }, {
             status: "deleted",
             schedules: [],

@@ -36,6 +36,7 @@ async function spotEvictionHandler() {
     const runningVms = await VM.find({
       isRunning: true,
       isAlive: true,
+      cloud: { $ne: "aws" },
       os: { $not: /RDS Session/ },
     });
     if (!runningVms.length) return;

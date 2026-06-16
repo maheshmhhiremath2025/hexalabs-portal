@@ -4,7 +4,7 @@ const User = require('../models/user');
 const Plan = require('../models/plan');
 const Subscription = require('../models/subscription');
 const Container = require('../models/container');
-const { createContainer, buildAccessUrl, buildExtraAccessUrls } = require('../services/containerService');
+const { createContainer, buildAccessUrl } = require('../services/containerService');
 const { notifyInstanceReady } = require('../services/emailNotifications');
 const { setUser } = require('../services/auth');
 const { logger } = require('../plugins/logger');
@@ -227,8 +227,6 @@ async function handleDashboard(req, res) {
         memory: c.memory,
         isRunning: c.isRunning,
         accessUrl: buildAccessUrl(c),
-        vncLabel: c.vncLabel || null,
-        extraAccessUrls: buildExtraAccessUrls(c),
         password: c.password,
         containerId: c.containerId,
         runtimeHours: Math.round((c.duration || 0) / 3600 * 10) / 10,
@@ -286,7 +284,7 @@ async function handleSelfSandbox(req, res) {
         });
       }
 
-      const azResult = await createAzureSandbox(resourceGroupName, 'southindia', sbUser.userId, req.user.email);
+      const azResult = await createAzureSandbox(resourceGroupName, 'southindia', sbUser.userId, req.user.email, { allowedVmSkus: ['Standard_B1s','Standard_B1ms','Standard_B2s','Standard_B2ms','Standard_B4ms'] });
 
       const now = new Date();
       sbUser.sandbox.push({
@@ -315,7 +313,7 @@ async function handleSelfSandbox(req, res) {
       sandboxResult = { credentials: { username: awsResult.username, password: awsResult.password }, accessUrl: awsResult.accessUrl };
     } else if (cloud === 'gcp') {
       const { getOrCreateSharedProject, addUserToSharedProject } = require('../services/gcpSharedProject');
-      const org = req.user.organization || 'hexalabs';
+      const org = req.user.organization || 'getlabs';
 
       // Find or create a shared project (1 project per 5 users)
       const { projectId, isNew } = await getOrCreateSharedProject(org, ttlHours, budgetCap);

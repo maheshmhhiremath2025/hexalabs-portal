@@ -110,6 +110,7 @@ const organizationSchema = new mongoose.Schema(
     legal: legalSchema,
     transactions: { type: [transactionSchema], default: [] },
     branding: brandingSchema,
+    customDomain: { type: String, trim: true, lowercase: true, index: true, sparse: true },
   },
   { timestamps: true }
 );

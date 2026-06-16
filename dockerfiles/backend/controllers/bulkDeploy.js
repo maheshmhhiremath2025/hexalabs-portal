@@ -42,6 +42,16 @@ async function handleBulkDeploy(req, res) {
   if (!emails || !Array.isArray(emails) || emails.length === 0) {
     return res.status(400).json({ message: 'emails array is required and must not be empty' });
   }
+  if (req.user?.userType !== 'admin' && req.user?.userType !== 'superadmin') {
+    return res.status(403).json({ message: 'Admin/superadmin access required' });
+  }
+  if (req.user.userType === 'admin' && emails.length > 200) {
+    return res.status(400).json({ message: `Batch size of ${emails.length} exceeds the 200-student cap for admin role.` });
+  }
+  // admin is locked to their own org; superadmin may target any org via body
+  const targetOrg = req.user.userType === 'superadmin' && req.body.organization
+    ? req.body.organization
+    : req.user.organization;
   if (!ttlHours || ttlHours < 1) {
     return res.status(400).json({ message: 'ttlHours is required and must be at least 1' });
   }
@@ -50,6 +60,11 @@ async function handleBulkDeploy(req, res) {
   if (!template) {
     return res.status(404).json({ message: 'AWS template not found' });
   }
+
+  // Org-template entitlement: auto-associate for superadmin; clear 403 for admin.
+  const { ensureTemplateAssociation } = require('../services/orgTemplateAssociation');
+  const _assoc = await ensureTemplateAssociation({ targetOrg, templateSlug, userType: req.user.userType, adminEmail: req.user.email });
+  if (!_assoc.ok) return res.status(_assoc.status).json({ message: _assoc.error });
 
   const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : new Date(Date.now() + ttlHours * 60 * 60 * 1000);
   const results = [];
@@ -72,6 +87,18 @@ async function handleBulkDeploy(req, res) {
 
       const awsResult = await createAwsSandbox(username, email, useConnectAccount ? { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } : undefined);
 
+      // Attach CloudOpsSRE-CourseAllow managed policy for the 40h CloudOps + SRE + DevOps template.
+      if (template.slug === 'aws-cloudops-sre-devops-lab' && !useConnectAccount) {
+        try {
+          const { IAMClient: _IAM2, AttachUserPolicyCommand: _AUP2 } = require('@aws-sdk/client-iam');
+          const _c2 = new _IAM2({ region: awsRegion, credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } });
+          await _c2.send(new _AUP2({ UserName: username, PolicyArn: 'arn:aws:iam::475184346033:policy/CloudOpsSRE-CourseAllow' }));
+          logger.info(`Attached CloudOpsSRE-CourseAllow to ${username}`);
+        } catch (e) {
+          logger.error(`Failed to attach CloudOpsSRE-CourseAllow: ${e.message}`);
+        }
+      }
+
       // For Connect templates, attach the managed Connect student policy
       if (useConnectAccount && process.env.AWS_CONNECT_STUDENT_POLICY_ARN) {
         try {
@@ -87,7 +114,7 @@ async function handleBulkDeploy(req, res) {
       // createAwsSandbox() already attached 2 base policies (~2500 bytes) — remove them
       // and replace with a single compact course policy that includes both allow + deny + restrictions
       try {
-        const { IAMClient, PutUserPolicyCommand, DeleteUserPolicyCommand } = require('@aws-sdk/client-iam');
+        const { IAMClient, PutUserPolicyCommand, DeleteUserPolicyCommand, AttachUserPolicyCommand } = require('@aws-sdk/client-iam');
         const client = new IAMClient({
           region: awsRegion,
           credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey },
@@ -127,6 +154,26 @@ async function handleBulkDeploy(req, res) {
           ssm: 'ssm',
           autoscaling: 'autoscaling',
           applicationautoscaling: 'application-autoscaling',
+          'application auto scaling': 'application-autoscaling',
+          // Data-lab additions
+          emr: 'elasticmapreduce',
+          'elastic mapreduce': 'elasticmapreduce',
+          'elasticmapreduce': 'elasticmapreduce',
+          glue: 'glue',
+          'aws glue': 'glue',
+          redshift: 'redshift',
+          'amazon redshift': 'redshift',
+          'redshift data api': 'redshift-data',
+          'redshift serverless': 'redshift-serverless',
+          'lake formation': 'lakeformation',
+          lakeformation: 'lakeformation',
+          'ec2 instance connect': 'ec2-instance-connect',
+          ec2instanceconnect: 'ec2-instance-connect',
+          'ec2-instance-connect': 'ec2-instance-connect',
+          'query editor v2': 'sqlworkbench',
+          'redshift query editor': 'sqlworkbench',
+          'sql workbench': 'sqlworkbench',
+          sqlworkbench: 'sqlworkbench',
         };
 
         // Collect unique action prefixes for allowed services (use prefix:* for compactness)
@@ -149,12 +196,16 @@ async function handleBulkDeploy(req, res) {
         if (denyPrefixes.length) {
           statements.push({ Sid: 'Deny', Effect: 'Deny', Action: denyPrefixes, Resource: '*' });
         }
+        // Allowed EC2 instance types: template can override the default mini list
+        const allowedTypes = (template.allowedInstanceTypes?.aws?.length
+          ? template.allowedInstanceTypes.aws
+          : ['t2.micro', 't3.micro', 't3.small']);
         statements.push({
           Sid: 'DenyBadEC2',
           Effect: 'Deny',
           Action: 'ec2:RunInstances',
           Resource: 'arn:aws:ec2:*:*:instance/*',
-          Condition: { 'ForAllValues:StringNotEquals': { 'ec2:InstanceType': ['t2.micro', 't3.micro', 't3.small'] } },
+          Condition: { 'ForAllValues:StringNotEquals': { 'ec2:InstanceType': allowedTypes } },
         });
         statements.push({
           Sid: 'RegionLock',
@@ -174,6 +225,20 @@ async function handleBulkDeploy(req, res) {
           PolicyDocument: JSON.stringify(policyDoc),
         }));
         logger.info(`[bulk-deploy] Applied CoursePolicy for ${email} (${policySize} bytes)`);
+
+        // Attach managed policies declared on the template (e.g. aws-data-lab
+        // needs AmazonEC2FullAccess + SSM bundle + EC2InstanceConnect so EMR's
+        // post-create flows like SSH-into-master / Session Manager work for
+        // learners without us re-explaining inline policy coverage every time).
+        const managedArns = (template.managedPolicyArns?.aws || []);
+        for (const arn of managedArns) {
+          try {
+            await client.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: arn }));
+            logger.info(`[bulk-deploy] Attached managed policy ${arn.split('/').pop()} to ${email}`);
+          } catch (attachErr) {
+            logger.warn(`[bulk-deploy] Failed to attach ${arn.split('/').pop()} to ${email}: ${attachErr.message}`);
+          }
+        }
       } catch (e) {
         logger.error(`[bulk-deploy] Failed to apply course policy for ${email}: ${e.message}`);
       }
@@ -194,6 +259,8 @@ async function handleBulkDeploy(req, res) {
           endDate: expiresAt,
           templateId: template._id,
           expiresAt,
+          batchExpiresAt: req.body.batchExpiresAt ? new Date(req.body.batchExpiresAt) : null,
+          organization: targetOrg,
           dailyCapHours,
           totalCapHours,
           usageSessions: [{ startedAt: now, ttlHours, templateSlug }],
@@ -223,6 +290,8 @@ async function handleBulkDeploy(req, res) {
             endDate: expiresAt,
             templateId: template._id,
             expiresAt,
+            batchExpiresAt: req.body.batchExpiresAt ? new Date(req.body.batchExpiresAt) : null,
+            organization: targetOrg,
             dailyCapHours,
             totalCapHours,
             $push: { usageSessions: { startedAt: now, ttlHours, templateSlug } },
@@ -267,7 +336,7 @@ async function handleBulkDeploy(req, res) {
       if (!existingUser) {
         await User.create({
           email, name: email, password: 'Welcome1234!',
-          userType: 'sandboxuser', organization: template.name,
+          userType: 'sandboxuser', organization: targetOrg,
           ...scheduleFields,
         });
       } else if (Object.keys(scheduleFields).length) {
@@ -309,21 +378,28 @@ async function handleBulkDeploy(req, res) {
   // This is the "one table to rule them all" so the admin can distribute
   // creds regardless of whether individual addresses were deliverable.
   if (results.length > 0) {
-    notifySandboxBulkSummary({
-      opsEmail: req.user?.email,
-      trainingName: template.name,
-      organization: (results[0] && results[0].organization) || template.name,
-      templateName: template.name,
-      cloud: 'aws',
-      sandboxes: results.map(r => ({
-        email: r.email,
-        username: r.username,
-        password: r.password,
-        accessUrl: r.accessUrl,
-        region: r.region,
-        expiresAt: r.expiresAt,
-      })),
-    }).catch(e => logger.error(`[bulk-deploy] Roster email failed: ${e.message}`));
+    // P2-15: await so a slow Mailgun call can't race the JSON response and
+    // leave the caller without a confirmation. Also use the in-scope
+    // `targetOrg` instead of the never-set `result.organization`.
+    try {
+      await notifySandboxBulkSummary({
+        opsEmail: req.user?.email,
+        trainingName: template.name,
+        organization: targetOrg || template.name,
+        templateName: template.name,
+        cloud: 'aws',
+        sandboxes: results.map(r => ({
+          email: r.email,
+          username: r.username,
+          password: r.password,
+          accessUrl: r.accessUrl,
+          region: r.region,
+          expiresAt: r.expiresAt,
+        })),
+      });
+    } catch (e) {
+      logger.error(`[bulk-deploy] Roster email failed: ${e.message}`);
+    }
   }
 
   return res.json({

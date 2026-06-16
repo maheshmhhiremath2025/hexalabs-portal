@@ -1,16 +1,16 @@
 const express = require('express');
 const {handleGetTrainingName, handleGetTemplates, handleGetMachines, handleVMRestart} = require('../controllers/users/azure')
 const {handleGetTrainingPorts, handleOpenTrainingPorts, handleCloseTrainingPorts} = require('./../controllers/users/port')
-const {handleGetExistingSchedule, handleDeleteSchedule, handleCreateSchedule} = require("./../controllers/users/schedule")
-const {handleGetBillingStats, handleGetLogs, handleGetVMnames} = require('./../controllers/users/billingStats')
+const {handleGetExistingSchedule, handleDeleteSchedule, handleCreateSchedule, handleGetSchedulesByVm, handleBulkDeleteSchedules, handleBulkUpdateSchedules} = require("./../controllers/users/schedule")
+const {handleGetBillingStats, handleGetLogs, handleGetVMnames, handleGetCohortLogs} = require('./../controllers/users/billingStats')
 const {handleCreateMachines} = require ('./../controllers/users/azureVmCreate')
 const {handleVMOperations} = require('./../controllers/users/vm')
 const {handleKillTraining, handlePreviewKill} = require("./../controllers/killTraining")
 const { getVmAccessUrl } = require('../services/guacamoleService');
-const { getDesktopAccessUrl } = require('../services/meshCentralService');
 const { requireWorker, isWorkerAlive } = require('../services/queueHealth');
 const { cascadeRdsSessions } = require('../services/rdsCascade');
 const { logger } = require('../plugins/logger');
+const queues = require('./../controllers/newQueues');
 const router = express.Router();
 
 router.get('/trainingName', handleGetTrainingName);
@@ -23,10 +23,15 @@ router.delete('/ports', requireWorker, handleCloseTrainingPorts);
 router.get('/schedules', handleGetExistingSchedule);
 router.delete('/schedules', handleDeleteSchedule);
 router.post('/schedules', handleCreateSchedule);
+// === Additive bulk-management endpoints (2026-05-28) ===
+router.get('/schedules/by-vm', handleGetSchedulesByVm);
+router.post('/schedules/bulk-delete', handleBulkDeleteSchedules);
+router.post('/schedules/bulk-update', handleBulkUpdateSchedules);
 router.get('/templates', handleGetTemplates);
 router.get('/billing', handleGetBillingStats);
 router.get('/logs', handleGetLogs);
 router.get('/vmnames', handleGetVMnames);
+router.get('/logs/cohort', handleGetCohortLogs);
 router.get('/machines', handleGetMachines)
 router.post('/machines', requireWorker, handleCreateMachines)
 router.patch('/machines', requireWorker, handleVMOperations);
@@ -70,55 +75,20 @@ router.delete('/vm', async (req, res) => {
       logger.error(`[delete-vm] ${vmName}: rds cascade failed — ${e.message}`)
     );
 
-    // Return immediately, do Azure cleanup in background
-    res.json({ message: `${vmName} deletion started — Azure resources being cleaned up` });
-
-    // Background: Delete from Azure directly (no worker needed)
-    (async () => {
-      try {
-        const { ClientSecretCredential } = require('@azure/identity');
-        const { ComputeManagementClient } = require('@azure/arm-compute');
-        const { NetworkManagementClient } = require('@azure/arm-network');
-        const cred = new ClientSecretCredential(process.env.TENANT_ID, process.env.CLIENT_ID, process.env.CLIENT_SECRET);
-        const compute = new ComputeManagementClient(cred, process.env.SUBSCRIPTION_ID);
-        const network = new NetworkManagementClient(cred, process.env.SUBSCRIPTION_ID);
-
-        // 1. Get VM details before deleting (need OS disk name)
-        let osDiskName;
-        try {
-          const azVm = await compute.virtualMachines.get(resourceGroup, vmName);
-          osDiskName = azVm.storageProfile?.osDisk?.name;
-        } catch {}
-
-        // 2. Delete VM
-        try { await compute.virtualMachines.beginDeleteAndWait(resourceGroup, vmName); logger.info(`Azure VM deleted: ${vmName}`); } catch (e) { logger.error(`VM delete: ${e.message}`); }
-
-        // 3. Delete OS disk
-        if (osDiskName) { try { await compute.disks.beginDeleteAndWait(resourceGroup, osDiskName); logger.info(`Disk deleted: ${osDiskName}`); } catch {} }
-
-        // 4. Delete NIC
-        try { await network.networkInterfaces.beginDeleteAndWait(resourceGroup, `${vmName}-nic`); logger.info(`NIC deleted: ${vmName}-nic`); } catch {}
-
-        // 5. Delete Public IP
-        for (const ipName of [`${vmName}-public-IP`, `${vmName}-pip`]) {
-          try { await network.publicIPAddresses.beginDeleteAndWait(resourceGroup, ipName); logger.info(`IP deleted: ${ipName}`); } catch {}
-        }
-
-        // 6. Delete NSG
-        try { await network.networkSecurityGroups.beginDeleteAndWait(resourceGroup, `${vmName}-nsg`); logger.info(`NSG deleted: ${vmName}-nsg`); } catch {}
-
-        // 7. Delete snapshots
-        try {
-          for await (const snap of compute.snapshots.listByResourceGroup(resourceGroup)) {
-            if (snap.name.includes(vmName)) { await compute.snapshots.beginDeleteAndWait(resourceGroup, snap.name); logger.info(`Snapshot deleted: ${snap.name}`); }
-          }
-        } catch {}
-
-        logger.info(`Full Azure cleanup complete for ${vmName}`);
-      } catch (e) {
-        logger.error(`Azure cleanup failed for ${vmName}: ${e.message}`);
-      }
-    })();
+    // Hand cleanup off to the worker via Bull. The previous implementation ran
+    // an unawaited (async () => { ... })() in the request process, which is
+    // killed on every backend restart — leaving partial cleanups (e.g. NIC
+    // deleted but Public IP / NSG / snapshot still around) that brick future
+    // snapshot-recovery starts on the same vmName. The worker handler at
+    // worker/handlers/azure-delete-vm.js calls DeleteVMandResources() which is
+    // already idempotent (skips 404s gracefully), so Bull retries on failure
+    // converge cleanly. Ref: dockerguidedlab-1 incident 2026-05-05.
+    await queues['azure-delete-vm'].add({
+      name: vmName,
+      resourceGroup,
+      guacamole: !!vm.guacamole,
+    });
+    res.json({ message: `${vmName} deletion queued — Azure resources will be cleaned up by the worker` });
   } catch (err) {
     logger.error(`VM delete error: ${err.message}`);
     res.status(500).json({ message: 'Delete failed' });
@@ -131,12 +101,22 @@ router.patch('/expiry', async (req, res) => {
     if (!['superadmin', 'admin'].includes(req.user.userType)) return res.status(403).json({ message: 'Forbidden' });
 
     const { trainingName, vmName, expiresAt, extendHours } = req.body;
+    // Tenant scoping: org-admin can only modify expiry for own org's resources.
+    const scopeOrg = req.user.userType === 'superadmin' ? null : (req.user.organization || null);
 
     if (trainingName && !vmName) {
       // Set expiry for entire training + all its VMs/containers
       const Training = require('../models/training');
       const VM = require('../models/vm');
       const Container = require('../models/container');
+
+      // Verify training belongs to caller's org
+      if (scopeOrg) {
+        const t = await Training.findOne({ name: trainingName }, 'organization').lean();
+        if (!t || t.organization !== scopeOrg) {
+          return res.status(403).json({ message: 'Cannot modify expiry for a training outside your organization' });
+        }
+      }
 
       const newExpiry = extendHours
         ? new Date(Date.now() + extendHours * 60 * 60 * 1000)
@@ -169,6 +149,25 @@ router.patch('/expiry', async (req, res) => {
       // Set/extend expiry for single VM
       const VM = require('../models/vm');
       const Container = require('../models/container');
+      const Training = require('../models/training');
+
+      // Verify VM/container belongs to caller's org (VM has no org field — resolve via trainingName)
+      if (scopeOrg) {
+        const vmDoc = await VM.findOne({ name: vmName }, 'trainingName').lean();
+        const cDoc  = vmDoc ? null : await Container.findOne({ name: vmName }, 'organization trainingName').lean();
+        if (vmDoc) {
+          const t = await Training.findOne({ name: vmDoc.trainingName }, 'organization').lean();
+          if (!t || t.organization !== scopeOrg) {
+            return res.status(403).json({ message: 'Cannot modify expiry for a VM outside your organization' });
+          }
+        } else if (cDoc) {
+          if (cDoc.organization !== scopeOrg) {
+            return res.status(403).json({ message: 'Cannot modify expiry for a container outside your organization' });
+          }
+        } else {
+          return res.status(404).json({ message: 'Instance not found' });
+        }
+      }
 
       const newExpiry = extendHours
         ? new Date(Date.now() + extendHours * 60 * 60 * 1000)
@@ -244,8 +243,16 @@ router.patch('/vm-settings', async (req, res) => {
 // still route through Guacamole for RDP.
 router.post('/browser-access', async (req, res) => {
   try {
-    const { vmName, publicIp, adminUsername, adminPassword, os, useVnc, vncPort } = req.body;
-    if (!vmName || !publicIp) return res.status(400).json({ message: 'vmName and publicIp required' });
+    // Patched 2026-05-21: ignore client-supplied creds. Pull adminUsername/adminPassword/publicIp from Mongo to prevent stale frontend caches reverting Guac connection params.
+    const { vmName, useVnc, vncPort } = req.body;
+    if (!vmName) return res.status(400).json({ message: 'vmName required' });
+    const VMM = require('../models/vm');
+    const vmServerDoc = await VMM.findOne({ name: vmName }, 'adminUsername adminPass publicIp os hasXrdp').lean();
+    if (!vmServerDoc) return res.status(404).json({ message: 'VM not found' });
+    const adminUsername = vmServerDoc.adminUsername;
+    const adminPassword = vmServerDoc.adminPass;
+    const publicIp = vmServerDoc.publicIp;
+    const os = vmServerDoc.os;
 
     // Only route to the Kasm proxy when the caller explicitly asked
     // (useVnc=true, set by vmDetails.jsx when the VM's kasmVnc flag is
@@ -260,30 +267,14 @@ router.post('/browser-access', async (req, res) => {
       });
     }
 
-    // Check VM flags for MeshCentral and xrdp
-    const VM = require('../models/vm');
-    const vmDoc = await VM.findOne({ name: vmName }, 'hasXrdp meshCentral').lean();
-
-    // MeshCentral path: Windows VMs with agent get direct agent-based
-    // desktop — no RDP transcoding, no guacd CPU load. Falls back to
-    // Guacamole if agent hasn't connected yet.
-    if (vmDoc?.meshCentral) {
-      try {
-        const mcResult = await getDesktopAccessUrl(vmName);
-        if (mcResult) return res.json(mcResult);
-        logger.warn(`[browser-access] ${vmName}: MeshCentral device not found, falling back to Guacamole`);
-      } catch (mcErr) {
-        logger.warn(`[browser-access] ${vmName}: MeshCentral error (${mcErr.message}), falling back to Guacamole`);
-      }
-    }
-
-    // Guacamole fallback — for Linux VMs with xrdp, pass the xrdp flag
-    // so Guacamole picks RDP (security='rdp') instead of SSH terminal.
+    // For Linux VMs with xrdp installed, pass the xrdp flag so the
+    // Guacamole service picks RDP (security='rdp', port 3389) and opens
+    // the XFCE desktop instead of a bare SSH terminal.
     const result = await getVmAccessUrl({
       vmName, publicIp, adminUsername, adminPassword, os,
       useVnc: useVnc || false,
       vncPort: vncPort || 6901,
-      xrdp: !!vmDoc?.hasXrdp,
+      xrdp: !!vmServerDoc.hasXrdp,
     });
     res.json(result);
   } catch (err) {

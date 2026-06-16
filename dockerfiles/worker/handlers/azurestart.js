@@ -37,8 +37,8 @@ const handler = async (job) => {
     // -----------------------------------------------------------------
     const vmDoc = await VM.findOne(
       { name: vmName },
-      'isRunning isAlive vmTemplate -_id'   // we also need the template for recreation
-    );
+      'isRunning isAlive vmTemplate -_id'
+    ).lean();   // .lean() so vmTemplate (not in schema) is accessible as raw object
 
     if (!vmDoc) {
       return logger.error(`${vmName} not found in DB`);

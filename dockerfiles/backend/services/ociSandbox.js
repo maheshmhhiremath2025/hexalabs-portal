@@ -85,6 +85,13 @@ async function createOciSandbox(compartmentName, region, email) {
   const tenancyId = process.env.OCI_TENANCY_OCID;
 
   if (!ociSdkAvailable || !getProvider()) {
+    // P2-17: in production (OCI_TENANCY_OCID set) the mock-mode fallback is
+    // a silent footgun — it succeeds the create flow, persists fake OCIDs,
+    // and the resulting sandbox doc is unusable. Fail loudly instead so an
+    // SDK/credential regression is obvious.
+    if (process.env.OCI_TENANCY_OCID) {
+      throw new Error('OCI provider failed to initialise in production: SDK unavailable or credentials invalid (OCI_TENANCY_OCID set, but provider could not be built)');
+    }
     // Return mock data so the rest of the flow works without OCI credentials
     logger.warn('OCI SDK not configured — returning mock sandbox data');
     const mockId = crypto.randomBytes(8).toString('hex');
@@ -135,13 +142,52 @@ async function createOciSandbox(compartmentName, region, email) {
   logger.info(`OCI user created: ${userId}`);
 
   // 3. Create UI password — OCI generates the password, we capture it
-  let actualPassword = password;
+  // Set password on the IDENTITY DOMAIN side (the auth surface used by
+  // Console login). Legacy createOrResetUIPassword sets a password on the
+  // IAM identity, which does NOT propagate to Identity Domains — so we'd
+  // get an "Invalid username" on Console. Modern tenancies route Console
+  // login through IDCS, so we must call putUserPasswordChanger on the
+  // domain user. The legacy IAM password is left untouched (only matters
+  // for `oci` CLI auth, which sandbox students don't use).
+  let actualPassword = password; // already strong (matches IDCS policy)
   try {
-    const pwResponse = await identityClient.createOrResetUIPassword({ userId });
-    actualPassword = pwResponse.uIPassword?.password || password;
-    logger.info(`OCI UI password created for user ${username}`);
+    const idd = require('oci-identitydomains');
+    const iddClient = new idd.IdentityDomainsClient({ authenticationDetailsProvider: provider });
+    const domainEndpoint = (process.env.OCI_IDCS_URL || '').replace(/\/+$/, '');
+    if (!domainEndpoint) throw new Error('OCI_IDCS_URL env var not set — needed for Identity Domains password reset');
+    iddClient.endpoint = domainEndpoint;
+
+    // Newly-created IAM user gets auto-mirrored to the default Identity
+    // Domain, but propagation can take a few seconds. Poll up to ~15s.
+    let domainUser = null;
+    for (let i = 0; i < 5; i++) {
+      const search = await iddClient.listUsers({ filter: `userName eq "${username}"`, limit: 1 });
+      const items = search.users?.Resources || search.users?.resources || [];
+      if (items.length) { domainUser = items[0]; break; }
+      await new Promise(r => setTimeout(r, 3000));
+    }
+    if (!domainUser) {
+      logger.warn(`OCI domain user not found yet for ${username} — Console login may fail until manually reset`);
+    } else {
+      await iddClient.putUserPasswordChanger({
+        userPasswordChangerId: domainUser.id,
+        userPasswordChanger: {
+          schemas: ['urn:ietf:params:scim:schemas:oracle:idcs:UserPasswordChanger'],
+          password: actualPassword,
+        },
+      });
+      logger.info(`OCI domain password set for ${username} (id=${domainUser.id})`);
+    }
   } catch (e) {
-    logger.error(`OCI UI password creation failed: ${e.message}`);
+    logger.error(`OCI domain password setter failed for ${username}: ${e.message}`);
+    // Fall back to legacy IAM UI password so something still gets set
+    try {
+      const pwResponse = await identityClient.createOrResetUIPassword({ userId });
+      actualPassword = pwResponse.uIPassword?.password || password;
+      logger.warn(`Fell back to legacy IAM password for ${username} — Console login may not work`);
+    } catch (e2) {
+      logger.error(`OCI UI password creation also failed: ${e2.message}`);
+    }
   }
 
   // 4. Create policy scoping user to their compartment
@@ -225,4 +271,59 @@ async function deleteOciSandbox(compartmentId, userId, policyId) {
   }
 }
 
-module.exports = { createOciSandbox, deleteOciSandbox };
+// Grant the OAC ServiceAdministrator app role on the analytics-instance app to a
+// freshly-created Identity Domain user. createOciSandbox provisions the user
+// but does not assign any OAC role, so without this the user can authenticate
+// against IDCS but lands on a permissions wall inside Oracle Analytics.
+//
+// Looks up the OAC analytics-instance app dynamically (serviceTypeURN
+// ANALYTICSINST, non-alias, ending in _APPID, excluding the
+// SERVICE_INSTANCE_ADMIN_APPID alias). If multiple OAC instances ever coexist
+// in the same domain this picks the first match — revisit then.
+async function grantOacServiceAdminByUsername(username) {
+  const idcsUrl = (process.env.OCI_IDCS_URL || '').replace(/\/+$/, '');
+  const clientId = process.env.OCI_IDCS_CLIENT_ID;
+  const clientSecret = process.env.OCI_IDCS_CLIENT_SECRET;
+  if (!idcsUrl || !clientId || !clientSecret) {
+    throw new Error('OCI_IDCS_URL/CLIENT_ID/CLIENT_SECRET not configured');
+  }
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const tokenRes = await fetch(`${idcsUrl}/oauth2/v1/token`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials&scope=urn:opc:idm:__myscopes__',
+  });
+  if (!tokenRes.ok) throw new Error(`IDCS token: ${tokenRes.status} ${await tokenRes.text()}`);
+  const token = (await tokenRes.json()).access_token;
+  const auth = { 'Authorization': `Bearer ${token}` };
+
+  const userQ = await fetch(`${idcsUrl}/admin/v1/Users?filter=${encodeURIComponent(`userName eq "${username}"`)}&attributes=id`, { headers: auth });
+  const userJson = await userQ.json();
+  const userId = userJson.Resources?.[0]?.id;
+  if (!userId) throw new Error(`IDCS user not found: ${username}`);
+
+  const appQ = await fetch(`${idcsUrl}/admin/v1/Apps?filter=${encodeURIComponent('serviceTypeURN eq "ANALYTICSINST" and isAliasApp eq false')}&attributes=id,name`, { headers: auth });
+  const appJson = await appQ.json();
+  const oacApp = (appJson.Resources || []).find(a => /APPID$/.test(a.name) && !/SERVICE_INSTANCE_ADMIN_APPID/.test(a.name));
+  if (!oacApp) throw new Error('OAC analytics instance app not found in IDCS');
+
+  const roleQ = await fetch(`${idcsUrl}/admin/v1/AppRoles?filter=${encodeURIComponent(`app.value eq "${oacApp.id}" and displayName eq "ServiceAdministrator"`)}&attributes=id`, { headers: auth });
+  const roleJson = await roleQ.json();
+  const roleId = roleJson.Resources?.[0]?.id;
+  if (!roleId) throw new Error('ServiceAdministrator role not found on OAC app');
+
+  const grantRes = await fetch(`${idcsUrl}/admin/v1/Grants`, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/scim+json' },
+    body: JSON.stringify({
+      schemas: ['urn:ietf:params:scim:schemas:oracle:idcs:Grant'],
+      grantee: { value: userId, type: 'User' },
+      app: { value: oacApp.id },
+      entitlement: { attributeName: 'appRoles', attributeValue: roleId },
+      grantMechanism: 'ADMINISTRATOR_TO_USER',
+    }),
+  });
+  if (!grantRes.ok) throw new Error(`grant: ${grantRes.status} ${await grantRes.text()}`);
+}
+
+module.exports = { createOciSandbox, deleteOciSandbox, grantOacServiceAdminByUsername };

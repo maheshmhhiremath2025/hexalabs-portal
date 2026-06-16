@@ -1,7 +1,7 @@
 // Unified email template engine — used by ALL customer-facing emails.
 //
 // Goal: every customer email looks like it came from the same product.
-// Brand is fixed (HexaLabs Cloud Portal) — we intentionally do NOT pull
+// Brand is fixed (Hexalabs Cloud Portal) — we intentionally do NOT pull
 // per-org branding here. Reason: emails go through Gmail and end up in
 // reply chains, forwards, and screenshots; consistent brand identity
 // across organizations protects ours.
@@ -17,7 +17,7 @@
 // got to 848 lines in the first place.
 
 const BRAND = {
-  name: 'HexaLabs Cloud Portal',
+  name: 'Hexalabs Cloud Portal',
   tagline: 'Enterprise Cloud Training Labs',
   primary: '#2563eb',
   accent: '#1e40af',
@@ -112,7 +112,7 @@ function rawHtml(html, textFallback = '') {
 
 function headerHtml(title, badge) {
   return `
-    <div style="background:${BRAND.headerGradient};padding:32px 24px;text-align:center;">
+    <div style="background:${BRAND.primary};background:${BRAND.headerGradient};padding:32px 24px;text-align:center;">
       ${badge ? `<div style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;margin-bottom:12px;">
         <span style="font-size:11px;font-weight:700;color:#ffffff;letter-spacing:1.5px;">${escapeHtml(badge)}</span>
       </div>` : ''}

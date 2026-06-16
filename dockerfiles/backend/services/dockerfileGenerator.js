@@ -82,7 +82,7 @@ RESPOND WITH ONLY THE DOCKERFILE CONTENT. No explanation, no markdown fences, ju
  */
 async function buildImage(dockerfile, imageName, imageTag = '1.0', onProgress) {
   // Create a temp directory with the Dockerfile
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexalabs-build-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'getlabs-build-'));
   const dockerfilePath = path.join(tmpDir, 'Dockerfile');
   fs.writeFileSync(dockerfilePath, dockerfile);
 

@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import apiCaller from '../../services/apiCaller';
-import { FaGoogle, FaPlus, FaTrash, FaSpinner, FaUsers, FaRocket, FaExclamationTriangle, FaDownload } from 'react-icons/fa';
+import { FaGoogle, FaPlus, FaTrash, FaKey, FaSpinner, FaUsers, FaRocket, FaExclamationTriangle, FaDownload } from 'react-icons/fa';
 import BulkEmailInput from '../../components/BulkEmailInput';
 
-export default function GcpUsers() {
+export default function GcpUsers({ userDetails }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -20,25 +20,84 @@ export default function GcpUsers() {
   const [ttlHours, setTtlHours] = useState(4);
   const [dailyCapHours, setDailyCapHours] = useState(12);
   const [totalCapHours, setTotalCapHours] = useState(0);
+  const [batchExpiresAt, setBatchExpiresAt] = useState('');
+  const [orgs, setOrgs] = useState([]);
+  const [selectedOrg, setSelectedOrg] = useState('');
+  const isSuper = userDetails?.userType === 'superadmin';
   const [bulkEmails, setBulkEmails] = useState('');
   const [deploying, setDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState(null);
   const [emailWarnings, setEmailWarnings] = useState([]);
+  const [filterOrg, setFilterOrg] = useState('');
+  const [selectedEmails, setSelectedEmails] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const pollRef = useRef(null);
 
   const fetchUsers = useCallback(async (silent = false) => {
+    if (isSuper && !filterOrg) {
+      setUsers([]);
+      setSelectedEmails(new Set());
+      if (!silent) setLoading(false);
+      return;
+    }
     try {
-      const res = await apiCaller.get('/gcp-sandbox/user');
+      const url = isSuper && filterOrg ? `/gcp-sandbox/user?organization=${encodeURIComponent(filterOrg)}` : '/gcp-sandbox/user';
+      const res = await apiCaller.get(url);
       setUsers(res.data);
+      setSelectedEmails(new Set());
     } catch {
       if (!silent) setError('Error fetching GCP sandbox users.');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [isSuper, filterOrg]);
 
   useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { if (isSuper) fetchUsers(); }, [filterOrg]);
+
+  const toggleSelected = (email) => {
+    setSelectedEmails(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email); else next.add(email);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelectedEmails(prev => prev.size === users.length ? new Set() : new Set(users.map(u => u.email)));
+  };
+  const handleBulkDelete = async () => {
+    const emails = [...selectedEmails];
+    if (emails.length === 0) return;
+    if (!window.confirm(`Delete ${emails.length} GCP sandbox user(s)?\n\nThis will tear down their GCP projects + Mongo records. Cannot be undone.`)) return;
+    setBulkDeleting(true); setError(null); setSuccess(null);
+    try {
+      const res = await apiCaller.post('/sandbox/bulk-delete-users', { cloud: 'gcp', emails });
+      const jobId = res.data?.jobId;
+      if (!jobId) throw new Error('No jobId returned');
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        if (attempts > 180) { clearInterval(poll); setBulkDeleting(false); setError('Bulk delete timed out'); return; }
+        try {
+          const s = await apiCaller.get(`/sandbox/bulk-delete-status/${jobId}`);
+          if (s.data?.status === 'done' || s.data?.status === 'failed') {
+            clearInterval(poll);
+            setBulkDeleting(false);
+            const ok = s.data.completed || 0;
+            const total = s.data.total || emails.length;
+            const failedCount = s.data.failed || 0;
+            setSuccess(`Bulk delete: ${ok}/${total} succeeded${failedCount ? `, ${failedCount} failed` : ''}`);
+            setSelectedEmails(new Set());
+            fetchUsers();
+          }
+        } catch {}
+      }, 2000);
+    } catch (e) {
+      setBulkDeleting(false);
+      setError(`Bulk delete failed: ${e.response?.data?.error || e.message}`);
+    }
+  };
 
   // Auto-poll when any user has deletionStatus === 'deleting'
   useEffect(() => {
@@ -67,6 +126,14 @@ export default function GcpUsers() {
       } catch {}
     })();
   }, []);
+
+  // Fetch organizations for superadmin org-picker
+  useEffect(() => {
+    if (userDetails?.userType !== 'superadmin') return;
+    apiCaller.get('/admin/organization')
+      .then(r => setOrgs(r.data?.organization || []))
+      .catch(() => {});
+  }, [userDetails]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -119,6 +186,10 @@ export default function GcpUsers() {
   const handleBulkDeploy = async () => {
     const emails = getEmailList();
     if (!selectedTemplate || emails.length === 0) return;
+    if (isSuper && !selectedOrg) {
+      setError('Please select an Organization to deploy to.');
+      return;
+    }
     setDeploying(true); setError(null); setSuccess(null); setDeployResult(null);
     try {
       const res = await apiCaller.post('/gcp-sandbox/bulk-deploy-gcp', {
@@ -127,6 +198,8 @@ export default function GcpUsers() {
         ttlHours,
         dailyCapHours,
         totalCapHours,
+        batchExpiresAt: batchExpiresAt || null,
+        organization: selectedOrg || undefined,
       });
       setDeployResult(res.data);
       setSuccess(`Deployed ${res.data.succeeded}/${res.data.total} GCP sandboxes from "${res.data.templateName}"`);
@@ -135,6 +208,23 @@ export default function GcpUsers() {
     } catch (err) {
       setError(err.response?.data?.message || 'Bulk deploy failed');
     } finally { setDeploying(false); }
+  };
+
+  
+  const [resettingUser, setResettingUser] = useState(null);
+  const handleResetPassword = async (email) => {
+    if (!window.confirm(`Reset password for ${email}?\n\nNew password will be: Welcome1234!\nShare it with the learner via your usual channel.`)) return;
+    setResettingUser(email);
+    setError(null);
+    try {
+      await apiCaller.patch(superadminApiRoutes.usersApi, { email, resetPassword: true });
+      setSuccess(`Password reset for ${email}. New password: Welcome1234!`);
+      setTimeout(() => setSuccess(null), 6000);
+    } catch (e) {
+      setError(`Could not reset ${email}. ${e.response?.data?.message || ""}`);
+    } finally {
+      setResettingUser(null);
+    }
   };
 
   const handleDelete = async (email) => {
@@ -155,17 +245,11 @@ export default function GcpUsers() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <FaGoogle className="text-red-500" /> GCP Sandbox Users
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage GCP sandbox users and their project quotas</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-          <FaPlus className="w-3 h-3" /> Add User
-        </button>
+      <div>
+        <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <FaGoogle className="text-red-500" /> GCP Sandbox Users
+        </h1>
+        <p className="text-sm text-gray-500 mt-0.5">Manage GCP sandbox users and their project quotas</p>
       </div>
 
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
@@ -179,6 +263,20 @@ export default function GcpUsers() {
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isSuper && (
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Deploy to Organization</label>
+                <select
+                  value={selectedOrg}
+                  onChange={e => setSelectedOrg(e.target.value)}
+                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                >
+                  <option value="">Select an organization...</option>
+                  {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-0.5">Required. Sandboxes will be visible to this org's admin.</p>
+              </div>
+            )}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">GCP Template</label>
               <select
@@ -209,6 +307,12 @@ export default function GcpUsers() {
                 <option value={48}>48 hours</option>
                 <option value={72}>72 hours</option>
               </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Batch ends on</label>
+              <input type="datetime-local" value={batchExpiresAt} onChange={e => setBatchExpiresAt(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+              <p className="text-[10px] text-gray-400 mt-0.5">After this date, IAM user + DB record are permanently deleted</p>
             </div>
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Daily Cap (hrs)</label>
@@ -400,32 +504,75 @@ export default function GcpUsers() {
 
       {/* Users table */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-        <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
           <h3 className="text-sm font-semibold text-gray-800">Users ({users.length})</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            {isSuper && (
+              <select
+                value={filterOrg}
+                onChange={e => setFilterOrg(e.target.value)}
+                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                title="Filter by organization"
+              >
+                <option value="">— Select organization —</option>
+                {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            )}
+            {selectedEmails.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 transition-colors"
+              >
+                {bulkDeleting ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
+                Delete {selectedEmails.size} selected
+              </button>
+            )}
+          </div>
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
+        ) : isSuper && !filterOrg ? (
+          <div className="px-5 py-10 text-center text-sm text-gray-400">Select an organization above to view its sandbox users.</div>
         ) : users.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-gray-400">No GCP sandbox users yet</div>
+          <div className="px-5 py-10 text-center text-sm text-gray-400">No GCP sandbox users in this organization.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-[13px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  {['Email', 'Duration', 'TTL', 'Credits', 'Sandboxes', 'Expires', ''].map(h => (
+                  <th className="px-3 py-2.5 text-left">
+                    <input
+                      type="checkbox"
+                      checked={users.length > 0 && selectedEmails.size === users.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300"
+                      title="Select all"
+                    />
+                  </th>
+                  {['Email', 'Session TTL', 'Sandboxes', 'Batch Expires', ''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {users.map(u => {
-                  const available = (u.credits?.total || 0) - (u.credits?.consumed || 0);
                   const activeSandboxes = (u.sandbox || []).length;
                   const expired = u.endDate && new Date(u.endDate) < new Date();
+                  const batchExpired = u.batchExpiresAt && new Date(u.batchExpiresAt) < new Date();
                   const isDeleting = u.deletionStatus === 'deleting';
                   const deleteFailed = u.deletionStatus === 'failed';
                   return (
                     <tr key={u._id} className={`hover:bg-gray-50/50 ${isDeleting ? 'opacity-50' : ''}`}>
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmails.has(u.email)}
+                          onChange={() => toggleSelected(u.email)}
+                          disabled={isDeleting}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="font-medium text-gray-800">{u.email}</div>
                         {u.googleEmail && u.googleEmail !== u.email && <div className="text-[11px] text-gray-400">{u.googleEmail}</div>}
@@ -440,12 +587,7 @@ export default function GcpUsers() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{u.duration} days</td>
-                      <td className="px-4 py-2.5 text-gray-600">{u.sandboxTtlHours || 4}h</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`font-medium ${available > 0 ? 'text-green-600' : 'text-red-600'}`}>{available}</span>
-                        <span className="text-gray-400">/{u.credits?.total || 0}</span>
-                      </td>
+                      <td className="px-4 py-2.5 text-gray-600">{u.sandboxTtlHours ? `${u.sandboxTtlHours}h` : '-'}</td>
                       <td className="px-4 py-2.5">
                         {activeSandboxes > 0 ? (
                           <div className="space-y-1">
@@ -463,20 +605,27 @@ export default function GcpUsers() {
                         ) : <span className="text-gray-300">none</span>}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${expired ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
-                          {expired ? 'Expired' : new Date(u.endDate).toLocaleDateString('en-IN')}
+                        <span className={batchExpired ? 'text-red-500 font-semibold' : 'text-gray-700'}>
+                          {u.batchExpiresAt
+                            ? new Date(u.batchExpiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                            : <span className="text-gray-400 italic">no expiry</span>}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         {isDeleting ? (
                           <FaSpinner className="w-3 h-3 animate-spin text-gray-400 inline" />
-                        ) : (
+                        ) : (<>
+                          <button onClick={() => handleResetPassword(u.email)} disabled={resettingUser === u.email}
+                            title="Reset password to Welcome1234!"
+                            className="p-1.5 mr-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md disabled:opacity-50 transition-colors">
+                            {resettingUser === u.email ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaKey className="w-3 h-3" />}
+                          </button>
                           <button onClick={() => handleDelete(u.email)} disabled={deleting === u.email}
                             title={deleteFailed ? 'Retry delete' : 'Delete user'}
                             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md disabled:opacity-50 transition-colors">
                             {deleting === u.email ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
                           </button>
-                        )}
+                        </>)}
                       </td>
                     </tr>
                   );

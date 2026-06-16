@@ -1349,6 +1349,221 @@ async function deleteGuidedLabSandbox(req, res) {
   }
 }
 
+// ─── TOC-to-Lab Suite Pipeline ───────────────────────────────────────────
+
+/**
+ * POST /guided-labs/toc-pipeline
+ * Start the TOC analysis + multi-lab generation pipeline.
+ * Accepts PDF upload (multipart) or rawText body.
+ * Returns jobId for polling.
+ */
+async function startTocPipeline(req, res) {
+  try {
+    if (!['admin', 'superadmin'].includes(req.user.userType)) {
+      return res.status(403).json({ message: 'Admin or superadmin access required' });
+    }
+
+    if (!req.file && !req.body.rawText) {
+      return res.status(400).json({ message: 'A PDF file or rawText is required' });
+    }
+
+    let pdfBuffer;
+    if (req.file) {
+      pdfBuffer = req.file.buffer;
+    } else {
+      // For raw text, wrap it in a buffer-like structure that pdfExtractor
+      // won't accept — so we handle text directly in the pipeline
+      pdfBuffer = null;
+    }
+
+    const { startPipeline } = require('../services/tocLabPipeline');
+
+    // If raw text provided instead of PDF, we need to handle differently
+    if (!pdfBuffer && req.body.rawText) {
+      // Create a modified pipeline that skips PDF extraction
+      const { startPipelineFromText } = require('../services/tocLabPipeline');
+      if (typeof startPipelineFromText === 'function') {
+        const { jobId } = startPipelineFromText(req.body.rawText, {
+          providerHint: req.body.providerHint || 'aws',
+          difficultyHint: req.body.difficultyHint || 'auto',
+          customPrompt: req.body.customPrompt || '',
+          ttlHours: parseInt(req.body.ttlHours, 10) || 4,
+          organization: req.body.organization || req.user.organization || '',
+          createdBy: req.user.email,
+        });
+        return res.json({ jobId, message: 'TOC pipeline started from text' });
+      }
+    }
+
+    const { jobId } = startPipeline(pdfBuffer, {
+      providerHint: req.body.providerHint || 'aws',
+      difficultyHint: req.body.difficultyHint || 'auto',
+      customPrompt: req.body.customPrompt || '',
+      ttlHours: parseInt(req.body.ttlHours, 10) || 4,
+      organization: req.body.organization || req.user.organization || '',
+      createdBy: req.user.email,
+    });
+
+    res.json({ jobId, message: 'TOC pipeline started' });
+  } catch (err) {
+    logger.error(`[guided-labs] startTocPipeline error: ${err.message}`);
+    res.status(500).json({ message: `Pipeline start failed: ${err.message}` });
+  }
+}
+
+/**
+ * GET /guided-labs/toc-pipeline/:jobId
+ * Poll pipeline status.
+ */
+async function getTocPipelineStatus(req, res) {
+  try {
+    const { getStatus } = require('../services/tocLabPipeline');
+    const status = getStatus(req.params.jobId);
+    if (!status) return res.status(404).json({ message: 'Pipeline job not found' });
+    res.json(status);
+  } catch (err) {
+    logger.error(`[guided-labs] getTocPipelineStatus error: ${err.message}`);
+    res.status(500).json({ message: 'Failed to get pipeline status' });
+  }
+}
+
+/**
+ * GET /guided-labs/toc-pipeline/:jobId/result
+ * Get full pipeline results (labs + template + analysis).
+ * Only available when status is 'done' or 'failed'.
+ */
+async function getTocPipelineResult(req, res) {
+  try {
+    const { getResult } = require('../services/tocLabPipeline');
+    const result = getResult(req.params.jobId);
+    if (!result) return res.status(404).json({ message: 'Pipeline job not found or not yet complete' });
+    res.json(result);
+  } catch (err) {
+    logger.error(`[guided-labs] getTocPipelineResult error: ${err.message}`);
+    res.status(500).json({ message: 'Failed to get pipeline result' });
+  }
+}
+
+/**
+ * POST /guided-labs/toc-pipeline/:jobId/save
+ * Persist the generated labs + sandbox template to database.
+ * Accepts edited labs and template overrides from the frontend.
+ */
+async function saveTocLabSuite(req, res) {
+  try {
+    if (!['admin', 'superadmin'].includes(req.user.userType)) {
+      return res.status(403).json({ message: 'Admin or superadmin access required' });
+    }
+
+    const { getJob } = require('../services/tocLabPipeline');
+    const job = getJob(req.params.jobId);
+    if (!job) return res.status(404).json({ message: 'Pipeline job not found' });
+    if (job.status !== 'done') return res.status(400).json({ message: 'Pipeline is not complete yet' });
+
+    const { labs: editedLabs, templateOverrides, organization, assignedOrgs } = req.body;
+
+    // Use edited labs from frontend if provided, otherwise use generated ones
+    const labsToSave = editedLabs || job.labs.filter(l => l);
+
+    if (!labsToSave.length) {
+      return res.status(400).json({ message: 'No labs to save' });
+    }
+
+    const SandboxTemplate = require('../models/sandboxTemplate');
+
+    // 1. Save the SandboxTemplate first (labs need the slug)
+    let savedTemplate = null;
+    if (job.template) {
+      const templateData = { ...job.template };
+      delete templateData._id;
+      delete templateData._isSaved;
+      delete templateData.__v;
+
+      // Apply any overrides from admin
+      if (templateOverrides) {
+        if (templateOverrides.name) templateData.name = templateOverrides.name;
+        if (templateOverrides.ttlHours) templateData.sandboxConfig = { ...templateData.sandboxConfig, ttlHours: templateOverrides.ttlHours };
+      }
+
+      templateData.createdBy = req.user.email;
+      templateData.isActive = true;
+      savedTemplate = await SandboxTemplate.create(templateData);
+      logger.info(`[toc-suite] saved SandboxTemplate ${savedTemplate._id} (${savedTemplate.slug})`);
+    }
+
+    // 2. Save each lab as a GuidedLab document
+    const savedLabs = [];
+    for (let i = 0; i < labsToSave.length; i++) {
+      const labData = labsToSave[i];
+      if (!labData) continue;
+
+      try {
+        const labDoc = await GuidedLab.create({
+          title: labData.title || `Lab ${i + 1}`,
+          slug: labData.slug || `toc-lab-${Date.now()}-${i}`,
+          description: labData.description || '',
+          cloud: labData.cloud || 'aws',
+          difficulty: labData.difficulty || 'intermediate',
+          duration: labData.duration || 60,
+          category: labData.category || 'General',
+          tags: labData.tags || [],
+          steps: (labData.steps || []).map((step, idx) => ({
+            order: step.order || idx + 1,
+            title: step.title || `Step ${idx + 1}`,
+            description: step.description || '',
+            hint: step.hint || '',
+            verifyType: step.verifyType || 'manual',
+            verifyCommand: step.verifyCommand || '',
+            verifyExpectedOutput: step.verifyExpectedOutput || '',
+            troubleshooting: step.troubleshooting || [],
+          })),
+          labTroubleshooting: labData.labTroubleshooting || [],
+          sandboxTemplateSlug: savedTemplate ? savedTemplate.slug : null,
+          containerImage: labData.containerImage || null,
+          containerConfig: labData.containerConfig || null,
+          vmTemplateName: labData.vmTemplateName || null,
+          aiGenerated: true,
+          isActive: true,
+          createdBy: req.user.email,
+          assignedOrgs: assignedOrgs || [],
+        });
+
+        savedLabs.push(labDoc);
+        logger.info(`[toc-suite] saved GuidedLab ${labDoc._id} (${labDoc.slug})`);
+      } catch (err) {
+        logger.error(`[toc-suite] failed to save lab ${i}: ${err.message}`);
+        // If slug conflict, try with timestamp suffix
+        if (err.code === 11000) {
+          try {
+            labData.slug = `${labData.slug}-${Date.now().toString(36)}`;
+            const retryDoc = await GuidedLab.create({
+              ...labData,
+              slug: labData.slug,
+              sandboxTemplateSlug: savedTemplate ? savedTemplate.slug : null,
+              aiGenerated: true,
+              isActive: true,
+              createdBy: req.user.email,
+              assignedOrgs: assignedOrgs || [],
+            });
+            savedLabs.push(retryDoc);
+          } catch (retryErr) {
+            logger.error(`[toc-suite] retry save also failed: ${retryErr.message}`);
+          }
+        }
+      }
+    }
+
+    res.json({
+      message: `Saved ${savedLabs.length} labs` + (savedTemplate ? ` and 1 sandbox template` : ''),
+      labs: savedLabs.map(l => ({ id: l._id, title: l.title, slug: l.slug })),
+      template: savedTemplate ? { id: savedTemplate._id, slug: savedTemplate.slug, name: savedTemplate.name } : null,
+    });
+  } catch (err) {
+    logger.error(`[guided-labs] saveTocLabSuite error: ${err.message}`);
+    res.status(500).json({ message: `Save failed: ${err.message}` });
+  }
+}
+
 module.exports = {
   listGuidedLabs,
   getGuidedLab,
@@ -1372,4 +1587,8 @@ module.exports = {
   getGuidedLabAnalytics,
   getGuidedLabSandboxes,
   deleteGuidedLabSandbox,
+  startTocPipeline,
+  getTocPipelineStatus,
+  getTocPipelineResult,
+  saveTocLabSuite,
 };

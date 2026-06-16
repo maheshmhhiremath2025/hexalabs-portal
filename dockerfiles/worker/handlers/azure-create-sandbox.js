@@ -28,14 +28,14 @@ const ALLOWED_VM_SIZES = [
    "Standard_B4ms", "Standard_B1ls",
 ];
 
-async function assignUserRole(resourceGroupName, userId, roleId = CUSTOM_ROLE_ID) {
+async function assignUserRole(resourceGroupName, userId) {
    try {
       await authClient.roleAssignments.create(
          `/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${resourceGroupName}`,
          crypto.randomUUID(),
          {
             principalId: userId,
-            roleDefinitionId: roleId,
+            roleDefinitionId: CUSTOM_ROLE_ID,
             scope: `/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${resourceGroupName}`,
          }
       );
@@ -44,13 +44,13 @@ async function assignUserRole(resourceGroupName, userId, roleId = CUSTOM_ROLE_ID
    }
 }
 
-async function assignInitiative(resourceGroupName, initiativeId = INITIATIVE_ID) {
+async function assignInitiative(resourceGroupName) {
    try {
       await policyClient.policyAssignments.create(
          `/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${resourceGroupName}`,
          crypto.randomUUID(),
          {
-            policyDefinitionId: initiativeId,
+            policyDefinitionId: INITIATIVE_ID,
             scope: `/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${resourceGroupName}`,
             displayName: "Sandbox Resource Restrictions",
          }
@@ -158,7 +158,7 @@ async function createBudget(resourceGroupName, budgetAmountInr = 500) {
 
 // Main Handler
 const handler = async (job) => {
-   const { resourceGroupName, resourceGroupLocation, userId, budgetLimit, customRoleId, policyInitiativeId } = job.data;
+   const { resourceGroupName, resourceGroupLocation, userId, budgetLimit } = job.data;
 
    if (!resourceGroupName || !resourceGroupLocation || !userId) {
       logger.error("Missing required parameters for sandbox creation");
@@ -186,8 +186,8 @@ const handler = async (job) => {
 
       // Step 3: Assign role + policies (parallel for speed)
       await Promise.allSettled([
-         assignUserRole(resourceGroupName, userId, customRoleId || CUSTOM_ROLE_ID),
-         assignInitiative(resourceGroupName, policyInitiativeId || INITIATIVE_ID),
+         assignUserRole(resourceGroupName, userId),
+         assignInitiative(resourceGroupName),
          assignVmSizeRestriction(resourceGroupName),
          assignCostRestrictions(resourceGroupName),
          createBudget(resourceGroupName, budgetLimit || 500),

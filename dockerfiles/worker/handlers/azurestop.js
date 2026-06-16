@@ -51,7 +51,20 @@ const handler = async (job) => {
     }
 
     const startTime = vmDoc.logs[logIndex].start;
-    const durationMins = Math.ceil((currentTime - new Date(startTime)) / 60000);
+    // PATCH 2026-05-25: cap suspicious open log entries to prevent quota inflation.
+    // If a log entry has been open > 24h, the previous stop never closed it (idleShutdown
+    // auto-stops at 30 min, so anything older is stale). Charging "real elapsed time"
+    // would inflate quota by hundreds of hours. Cap at idleMinutes instead.
+    const rawDuration = Math.ceil((currentTime - new Date(startTime)) / 60000);
+    const STALE_LOG_THRESHOLD_MIN = 24 * 60;
+    const idleThreshold = vmDoc.idleMinutes || 30;
+    let durationMins;
+    if (rawDuration > STALE_LOG_THRESHOLD_MIN) {
+      durationMins = idleThreshold;
+      logger.warn(`${vmName}: stale open log (${Math.round(rawDuration/60)}h old) — clamping duration to ${idleThreshold}m`);
+    } else {
+      durationMins = rawDuration;
+    }
     const totalDuration = vmDoc.duration + durationMins;
     const consumedQuota = vmDoc.quota.consumed + durationMins;
 

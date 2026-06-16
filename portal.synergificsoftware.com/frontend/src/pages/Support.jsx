@@ -143,7 +143,7 @@ const SupportPage = () => {
       icon: FaVideo,
       title: 'Video Tutorials',
       description: 'Step-by-step video guides',
-      link: 'https://youtube.com/hexalabs',
+      link: 'https://youtube.com/@hexalabs',
       category: 'Learning'
     },
     {

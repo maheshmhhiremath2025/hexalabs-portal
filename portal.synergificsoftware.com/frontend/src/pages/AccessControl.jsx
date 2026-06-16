@@ -542,6 +542,7 @@ export default function AccessControl() {
         {[
           { v: 'login', label: 'Login Access',    icon: FaShieldAlt, hint: 'Who can log in, when' },
           { v: 'power', label: 'Power Schedule',  icon: FaPowerOff,  hint: 'VM start/stop for a batch' },
+          { v: 'cleanup', label: 'Bulk Cleanup',  icon: FaTrashAlt, hint: 'Filter + delete schedules by VM' },
         ].map(t => (
           <button key={t.v} onClick={() => setActiveTab(t.v)}
             className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
@@ -556,6 +557,7 @@ export default function AccessControl() {
       </div>
 
       {activeTab === 'power' && <PowerScheduleTab pushToast={pushToast} />}
+      {activeTab === 'cleanup' && <BulkCleanupTab pushToast={pushToast} />}
 
       {activeTab === 'login' && <>
       {/* Form card */}
@@ -673,7 +675,7 @@ export default function AccessControl() {
         <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <FaInfoCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-amber-800 leading-relaxed">
-            Restrictions are enforced at the login gate. Already-logged-in users keep their session until auto-logout (5 min idle) or browser refresh — so rules don't interrupt mid-session.
+            Restrictions are enforced at the login gate. Already-logged-in users keep their session until auto-logout (15 min idle) or browser refresh — so rules don't interrupt mid-session.
             To start/stop VMs on a schedule, use the <span className="font-semibold">Power Schedule</span> tab above.
           </p>
         </div>
@@ -748,6 +750,422 @@ export default function AccessControl() {
         )}
       </div>
       </>}
+    </div>
+  );
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bulk Schedule Cleanup tab (added 2026-05-28)
+// Lets superadmins filter every Power-Schedule entry across all trainings by
+// target VM + status, multi-select, and delete in one click. Backed by:
+//   GET  /azure/schedules/by-vm?vmName=…&status=…
+//   POST /azure/schedules/bulk-delete  { items: […] }  OR  { filter: { vmName, status } }
+// ───────────────────────────────────────────────────────────────────────────
+function BulkCleanupTab({ pushToast }) {
+  const [vmName, setVmName] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmMode, setConfirmMode] = useState('selected'); // 'selected' | 'all'
+  const [deleting, setDeleting] = useState(false);
+  const [vmSuggestions, setVmSuggestions] = useState([]);
+
+  // Bulk-edit state — empty string in any field = "don't change"
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMode, setEditMode] = useState('selected'); // 'selected' | 'all'
+  const [editTime, setEditTime] = useState('');
+  const [editAction, setEditAction] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  // Pre-populate VM suggestions from the dockerhosts + portal-managed VMs
+  // pattern. Cheap — falls back to the trainingName route to enumerate
+  // known docker-host VM names.
+  useEffect(() => {
+    (async () => {
+      try {
+        // Static suggestions — known portal-adopted docker hosts.
+        // This list is informational only; user can type anything.
+        setVmSuggestions([
+          'docker-host-a17718d5',
+          'docker-host-d6815ffb',
+          'docker-host-mpcjf0gu',
+          'docker-host-clvs-mpgipd06',
+        ]);
+      } catch { /* no-op */ }
+    })();
+  }, []);
+
+  const loadSchedules = useCallback(async () => {
+    if (!vmName.trim()) {
+      pushToast('Enter a VM name first', 'error');
+      return;
+    }
+    setLoading(true);
+    setSelectedIds(new Set());
+    try {
+      const q = new URLSearchParams({ vmName: vmName.trim() });
+      if (statusFilter && statusFilter !== 'all') q.set('status', statusFilter);
+      const r = await apiCaller.get(`/azure/schedules/by-vm?${q.toString()}`);
+      setRows(r.data?.schedules || []);
+      if ((r.data?.schedules || []).length === 0) {
+        pushToast('No matching schedules found', 'success');
+      }
+    } catch {
+      pushToast('Failed to load schedules', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [vmName, statusFilter, pushToast]);
+
+  const toggleOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allChecked = rows.length > 0 && selectedIds.size === rows.length;
+  const toggleAll = () => {
+    if (allChecked) setSelectedIds(new Set());
+    else setSelectedIds(new Set(rows.map(r => String(r.scheduleId))));
+  };
+
+  const openConfirm = (mode) => {
+    if (mode === 'selected' && selectedIds.size === 0) {
+      pushToast('Select at least one row', 'error');
+      return;
+    }
+    setConfirmMode(mode);
+    setConfirmOpen(true);
+  };
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      let body;
+      if (confirmMode === 'selected') {
+        const itemsByRow = rows
+          .filter(r => selectedIds.has(String(r.scheduleId)))
+          .map(r => ({ trainingName: r.trainingName, scheduleId: r.scheduleId }));
+        body = { items: itemsByRow };
+      } else {
+        // 'all matching' mode = filter-based
+        body = { filter: { vmName: vmName.trim(), ...(statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {}) } };
+      }
+      const r = await apiCaller.post('/azure/schedules/bulk-delete', body);
+      pushToast(`Deleted ${r.data?.count ?? 0} schedule(s)`, 'success');
+      setConfirmOpen(false);
+      setSelectedIds(new Set());
+      await loadSchedules();
+    } catch {
+      pushToast('Bulk delete failed', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openEdit = (mode) => {
+    if (mode === 'selected' && selectedIds.size === 0) {
+      pushToast('Select at least one row', 'error');
+      return;
+    }
+    setEditMode(mode);
+    setEditTime('');
+    setEditAction('');
+    setEditStatus('');
+    setEditOpen(true);
+  };
+
+  const handleBulkEdit = async () => {
+    const updates = {};
+    if (editTime.trim()) {
+      if (!/^\d{2}:\d{2}$/.test(editTime.trim())) {
+        pushToast('Time must be HH:MM (24-hour)', 'error');
+        return;
+      }
+      updates.time = editTime.trim();
+    }
+    if (editAction) updates.action = editAction;
+    if (editStatus) updates.status = editStatus;
+    if (Object.keys(updates).length === 0) {
+      pushToast('Pick at least one field to change', 'error');
+      return;
+    }
+    setEditing(true);
+    try {
+      let body;
+      if (editMode === 'selected') {
+        const items = rows
+          .filter(r => selectedIds.has(String(r.scheduleId)))
+          .map(r => ({ trainingName: r.trainingName, scheduleId: r.scheduleId }));
+        body = { items, updates };
+      } else {
+        body = {
+          filter: { vmName: vmName.trim(), ...(statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {}) },
+          updates
+        };
+      }
+      const r = await apiCaller.post('/azure/schedules/bulk-update', body);
+      pushToast(`Updated ${r.data?.count ?? 0} schedule(s)`, 'success');
+      setEditOpen(false);
+      setSelectedIds(new Set());
+      await loadSchedules();
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Bulk update failed';
+      pushToast(msg, 'error');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const fmtDate2 = (d) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      return dt.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' });
+    } catch { return String(d); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filter card */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <FaServer className="w-3.5 h-3.5 text-gray-500" />
+          Bulk schedule cleanup — filter by target VM
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <div className="md:col-span-6">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">VM name</label>
+            <input
+              type="text"
+              list="bulk-vm-suggestions"
+              value={vmName}
+              onChange={(e) => setVmName(e.target.value)}
+              placeholder="docker-host-a17718d5"
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+            <datalist id="bulk-vm-suggestions">
+              {vmSuggestions.map(s => <option key={s} value={s} />)}
+            </datalist>
+          </div>
+          <div className="md:col-span-3">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="missed">Missed</option>
+              <option value="failed">Failed</option>
+              <option value="all">All statuses</option>
+            </select>
+          </div>
+          <div className="md:col-span-3">
+            <button
+              onClick={loadSchedules}
+              disabled={loading}
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaServer className="w-3 h-3" />}
+              Load schedules
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <FaInfoCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-amber-800 leading-relaxed">
+            Only schedules with <span className="font-semibold">scope = specific</span> and the given VM in their target list are shown.
+            "Delete all matching" removes every entry that matches the current filter, ignoring checkbox selection.
+            Deleted schedules cannot be recovered — schedule the same window again from the Power Schedule tab if you change your mind.
+          </p>
+        </div>
+      </div>
+
+      {/* Results card */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
+          <h3 className="text-sm font-semibold text-gray-800">
+            Matching schedules
+            {rows.length > 0 && <span className="ml-2 text-gray-500 font-normal">({selectedIds.size} of {rows.length} selected)</span>}
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={rows.length === 0 || selectedIds.size === 0}
+              onClick={() => openEdit('selected')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FaPlus className="w-3 h-3 rotate-45" />
+              Edit selected ({selectedIds.size})
+            </button>
+            <button
+              disabled={rows.length === 0}
+              onClick={() => openEdit('all')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FaPlus className="w-3 h-3 rotate-45" />
+              Edit ALL matching ({rows.length})
+            </button>
+            <button
+              disabled={rows.length === 0 || selectedIds.size === 0}
+              onClick={() => openConfirm('selected')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FaTrashAlt className="w-3 h-3" />
+              Delete selected ({selectedIds.size})
+            </button>
+            <button
+              disabled={rows.length === 0}
+              onClick={() => openConfirm('all')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-600 text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FaTrashAlt className="w-3 h-3" />
+              Delete ALL matching ({rows.length})
+            </button>
+          </div>
+        </div>
+        {loading ? (
+          <div className="py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-400">No matching schedules. Pick a VM + status and click "Load schedules".</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-[13px]">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-4 py-2.5 w-10">
+                    <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Select all" />
+                  </th>
+                  {['Training', 'Action', 'Date', 'Time (IST)', 'Target VMs', 'Status'].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map(r => {
+                  const sid = String(r.scheduleId);
+                  const isStart = String(r.action).toLowerCase().includes('start') || String(r.action).toLowerCase().includes('power on');
+                  return (
+                    <tr key={sid} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-2.5">
+                        <input type="checkbox" checked={selectedIds.has(sid)} onChange={() => toggleOne(sid)} />
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-700 text-xs font-medium truncate max-w-[220px]" title={r.trainingName}>{r.trainingName}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${isStart ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                          {isStart ? <FaPlay className="w-2.5 h-2.5" /> : <FaStop className="w-2.5 h-2.5" />}
+                          {isStart ? 'Start' : 'Stop'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-700 tabular-nums text-xs">{fmtDate2(r.date)}</td>
+                      <td className="px-4 py-2.5 text-gray-700 tabular-nums text-xs">{r.time}</td>
+                      <td className="px-4 py-2.5 text-gray-600 text-xs truncate max-w-[260px]" title={(r.targetVMs || []).join(', ')}>{(r.targetVMs || []).join(', ') || '—'}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className={`inline-block px-2 py-0.5 rounded-full font-medium ${
+                          r.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                          r.status === 'missed'    ? 'bg-amber-50 text-amber-700' :
+                          r.status === 'failed'    ? 'bg-red-50 text-red-700' :
+                                                     'bg-blue-50 text-blue-700'
+                        }`}>{r.status || 'pending'}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm modal */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <FaTrashAlt className="w-4 h-4 text-red-600" />
+              Confirm bulk delete
+            </h4>
+            <p className="text-sm text-gray-600 mb-4">
+              {confirmMode === 'selected'
+                ? <>You are about to delete <span className="font-semibold">{selectedIds.size}</span> selected schedule entr{selectedIds.size === 1 ? 'y' : 'ies'} for <span className="font-semibold">{vmName}</span>.</>
+                : <>You are about to delete <span className="font-semibold">ALL {rows.length}</span> schedule entries matching VM <span className="font-semibold">{vmName}</span>{statusFilter && statusFilter !== 'all' ? <> with status <span className="font-semibold">{statusFilter}</span></> : null}.</>
+              } This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setConfirmOpen(false)} disabled={deleting}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={doDelete} disabled={deleting}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-600 text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
+                {deleting ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaTrashAlt className="w-3 h-3" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk-edit modal */}
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <h4 className="text-base font-semibold text-gray-800 mb-1 flex items-center gap-2">
+              <FaPlus className="w-4 h-4 text-blue-600 rotate-45" />
+              Bulk edit schedules
+            </h4>
+            <p className="text-xs text-gray-500 mb-4">
+              {editMode === 'selected'
+                ? <>Updating <span className="font-semibold">{selectedIds.size}</span> selected entr{selectedIds.size === 1 ? 'y' : 'ies'} for <span className="font-semibold">{vmName}</span>.</>
+                : <>Updating <span className="font-semibold">ALL {rows.length}</span> matching entries for <span className="font-semibold">{vmName}</span>{statusFilter && statusFilter !== 'all' ? <> with status <span className="font-semibold">{statusFilter}</span></> : null}.</>
+              } Leave a field blank to keep its current value.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">New time (IST)</label>
+                <input type="text" value={editTime} onChange={e => setEditTime(e.target.value)} placeholder="HH:MM (e.g. 05:00)"
+                  className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 tabular-nums" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">New action</label>
+                <select value={editAction} onChange={e => setEditAction(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                  <option value="">(keep current)</option>
+                  <option value="start">start</option>
+                  <option value="stop">stop</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">New status</label>
+                <select value={editStatus} onChange={e => setEditStatus(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                  <option value="">(keep current)</option>
+                  <option value="pending">pending</option>
+                  <option value="completed">completed</option>
+                  <option value="missed">missed</option>
+                  <option value="failed">failed</option>
+                </select>
+                <p className="mt-1 text-[11px] text-gray-400">Reset a missed/failed entry to "pending" so the scheduler will retry it on its next tick.</p>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button onClick={() => setEditOpen(false)} disabled={editing}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleBulkEdit} disabled={editing}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
+                {editing ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaPlus className="w-3 h-3 rotate-45" />}
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

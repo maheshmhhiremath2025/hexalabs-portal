@@ -3,12 +3,15 @@ const queues = require('./newQueues')
 const awsUser = require('./../models/aws')
 
 async function handleGetSandboxUser(req, res) {
-    const { userType } = req.user;
+    const { userType, organization } = req.user;
     try {
-        if (userType !== 'superadmin') {
+        if (userType !== 'superadmin' && userType !== 'admin') {
             return res.status(403).send('Unauthorized access')
         }
-        const users = await awsUser.find().lean();
+        const filter = {};
+        if (userType === 'admin') filter.organization = organization;
+        else if (userType === 'superadmin' && req.query.organization) filter.organization = req.query.organization;
+        const users = await awsUser.find(filter).lean();
 
         return res.status(200).send(users)
     } catch (error) {

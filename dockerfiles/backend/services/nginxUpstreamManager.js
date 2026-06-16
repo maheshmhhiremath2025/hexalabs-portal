@@ -51,8 +51,8 @@ function writeAndReload() {
   }
 
   try {
-    execSync('nginx -t 2>&1', { timeout: 10000 });
-    execSync('nginx -s reload 2>&1', { timeout: 10000 });
+    execSync('sudo nginx -t 2>&1', { timeout: 10000 });
+    execSync('sudo nginx -s reload 2>&1', { timeout: 10000 });
     logger.info(`[nginx-upstream] Map updated (${upstreams.size} remote entries), nginx reloaded`);
   } catch (err) {
     logger.error(`[nginx-upstream] nginx reload failed: ${err.message}`);
@@ -87,18 +87,12 @@ async function rebuildFromDb() {
     const remoteContainers = await Container.find({
       isAlive: true,
       dockerHostIp: { $exists: true, $ne: 'localhost' },
-    }, 'vncPort extraPorts dockerHostIp');
+    }, 'vncPort dockerHostIp');
 
     upstreams.clear();
     for (const c of remoteContainers) {
       if (c.vncPort && c.dockerHostIp) {
         upstreams.set(c.vncPort, c.dockerHostIp);
-        // Also register extra port host ports (Jenkins, Kibana, etc.)
-        if (c.extraPorts && c.extraPorts.length) {
-          for (const ep of c.extraPorts) {
-            upstreams.set(ep.hostPort, c.dockerHostIp);
-          }
-        }
       }
     }
 

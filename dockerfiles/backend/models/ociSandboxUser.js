@@ -37,6 +37,8 @@ const ociSandboxUserSchema = new mongoose.Schema({
     cleanupError: { type: String },
     cleanupFailedAt: { type: Date },
     deletionStatus: { type: String, enum: ['none', 'deleting', 'failed'], default: 'none' },
+    batchExpiresAt: { type: Date, default: null },
+    organization: { type: String, index: true },
 }, { timestamps: true });
 
 const OciSandboxUser = mongoose.model('ocisandboxuser', ociSandboxUserSchema);

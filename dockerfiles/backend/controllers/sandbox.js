@@ -4,13 +4,6 @@ const SandboxUser = require('./../models/sandboxuser')
 const User = require('./../models/user')
 const { notifySandboxWelcomeEmail } = require('./../services/emailNotifications')
 
-// Sandbox type → custom Azure role/initiative IDs (types not listed here use worker defaults)
-const SANDBOX_TYPE_CONFIG = {
-    databricks: {
-        customRoleId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823',
-        policyInitiativeId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827',
-    },
-};
 
 async function handleGetSandbox(req, res) {
     const { email, userType } = req.user;
@@ -33,12 +26,15 @@ async function handleGetSandbox(req, res) {
 }
 
 async function handleGetSandboxUser(req, res) {
-    const { userType } = req.user;
+    const { userType, organization } = req.user;
     try {
         if (userType !== 'superadmin' && userType !== 'admin') {
             return res.status(403).send('Unauthorized access')
         }
-        const users = await SandboxUser.find().lean();
+        const filter = {};
+        if (userType === 'admin') filter.organization = organization;
+        else if (userType === 'superadmin' && req.query.organization) filter.organization = req.query.organization;
+        const users = await SandboxUser.find(filter).lean();
 
         return res.status(200).send(users)
     } catch (error) {
@@ -154,7 +150,7 @@ async function handleDeleteSandboxUser(req, res) {
 }
 
 async function handleCreateSandbox(req, res) {
-    const { resourceGroupName, resourceGroupLocation, sandboxType } = req.body;
+    const { resourceGroupName, resourceGroupLocation } = req.body;
     const { email, userType } = req.user;
 
     try {
@@ -191,14 +187,11 @@ async function handleCreateSandbox(req, res) {
         }
 
         // ✅ Prepare the sandbox creation request
-        const typeConfig = SANDBOX_TYPE_CONFIG[sandboxType] || {};
         const data = {
             resourceGroupName: resourceGroupName.trim(),
             resourceGroupLocation: resourceGroupLocation.trim(),
             userId: user.userId,
             budgetLimit: req.body.budgetLimit || 500,
-            ...(typeConfig.customRoleId && { customRoleId: typeConfig.customRoleId }),
-            ...(typeConfig.policyInitiativeId && { policyInitiativeId: typeConfig.policyInitiativeId }),
         };
 
         // ✅ Add job to Azure create sandbox queue
@@ -326,10 +319,22 @@ async function handleBulkDeployAzure(req, res) {
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
         return res.status(400).json({ error: 'emails array is required and must not be empty' });
     }
+    if (userType === 'admin' && emails.length > 200) {
+        return res.status(400).json({ error: `Batch size of ${emails.length} exceeds the 200-student cap for admin role.` });
+    }
+    // admin is locked to their own org; superadmin may target any org via body
+    const targetOrg = userType === 'superadmin' && req.body.organization
+        ? req.body.organization
+        : req.user.organization;
 
     const SandboxTemplate = require('../models/sandboxTemplate');
     const template = await SandboxTemplate.findOne({ slug: templateSlug, isActive: true, cloud: 'azure' });
     if (!template) return res.status(404).json({ error: 'Azure template not found' });
+
+    // Org-template entitlement: auto-associate for superadmin; clear 403 for admin.
+    const { ensureTemplateAssociation } = require('../services/orgTemplateAssociation');
+    const _assoc = await ensureTemplateAssociation({ targetOrg, templateSlug, userType, adminEmail });
+    if (!_assoc.ok) return res.status(_assoc.status).json({ error: _assoc.error });
 
     const { createAzureSandbox } = require('../services/directSandbox');
 
@@ -345,7 +350,7 @@ async function handleBulkDeployAzure(req, res) {
             const cleanName = userEmail.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 12);
             const rgName = `tpl-${(template.certificationCode || template.slug).slice(0, 10)}-${cleanName}-${randSuffix}-sbx`.toLowerCase().slice(0, 60);
 
-            const azResult = await createAzureSandbox(rgName, region, null, userEmail, template.customRoleId);
+            const azResult = await createAzureSandbox(rgName, region, null, userEmail, { allowedVmSkus: template.allowedInstanceTypes?.azure });
 
             // Apply Azure Policies
             try {
@@ -368,12 +373,87 @@ async function handleBulkDeployAzure(req, res) {
                     await applyAllSandboxPolicies(policyClient, process.env.SUBSCRIPTION_ID, rgName, template, region);
                 }
 
-                // Custom role is now handled by createAzureSandbox() via the customRoleId parameter
+                // If template has a custom role, replace the default role assignment
+                if (template.customRoleId) {
+                    try {
+                        const { AuthorizationManagementClient } = require('@azure/arm-authorization');
+                        const authClient = new AuthorizationManagementClient(credential, process.env.SUBSCRIPTION_ID);
+                        const crypto = require('crypto');
+
+                        // Get the Azure AD user's object ID from the sandbox credentials
+                        const azureObjectId = azResult.objectId || azResult.principalId;
+                        if (azureObjectId) {
+                            // Remove default Contributor role and assign custom role
+                            await authClient.roleAssignments.create(
+                                scope,
+                                crypto.randomUUID(),
+                                {
+                                    principalId: azureObjectId,
+                                    roleDefinitionId: template.customRoleId,
+                                    scope,
+                                }
+                            );
+                            logger.info(`[bulk-deploy-azure] Custom role ${template.customRoleId.split('/').pop()} assigned to ${userEmail} on ${rgName}`);
+
+                            // Remove the default sandbox role that createAzureSandbox
+                            // hardcodes — when the template has its own customRoleId,
+                            // students should only have that role, not the default.
+                            try {
+                                const DEFAULT_SANDBOX_ROLE_SUFFIX = '57fce75e-14f9-4736-84e6-9c55ba17b975';
+                                const existing = [];
+                                for await (const ra of authClient.roleAssignments.listForScope(scope)) existing.push(ra);
+                                const defaultRA = existing.find(ra =>
+                                    ra.roleDefinitionId && ra.roleDefinitionId.includes(DEFAULT_SANDBOX_ROLE_SUFFIX) &&
+                                    ra.principalId === azureObjectId &&
+                                    ra.scope === scope
+                                );
+                                if (defaultRA) {
+                                    await authClient.roleAssignments.deleteById(defaultRA.id);
+                                    logger.info(`[bulk-deploy-azure] Default sandbox role removed from ${userEmail} on ${rgName} (custom role takes precedence)`);
+                                }
+                            } catch (rmErr) {
+                                logger.warn(`[bulk-deploy-azure] Could not remove default role on ${rgName}: ${rmErr.message}`);
+                            }
+                        }
+                    } catch (roleErr) {
+                        logger.error(`[bulk-deploy-azure] Custom role assignment failed for ${rgName}: ${roleErr.message}`);
+                    }
+                }
             } catch (policyErr) {
                 logger.error(`[bulk-deploy-azure] Azure Policy failed for ${rgName}: ${policyErr.message}`);
             }
 
-            const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+            // Per-user TTL override: read sandboxTtlHours from the user's stored record
+            // and use it as the effective TTL. Falls back to request-level ttlHours, then 4h.
+            // Was hardcoded at the body-default level — meant changing a user's preferred TTL
+            // in Mongo had no effect on new deploys until this patch (stripedata cohort had
+            // sandboxTtlHours=2 set on user docs but deploys still got 4h). /* per-user-ttl-2026-05-28 */
+            const sbUserExisting = await SandboxUser.findOne({ email: userEmail }, 'sandboxTtlHours').lean();
+            // ttlHours === 0 is the "no-cleanup" sentinel: sandbox lives until batchExpiresAt
+            // (caller-supplied), else User.accessExpiresAt, else 30 days. usageSessions records
+            // the computed wall-clock hours so daily/total caps still meter correctly.
+            const rawTtl = (sbUserExisting && typeof sbUserExisting.sandboxTtlHours === 'number' && sbUserExisting.sandboxTtlHours > 0)
+                ? sbUserExisting.sandboxTtlHours
+                : ttlHours;
+            const isNoCleanup = (rawTtl === 0);
+            let expiresAt;
+            if (req.body.expiresAt) {
+                expiresAt = new Date(req.body.expiresAt);
+            } else if (isNoCleanup) {
+                if (req.body.batchExpiresAt) {
+                    expiresAt = new Date(req.body.batchExpiresAt);
+                } else {
+                    const portalUserForExp = await User.findOne({ email: userEmail }, 'accessExpiresAt').lean();
+                    expiresAt = (portalUserForExp && portalUserForExp.accessExpiresAt)
+                        ? new Date(portalUserForExp.accessExpiresAt)
+                        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                }
+            } else {
+                expiresAt = new Date(Date.now() + rawTtl * 60 * 60 * 1000);
+            }
+            const effectiveTtlHours = isNoCleanup
+                ? Math.max(1, Math.ceil((expiresAt.getTime() - Date.now()) / (60 * 60 * 1000)))
+                : rawTtl;
 
             // Find or create sandbox user record for this email
             let sandboxUser = await SandboxUser.findOne({ email: userEmail });
@@ -382,12 +462,15 @@ async function handleBulkDeployAzure(req, res) {
                 sandboxUser = new SandboxUser({
                     email: userEmail,
                     userId: `tpl-${cleanName}-${randSuffix}`,
-                    duration: Math.ceil(ttlHours / 24) || 1,
+                    duration: Math.ceil(effectiveTtlHours / 24) || 1,
                     credits: { total: 1, consumed: 0 },
                     startDate: new Date(),
                     endDate: expiresAt,
                 });
             }
+            // Latest batch wins — overwrite batchExpiresAt if caller provided one
+            if (req.body.batchExpiresAt) sandboxUser.batchExpiresAt = new Date(req.body.batchExpiresAt);
+            sandboxUser.organization = targetOrg;
 
             // Push sandbox entry with template fields
             sandboxUser.sandbox.push({
@@ -414,9 +497,10 @@ async function handleBulkDeployAzure(req, res) {
                 })),
             });
 
+            sandboxUser.sandboxTtlHours = rawTtl;
             sandboxUser.dailyCapHours = dailyCapHours;
             sandboxUser.totalCapHours = totalCapHours;
-            sandboxUser.usageSessions.push({ startedAt: new Date(), ttlHours, templateSlug });
+            sandboxUser.usageSessions.push({ startedAt: new Date(), ttlHours: effectiveTtlHours, templateSlug });
             await sandboxUser.save();
 
             results.push({
@@ -431,7 +515,7 @@ async function handleBulkDeployAzure(req, res) {
             // Auto-create portal login
             const existingUser = await User.findOne({ email: userEmail });
             if (!existingUser) {
-                await User.create({ email: userEmail, name: userEmail, password: 'Welcome1234!', userType: 'sandboxuser', organization: template.name });
+                await User.create({ email: userEmail, name: userEmail, password: 'Welcome1234!', userType: 'sandboxuser', organization: targetOrg });
             }
 
             // Send welcome email
@@ -456,7 +540,6 @@ async function handleBulkDeployAzure(req, res) {
         deployed: results.length,
         failed: errors.length,
         templateSlug,
-        templateName: template.name,
         ttlHours,
         region,
         results,
@@ -464,4 +547,198 @@ async function handleBulkDeployAzure(req, res) {
     });
 }
 
-module.exports = { handleCreateSandboxUser, handleCreateSandbox, handleDeleteSandbox, handleGetSandbox, handleDeleteSandboxUser, handleGetSandboxUser, handleBulkCreateUsers, handleBulkStatus, handleBulkDeployAzure };
+// ===== BULK DELETE: appended via patch 2026-05-04 =====
+// Mounted at POST /sandbox/bulk-delete-users
+// Body: { cloud: 'azure'|'aws'|'gcp'|'oci', emails: [string, ...] }
+// Admin: restricted to own org. Superadmin: any org.
+// Tears down cloud resources + Mongo doc per email. Async; responds immediately with jobId.
+
+const bulkDeleteJobs = new Map();
+
+async function handleBulkDeleteSandboxUsers(req, res) {
+    const { userType, organization: callerOrg } = req.user || {};
+    if (userType !== 'admin' && userType !== 'superadmin') {
+        return res.status(403).json({ error: 'Admin/superadmin access required' });
+    }
+    const { cloud, emails } = req.body || {};
+    if (!cloud || !['azure', 'aws', 'gcp', 'oci'].includes(cloud)) {
+        return res.status(400).json({ error: 'cloud must be azure|aws|gcp|oci' });
+    }
+    if (!Array.isArray(emails) || emails.length === 0) {
+        return res.status(400).json({ error: 'emails array required' });
+    }
+    if (emails.length > 200) {
+        return res.status(400).json({ error: 'max 200 emails per bulk-delete' });
+    }
+
+    // Org-scope check for admin
+    if (userType === 'admin') {
+        const Model = cloud === 'aws' ? require('../models/aws')
+                    : cloud === 'gcp' ? require('../models/gcpSandboxUser')
+                    : cloud === 'oci' ? require('../models/ociSandboxUser')
+                    : require('../models/sandboxuser');
+        const owned = await Model.find({ email: { $in: emails }, organization: callerOrg }).select('email').lean();
+        const ownedSet = new Set(owned.map(u => u.email));
+        const violators = emails.filter(e => !ownedSet.has(e));
+        if (violators.length) {
+            return res.status(403).json({ error: `Cannot delete users outside your org`, violators });
+        }
+    }
+
+    const jobId = `bulkdel-${cloud}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job = { jobId, cloud, total: emails.length, completed: 0, failed: 0, status: 'running', startedAt: Date.now(), errors: [], deletedEmails: [] };
+    bulkDeleteJobs.set(jobId, job);
+    res.json({ jobId, total: emails.length, status: 'running' });
+
+    (async () => {
+        for (const email of emails) {
+            try {
+                if (cloud === 'azure') {
+                    await tearDownAzureSandboxUser(email);
+                } else if (cloud === 'aws') {
+                    await tearDownAwsSandboxUser(email);
+                } else if (cloud === 'gcp') {
+                    await tearDownGcpSandboxUser(email);
+                } else if (cloud === 'oci') {
+                    await tearDownOciSandboxUser(email);
+                }
+                job.completed++;
+                job.deletedEmails.push(email);
+                logger.info(`[bulk-delete-${cloud}] deleted ${email}`);
+            } catch (e) {
+                job.failed++;
+                job.errors.push({ email, message: e.message });
+                logger.error(`[bulk-delete-${cloud}] ${email} failed: ${e.message}`);
+            }
+        }
+        job.status = 'done';
+        job.durationMs = Date.now() - job.startedAt;
+        logger.info(`[bulk-delete-${cloud}] job ${jobId} done: ${job.completed}/${job.total} ok in ${job.durationMs}ms`);
+        setTimeout(() => bulkDeleteJobs.delete(jobId), 30 * 60 * 1000);
+    })().catch(e => {
+        job.status = 'failed';
+        job.errors.push({ message: `Background fatal: ${e.message}` });
+        logger.error(`[bulk-delete-${cloud}] job ${jobId} fatal: ${e.message}`);
+    });
+}
+
+async function handleBulkDeleteStatus(req, res) {
+    const job = bulkDeleteJobs.get(req.params.jobId);
+    if (!job) return res.status(404).json({ message: 'Job not found or expired' });
+    res.json(job);
+}
+
+// ----- per-cloud teardown (extracted from existing per-user delete handlers) -----
+
+async function tearDownAzureSandboxUser(email) {
+    const userDoc = await SandboxUser.findOne({ email });
+    if (!userDoc) return;
+    const azureUserId = userDoc.sandbox?.[0]?.credentials?.username || userDoc.userId;
+    const sandboxEntries = userDoc.sandbox || [];
+    userDoc.deletionStatus = 'deleting';
+    await userDoc.save();
+
+    if (azureUserId) {
+        try {
+            const { ClientSecretCredential } = require('@azure/identity');
+            require('isomorphic-fetch');
+            const { Client } = require('@microsoft/microsoft-graph-client');
+            const identityCredential = new ClientSecretCredential(
+                process.env.IDENTITY_TENANT_ID || process.env.TENANT_ID,
+                process.env.IDENTITY_CLIENT_ID || process.env.CLIENT_ID,
+                process.env.IDENTITY_CLIENT_SECRET || process.env.CLIENT_SECRET
+            );
+            const tokenRes = await identityCredential.getToken('https://graph.microsoft.com/.default');
+            const graphClient = Client.init({ authProvider: (done) => done(null, tokenRes.token) });
+            await graphClient.api(`/users/${azureUserId}`).delete();
+        } catch (e) { logger.warn(`[bulk-delete-azure] AAD ${azureUserId} delete: ${e.message}`); }
+    }
+    if (sandboxEntries.length) {
+        try {
+            const { ClientSecretCredential } = require('@azure/identity');
+            const { ResourceManagementClient } = require('@azure/arm-resources');
+            const credential = new ClientSecretCredential(process.env.TENANT_ID, process.env.CLIENT_ID, process.env.CLIENT_SECRET);
+            const resourceClient = new ResourceManagementClient(credential, process.env.SUBSCRIPTION_ID);
+            for (const sb of sandboxEntries) {
+                if (sb.resourceGroupName) {
+                    try { await resourceClient.resourceGroups.beginDeleteAndWait(sb.resourceGroupName); }
+                    catch (e) { logger.warn(`[bulk-delete-azure] RG ${sb.resourceGroupName}: ${e.message}`); }
+                }
+            }
+        } catch (e) { logger.error(`[bulk-delete-azure] RG cleanup setup: ${e.message}`); }
+    }
+    try { await queues['azure-delete-user'].add({ email }); } catch {}
+    await SandboxUser.deleteOne({ email });
+}
+
+async function tearDownAwsSandboxUser(email) {
+    const awsUser = require('../models/aws');
+    const userDoc = await awsUser.findOne({ email });
+    if (!userDoc) return;
+    userDoc.deletionStatus = 'deleting';
+    await userDoc.save();
+    try { await queues['aws-delete-user'].add({ email, userId: userDoc.userId }); } catch {}
+    // The aws-delete-user worker does the IAM teardown; we wait briefly then delete the doc.
+    // For best-effort sync delete: also try direct IAM cleanup here.
+    try {
+        const { IAMClient, DeleteAccessKeyCommand, DetachUserPolicyCommand, DeleteUserPolicyCommand,
+                ListAccessKeysCommand, ListAttachedUserPoliciesCommand, ListUserPoliciesCommand,
+                DeleteLoginProfileCommand, DeleteUserCommand } = require('@aws-sdk/client-iam');
+        const iam = new IAMClient({
+            region: process.env.AWS_REGION || 'ap-south-1',
+            credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET },
+        });
+        const userName = userDoc.userId;
+        const keys = await iam.send(new ListAccessKeysCommand({ UserName: userName }));
+        for (const k of keys.AccessKeyMetadata || []) await iam.send(new DeleteAccessKeyCommand({ UserName: userName, AccessKeyId: k.AccessKeyId })).catch(() => {});
+        const attached = await iam.send(new ListAttachedUserPoliciesCommand({ UserName: userName }));
+        for (const p of attached.AttachedPolicies || []) await iam.send(new DetachUserPolicyCommand({ UserName: userName, PolicyArn: p.PolicyArn })).catch(() => {});
+        const inline = await iam.send(new ListUserPoliciesCommand({ UserName: userName }));
+        for (const pn of inline.PolicyNames || []) await iam.send(new DeleteUserPolicyCommand({ UserName: userName, PolicyName: pn })).catch(() => {});
+        await iam.send(new DeleteLoginProfileCommand({ UserName: userName })).catch(() => {});
+        await iam.send(new DeleteUserCommand({ UserName: userName })).catch(() => {});
+    } catch (e) { logger.warn(`[bulk-delete-aws] IAM ${email}: ${e.message}`); }
+    await awsUser.deleteOne({ email });
+}
+
+async function tearDownGcpSandboxUser(email) {
+    const GcpSandboxUser = require('../models/gcpSandboxUser');
+    const userDoc = await GcpSandboxUser.findOne({ email });
+    if (!userDoc) return;
+    userDoc.deletionStatus = 'deleting';
+    await userDoc.save();
+    // Delete each GCP project
+    try {
+        const { ProjectsClient } = require('@google-cloud/resource-manager');
+        const client = new ProjectsClient({ keyFilename: process.env.KEYFILENAME });
+        for (const sb of userDoc.sandbox || []) {
+            if (sb.projectId) {
+                try { await client.deleteProject({ name: `projects/${sb.projectId}` }); }
+                catch (e) { logger.warn(`[bulk-delete-gcp] project ${sb.projectId}: ${e.message}`); }
+            }
+        }
+    } catch (e) { logger.warn(`[bulk-delete-gcp] setup ${email}: ${e.message}`); }
+    await GcpSandboxUser.deleteOne({ email });
+}
+
+async function tearDownOciSandboxUser(email) {
+    const OciSandboxUser = require('../models/ociSandboxUser');
+    const { deleteOciSandbox } = require('../services/ociSandbox');
+    const doc = await OciSandboxUser.findOne({ email });
+    if (!doc) return;
+    try {
+        await deleteOciSandbox(doc.compartmentId, doc.userId, doc.policyId);
+        await OciSandboxUser.deleteOne({ email });
+        logger.info(`[bulk-delete-oci] OCI sandbox + DB record removed for ${email}`);
+    } catch (err) {
+        logger.error(`[bulk-delete-oci] cleanup failed for ${email}: ${err.message}`);
+        await OciSandboxUser.updateOne(
+            { email },
+            { $set: { cleanupError: err.message, cleanupFailedAt: new Date() }, $inc: { cleanupAttempts: 1 } }
+        );
+    }
+}
+
+// ===== END BULK DELETE =====
+
+module.exports = { handleCreateSandboxUser, handleCreateSandbox, handleDeleteSandbox, handleGetSandbox, handleDeleteSandboxUser, handleGetSandboxUser, handleBulkCreateUsers, handleBulkStatus, handleBulkDeployAzure, handleBulkDeleteSandboxUsers, handleBulkDeleteStatus };

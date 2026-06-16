@@ -12,33 +12,22 @@ function buildAccessUrl(container) {
   const protocol = container.accessProtocol || 'http';
   const port = container.vncPort;
 
-  // Windows containers on remote host → proxy via /win/<port>/
-  if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && accessDomain) {
-    return `https://${accessDomain}/win/${port}/`;
+  // Windows containers (dockurr/windows image) on remote host → legacy /win/<port>/ path.
+  // Linux remote containers fall through to /ws/<port>/ which uses the dynamic upstream map
+  // (built by services/nginxUpstreamManager.rebuildFromDb). Without this distinction every
+  // remote Linux container (code-server / Kasm VS Code on a Spot docker host) was being
+  // routed to the now-terminated Windows host hardcoded in the nginx /win/ block.
+  if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && protocol === 'http' && accessDomain) {
+    const isWindows = /windows|dockurr/i.test(container.image || '') || /windows/i.test(container.os || '');
+    if (isWindows) return `https://${accessDomain}/win/${port}/`;
   }
   if (accessDomain && protocol === 'https') {
-    return `https://${accessDomain}/wss/${port}/?path=wss/${port}/websockify&autoconnect=true`;
+    const sslPortOffset = parseInt(process.env.CONTAINER_SSL_PORT_OFFSET || '10000');
+    return `https://${accessDomain}:${port + sslPortOffset}/`;
   } else if (accessDomain) {
     return `https://${accessDomain}/ws/${port}/`;
   }
   return `${protocol}://${container.hostIp}:${port}`;
-}
-
-// Build access URLs for extra ports on a container
-function buildExtraAccessUrls(container) {
-  if (!container.extraPorts || !container.extraPorts.length) return [];
-  const accessDomain = process.env.CONTAINER_ACCESS_DOMAIN;
-  return container.extraPorts.map(ep => {
-    let url;
-    if (container.dockerHostIp && container.dockerHostIp !== 'localhost' && accessDomain) {
-      url = `https://${accessDomain}/win/${ep.hostPort}/`;
-    } else if (accessDomain) {
-      url = `https://${accessDomain}/ws/${ep.hostPort}/`;
-    } else {
-      url = `http://${container.hostIp || 'localhost'}:${ep.hostPort}`;
-    }
-    return { label: ep.label, hostPort: ep.hostPort, url };
-  });
 }
 
 // Fallback local Docker client (for stop/start/delete when host info is in container record)
@@ -55,7 +44,7 @@ function getDockerForContainer(containerDoc) {
 }
 
 // Available container images organized by category
-// Desktop images use kumar202699/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
+// Desktop images use getlabs/desktop-lite:1.0 (Alpine + Openbox + Chromium, ~2.6GB)
 // All desktops share one image to maximise cache hits and minimise disk/memory.
 const CONTAINER_IMAGES = {
   // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
@@ -75,6 +64,11 @@ const CONTAINER_IMAGES = {
     image: 'kasmweb/rockylinux-9-desktop:1.16.0', label: 'CentOS / Rocky Linux Desktop', os: 'CentOS / Rocky Linux 9',
     category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
     env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '512m',
+  },
+  'rocky-vscode-python': {
+    image: 'getlabs/rocky-vscode-python:1.0', label: 'Rocky Linux 9 Desktop + VS Code + Python 3.11', os: 'CentOS / Rocky Linux 9',
+    category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
+    env: ['VNC_PW=password', 'VNCOPTIONS=-disableBasicAuth'], shmSize: '768m',
   },
   'kali-desktop': {
     image: 'kasmweb/kali-rolling-desktop:1.16.0', label: 'Kali Linux Desktop', os: 'Kali Linux',
@@ -110,17 +104,17 @@ const CONTAINER_IMAGES = {
     env: ['PASSWORD=password'],
   },
   'claude-code': {
-    image: 'kumar202699/lab-claude-code:1.0', label: 'VS Code + Claude Code CLI', os: 'VS Code + Claude AI',
+    image: 'getlabs/lab-claude-code:1.0', label: 'VS Code + Claude Code CLI', os: 'VS Code + Claude AI',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
   'claude-code-thinknyx': {
-    image: 'kumar202699/claude-code-thinknyx:1.0', label: 'VS Code + Claude Code (Thinknyx Pre-configured)', os: 'VS Code + Claude AI',
+    image: 'getlabs/claude-code-thinknyx:1.0', label: 'VS Code + Claude Code (Thinknyx Pre-configured)', os: 'VS Code + Claude AI',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
   'mainframe-cobol': {
-    image: 'kumar202699/lab-mainframe-cobol:1.0', label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)', os: 'VS Code + GnuCOBOL',
+    image: 'getlabs/lab-mainframe-cobol:1.0', label: 'Mainframe COBOL Dev (VS Code + GnuCOBOL + gdb)', os: 'VS Code + GnuCOBOL',
     category: 'dev', vncPort: 8080, protocol: 'http', defaultUser: 'coder',
     env: ['PASSWORD=password'],
   },
@@ -137,17 +131,16 @@ const CONTAINER_IMAGES = {
 
   // === DevOps CI/CD Lab ===
   'devops-cicd': {
-    image: 'kumar202699/lab-devops-cicd:1.0',
+    image: 'getlabs/lab-devops-cicd:1.0',
     label: 'DevOps CI/CD — Jenkins, GitLab Runner, ArgoCD, Docker, K8s',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    vncLabel: 'Terminal', defaultUser: 'lab', runtime: 'sysbox-runc',
+    defaultUser: 'lab', runtime: 'sysbox-runc',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
-    extraPorts: [{ containerPort: 8080, label: 'Jenkins' }],
   },
 
   // === Terraform / IaC Lab ===
   'terraform-lab': {
-    image: 'kumar202699/lab-terraform:1.0',
+    image: 'getlabs/lab-terraform:1.0',
     label: 'Terraform + AWS/Azure/GCP CLIs — Infrastructure as Code',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -156,27 +149,25 @@ const CONTAINER_IMAGES = {
 
   // === ELK Stack Lab ===
   'elk-stack': {
-    image: 'kumar202699/lab-elk-stack:1.0',
+    image: 'getlabs/lab-elk-stack:1.0',
     label: 'ELK Stack — Elasticsearch, Logstash, Kibana, Filebeat',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    vncLabel: 'Terminal', defaultUser: 'lab',
+    defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
-    extraPorts: [{ containerPort: 5601, label: 'Kibana' }],
   },
 
   // === AI/ML Lab ===
   'ai-ml-lab': {
-    image: 'kumar202699/lab-ai-ml:1.0',
+    image: 'getlabs/lab-ai-ml:1.0',
     label: 'AI/ML Lab — TensorFlow, PyTorch, HuggingFace, JupyterLab',
     os: 'Python 3.11', category: 'bigdata', vncPort: 8888, protocol: 'http',
-    vncLabel: 'JupyterLab', defaultUser: 'lab',
+    defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '512m',
-    extraPorts: [{ containerPort: 7681, label: 'Terminal' }],
   },
 
   // === Ansible Lab ===
   'ansible-lab': {
-    image: 'kumar202699/lab-ansible:1.0',
+    image: 'getlabs/lab-ansible:1.0',
     label: 'Ansible Lab — Controller + 3 managed nodes (RHCE/EX294)',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab', runtime: 'sysbox-runc',
@@ -185,28 +176,25 @@ const CONTAINER_IMAGES = {
 
   // === SOC Analyst / SIEM Lab ===
   'soc-analyst': {
-    image: 'kumar202699/lab-soc-analyst:1.0',
+    image: 'getlabs/lab-soc-analyst:1.0',
     label: 'SOC Analyst Lab — Wazuh, Elasticsearch, Kibana, Suricata',
     os: 'Ubuntu 22.04', category: 'security', vncPort: 7681, protocol: 'http',
-    vncLabel: 'Terminal', defaultUser: 'lab',
+    defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '1g',
-    extraPorts: [{ containerPort: 5601, label: 'Kibana' }],
   },
 
   // === Monitoring Lab ===
   'monitoring-lab': {
-    image: 'kumar202699/lab-monitoring:1.0',
+    image: 'getlabs/lab-monitoring:1.0',
     label: 'Monitoring Lab — Prometheus, Grafana, Alertmanager',
     os: 'Ubuntu 22.04', category: 'bigdata', vncPort: 7681, protocol: 'http',
-    vncLabel: 'Terminal', defaultUser: 'lab',
+    defaultUser: 'lab',
     env: ['LAB_PASSWORD=Welcome1234!'], shmSize: '256m',
-    extraPorts: [{ containerPort: 3000, label: 'Grafana' }, { containerPort: 9090, label: 'Prometheus' }],
   },
 
   // === Full-Stack Web Dev Lab ===
-  // No extraPorts — ports 3000/8080 are for user-started apps, not pre-configured services
   'fullstack-lab': {
-    image: 'kumar202699/lab-fullstack:1.0',
+    image: 'getlabs/lab-fullstack:1.0',
     label: 'Full-Stack Lab — Node.js, React, Angular, MongoDB, Redis',
     os: 'Ubuntu 22.04', category: 'dev', vncPort: 7681, protocol: 'http',
     defaultUser: 'lab',
@@ -232,7 +220,7 @@ const CONTAINER_IMAGES = {
   //   sudo dpkg -i sysbox-ce_0.6.4-0.linux_amd64.deb
   //   sudo systemctl restart docker
   'docker-k8s-lab': {
-    image: 'kumar202699/lab-docker-k8s:1.0',
+    image: 'getlabs/lab-docker-k8s:1.0',
     label: 'Docker + Kubernetes Lab (nested containers)',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -261,7 +249,7 @@ const CONTAINER_IMAGES = {
 
   // === Big Data / Streaming Labs ===
   'bigdata-workspace': {
-    image: 'kumar202699/lab-bigdata-workspace:1.0',
+    image: 'getlabs/lab-bigdata-workspace:1.0',
     label: 'Big Data Lab — Kafka, Spark, MySQL, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -279,7 +267,7 @@ const CONTAINER_IMAGES = {
     shmSize: '1gb',
   },
   'bigdata-workspace-cassandra': {
-    image: 'kumar202699/lab-bigdata-workspace:1.0',
+    image: 'getlabs/lab-bigdata-workspace:1.0',
     label: 'Big Data Lab — Kafka, Spark, MySQL, Cassandra, JDK 17, Python 3.10',
     os: 'Ubuntu 22.04',
     category: 'bigdata',
@@ -302,16 +290,15 @@ const CONTAINER_IMAGES = {
 let nextPort = parseInt(process.env.CONTAINER_PORT_START || '10000');
 const MAX_PORT = parseInt(process.env.CONTAINER_PORT_END || '11000');
 
-async function getNextAvailablePort(extraPortCount = 0) {
+async function getNextAvailablePort() {
   // Collect ports from DB (both alive and dead — Docker may still hold them)
   const usedVncPorts = await Container.distinct('vncPort');
   const usedSshPorts = await Container.distinct('sshPort');
-  const usedExtraPorts = await Container.distinct('extraPorts.hostPort');
-  const usedSet = new Set([...usedVncPorts, ...usedSshPorts, ...usedExtraPorts]);
+  const usedSet = new Set([...usedVncPorts, ...usedSshPorts]);
 
   // Also check Docker directly for host port bindings (catches orphan containers not in DB)
   try {
-    const allContainers = await localDocker.listContainers({ all: true });
+    const allContainers = await docker.listContainers({ all: true });
     for (const c of allContainers) {
       if (c.Ports) {
         for (const p of c.Ports) {
@@ -323,14 +310,10 @@ async function getNextAvailablePort(extraPortCount = 0) {
     logger.warn(`Could not list Docker ports for collision check: ${err.message}`);
   }
 
-  // Allocate a consecutive block: P (primary), P+1..P+N (extra), P+5000 (SSH)
   for (let port = nextPort; port < MAX_PORT; port++) {
     const sshPort = port + 5000;
-    let blockFree = !usedSet.has(port) && !usedSet.has(sshPort);
-    for (let i = 1; i <= extraPortCount && blockFree; i++) {
-      if (usedSet.has(port + i)) blockFree = false;
-    }
-    if (blockFree) return port;
+    // Both the VNC port and SSH port must be free
+    if (!usedSet.has(port) && !usedSet.has(sshPort)) return port;
   }
   // Wrap around — only reuse ports from deleted containers
   const deadPorts = await Container.distinct('vncPort', { isAlive: false });
@@ -368,18 +351,10 @@ async function createContainer({
     throw new Error(`Unknown container image key: "${imageKey}". Available: ${Object.keys(CONTAINER_IMAGES).join(', ')}`);
   }
 
-  const cfgExtraPorts = imageConfig.extraPorts || [];
-  const vncPort = await getNextAvailablePort(cfgExtraPorts.length);
+  const vncPort = await getNextAvailablePort();
   const sshPort = vncPort + 5000; // SSH on offset port
 
-  // Compute host ports for extra services (consecutive after primary)
-  const extraPortMappings = cfgExtraPorts.map((ep, idx) => ({
-    containerPort: ep.containerPort,
-    hostPort: vncPort + 1 + idx,
-    label: ep.label,
-  }));
-
-  logger.info(`Creating container ${name} from ${imageConfig.image} on port ${vncPort}${extraPortMappings.length ? ` (+${extraPortMappings.map(e => e.hostPort).join(',')})` : ''}`);
+  logger.info(`Creating container ${name} from ${imageConfig.image} on port ${vncPort}`);
 
   // Pull image if not present — auto-pulls from registry on first use
   try {
@@ -395,7 +370,7 @@ async function createContainer({
       });
       logger.info(`Image ${imageConfig.image} pulled successfully`);
     } catch (pullErr) {
-      throw new Error(`Failed to pull image "${imageConfig.image}": ${pullErr.message}. For custom kumar202699/* images, build them first with: cd dockerfiles/${imageKey} && docker build -t ${imageConfig.image} .`);
+      throw new Error(`Failed to pull image "${imageConfig.image}": ${pullErr.message}. For custom getlabs/* images, build them first with: cd dockerfiles/${imageKey} && docker build -t ${imageConfig.image} .`);
     }
   }
 
@@ -420,37 +395,23 @@ async function createContainer({
 
   // Build HostConfig — sysbox containers need different security settings
   const isSysbox = imageConfig.runtime === 'sysbox-runc';
-  const bindIp = dockerHost ? '0.0.0.0' : '127.0.0.1';
-  const portBindings = {
-    [`${imageConfig.vncPort}/tcp`]: [{ HostIp: bindIp, HostPort: String(vncPort) }],
-    '22/tcp': [{ HostIp: bindIp, HostPort: String(sshPort) }],
-  };
-  // Add extra port bindings (Jenkins, Kibana, Grafana, etc.)
-  for (const ep of extraPortMappings) {
-    portBindings[`${ep.containerPort}/tcp`] = [{ HostIp: bindIp, HostPort: String(ep.hostPort) }];
-  }
   const hostConfig = {
-    PortBindings: portBindings,
+    PortBindings: {
+      // Bind to 127.0.0.1 on local host so ports are only reachable via Nginx proxy (HTTPS domain).
+      // On remote Docker hosts, bind to 0.0.0.0 so the main Nginx can proxy to them.
+      [`${imageConfig.vncPort}/tcp`]: [{ HostIp: "0.0.0.0", HostPort: String(vncPort) }],
+      '22/tcp': [{ HostIp: "0.0.0.0", HostPort: String(sshPort) }],
+    },
+    Memory: memory * 1024 * 1024,
+    NanoCpus: cpus * 1e9,
     ShmSize: shmSizeBytes,
     RestartPolicy: { Name: 'unless-stopped' },
   };
 
   if (isSysbox) {
-    // Check if sysbox-runc is available on the Docker host
-    let sysboxAvailable = false;
-    try {
-      const info = await docker.info();
-      const runtimes = info.Runtimes || {};
-      sysboxAvailable = !!runtimes['sysbox-runc'];
-    } catch { /* ignore — assume not available */ }
-
-    if (sysboxAvailable) {
-      hostConfig.Runtime = 'sysbox-runc';
-    } else {
-      // Fallback: use --privileged so Docker-in-Docker still works without sysbox
-      logger.warn(`sysbox-runc not available on host — falling back to privileged mode for ${name}`);
-      hostConfig.Privileged = true;
-    }
+    // Sysbox provides its own security isolation — don't set SecurityOpt
+    // or it conflicts. The runtime flag tells Docker to use sysbox-runc.
+    hostConfig.Runtime = 'sysbox-runc';
   } else {
     hostConfig.SecurityOpt = ['seccomp=unconfined']; // needed for some desktop images
   }
@@ -497,40 +458,12 @@ async function createContainer({
     ExposedPorts: {
       [`${imageConfig.vncPort}/tcp`]: {},
       '22/tcp': {},
-      ...Object.fromEntries(extraPortMappings.map(ep => [`${ep.containerPort}/tcp`, {}])),
     },
     HostConfig: hostConfig,
   });
 
   // Start it
   await container.start();
-
-  // KasmWeb containers: set kasm-user password + passwordless sudo.
-  // -disableBasicAuth skips OS password setup so we configure it explicitly.
-  if (imageConfig.defaultUser === 'kasm_user') {
-    try {
-      const setupExec = await container.exec({
-        Cmd: ['bash', '-c', [
-          `echo "kasm-user:${password}" | chpasswd`,
-          'echo "kasm-user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/kasm-nopasswd',
-          'chmod 440 /etc/sudoers.d/kasm-nopasswd',
-        ].join(' && ')],
-        AttachStdout: true,
-        AttachStderr: true,
-        User: 'root',
-      });
-      const setupStream = await setupExec.start({ hijack: true, stdin: false });
-      await new Promise((resolve) => {
-        setupStream.on('end', resolve);
-        setupStream.on('error', resolve);
-        setTimeout(resolve, 5000);
-      });
-      logger.info(`[container] Configured kasm-user password + sudo in ${name}`);
-    } catch (err) {
-      logger.warn(`[container] Failed to configure kasm-user in ${name}: ${err.message}`);
-    }
-  }
-
   const info = await container.inspect();
   const hostIp = process.env.CONTAINER_HOST_IP || 'localhost';
   const accessProtocol = imageConfig.protocol || 'http';
@@ -552,6 +485,14 @@ async function createContainer({
   }
 
   // Save to DB — include Docker host info for remote access
+  // Bug-audit 2026-05-21: quota.total is in MINUTES (canonical unit; see memory feedback).
+  // Field name 'allocatedHours' is misleading. If caller passed a value in HOURS by mistake
+  // (1..59 range almost certainly is), multiply x60 and warn loudly so it's visible.
+  if (typeof allocatedHours === 'number' && allocatedHours >= 1 && allocatedHours < 60) {
+    logger.warn(`[containerService] suspicious allocatedHours=${allocatedHours} for ${name} (=${(allocatedHours/60).toFixed(1)}h cap). Multiplying x60 -> ${allocatedHours*60} min.`);
+    allocatedHours = allocatedHours * 60;
+  }
+
   const containerDoc = new Container({
     name,
     containerId: info.Id,
@@ -575,8 +516,6 @@ async function createContainer({
     quota: { total: allocatedHours, consumed: 0 },
     accessProtocol,
     type: 'container',
-    extraPorts: extraPortMappings,
-    vncLabel: imageConfig.vncLabel || null,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
     dockerHostId: dockerHost?._id || null,
     dockerHostIp: dockerHost?.publicIp || 'localhost',
@@ -589,17 +528,12 @@ async function createContainer({
     await addContainerToHost(dockerHost._id, info.Id, name, memory);
   }
 
-  // Update Nginx upstream map for remote containers (primary + extra ports)
+  // Update Nginx upstream map for remote containers
   if (dockerHost && dockerHost.publicIp && dockerHost.publicIp !== 'localhost') {
     const { addUpstream } = require('./nginxUpstreamManager');
     addUpstream(vncPort, dockerHost.publicIp).catch(err => {
       logger.error(`Failed to update Nginx upstream for port ${vncPort}: ${err.message}`);
     });
-    for (const ep of extraPortMappings) {
-      addUpstream(ep.hostPort, dockerHost.publicIp).catch(err => {
-        logger.error(`Failed to update Nginx upstream for extra port ${ep.hostPort}: ${err.message}`);
-      });
-    }
   }
 
   // Update training mapping
@@ -628,9 +562,6 @@ async function createContainer({
 
   logger.info(`Container ${name} created: ${info.Id.slice(0, 12)} on port ${vncPort}`);
 
-  // Build extra access URLs for the response
-  const extraAccessUrls = buildExtraAccessUrls(containerDoc);
-
   return {
     name,
     containerId: info.Id,
@@ -638,9 +569,6 @@ async function createContainer({
     sshPort,
     hostIp,
     accessUrl,
-    vncLabel: imageConfig.vncLabel || null,
-    extraPorts: extraPortMappings,
-    extraAccessUrls,
     username: actualUsername,
     password,
   };
@@ -653,18 +581,24 @@ async function stopContainer(containerId) {
   let doc = await Container.findOne({ containerId });
   const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
   const container = dockerClient.getContainer(containerId);
-  await container.stop();
+  // Idempotent: 304 = already stopped, treat as success and reconcile Mongo from live state.
+  try { await container.stop(); } catch (e) { if (e.statusCode !== 304) throw e; }
+  let actuallyRunning = false;
+  try { actuallyRunning = !!(await container.inspect()).State.Running; } catch {}
 
   doc = await Container.findOne({ containerId });
   if (doc) {
-    doc.isRunning = false;
+    doc.isRunning = actuallyRunning;
     // Update last log entry
     const lastLog = doc.logs[doc.logs.length - 1];
     if (lastLog && !lastLog.stop) {
       lastLog.stop = new Date();
-      lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+      // duration stored in MINUTES to match VM convention (vm.duration is in min);
+      // the labReportService aggregator assumes minutes for both, so storing
+      // seconds here was producing 60x-inflated hours on lab reports + certs.
+      lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 60000);
       doc.duration = (doc.duration || 0) + lastLog.duration;
-      doc.quota.consumed = Math.round((doc.duration / 3600) * 100) / 100;
+      doc.quota.consumed = Math.round((doc.duration / 60) * 100) / 100;
     }
     await doc.save();
   }
@@ -678,12 +612,17 @@ async function startContainer(containerId) {
   let doc = await Container.findOne({ containerId });
   const dockerClient = doc ? getDockerForContainer(doc) : localDocker;
   const container = dockerClient.getContainer(containerId);
-  await container.start();
+  // Idempotent: 304 = already started, treat as success and reconcile Mongo from live state.
+  const wasAlreadyRunning = (() => { try { return !!(doc && doc.isRunning); } catch { return false; } })();
+  try { await container.start(); } catch (e) { if (e.statusCode !== 304) throw e; }
+  let actuallyRunning = true;
+  try { actuallyRunning = !!(await container.inspect()).State.Running; } catch {}
 
   doc = await Container.findOne({ containerId });
   if (doc) {
-    doc.isRunning = true;
-    doc.logs.push({ start: new Date() });
+    doc.isRunning = actuallyRunning;
+    // Only open a new log row if Mongo previously thought container was stopped (avoid duplicate concurrent rows).
+    if (actuallyRunning && !wasAlreadyRunning) doc.logs.push({ start: new Date() });
     await doc.save();
   }
   logger.info(`Container ${containerId.slice(0, 12)} started`);
@@ -715,14 +654,6 @@ async function deleteContainer(containerId) {
       removeUpstream(doc.vncPort).catch(err => {
         logger.error(`Failed to remove Nginx upstream for port ${doc.vncPort}: ${err.message}`);
       });
-      // Also remove extra port upstreams
-      if (doc.extraPorts && doc.extraPorts.length) {
-        for (const ep of doc.extraPorts) {
-          removeUpstream(ep.hostPort).catch(err => {
-            logger.error(`Failed to remove Nginx upstream for extra port ${ep.hostPort}: ${err.message}`);
-          });
-        }
-      }
     }
     doc.isAlive = false;
     doc.isRunning = false;
@@ -839,8 +770,8 @@ module.exports = {
   prePullImage,
   CONTAINER_IMAGES,
   buildAccessUrl,
-  buildExtraAccessUrls,
   captureContainerAsTemplate,
+  getDockerForContainer,
 };
 
 /**
@@ -889,14 +820,14 @@ async function captureContainerAsTemplate({ containerId, templateName, templateL
   } else {
     // Linux: docker commit to create a new image
     const container = docker.getContainer(containerId);
-    const newImageName = `kumar202699/custom-${sanitizedName}:1.0`;
+    const newImageName = `getlabs/custom-${sanitizedName}:1.0`;
 
     // Commit the container as a new image
     const commitResult = await container.commit({
-      repo: `kumar202699/custom-${sanitizedName}`,
+      repo: `getlabs/custom-${sanitizedName}`,
       tag: '1.0',
       comment: `Custom template from ${containerDoc.name}`,
-      author: 'HexaLabs Portal',
+      author: 'GetLabs Portal',
     });
 
     logger.info(`Linux template saved: ${newImageName} from ${containerDoc.name}`);

@@ -94,7 +94,7 @@ export default function Signup({ onLogin }) {
         key: res.data.razorpayKeyId,
         amount: res.data.amount * 100,
         currency: res.data.currency,
-        name: 'HexaLabs Cloud Portal',
+        name: 'Hexalabs Cloud Portal',
         description: `${selectedPlan.name} Plan`,
         order_id: res.data.orderId,
         handler: async (response) => {
@@ -126,7 +126,7 @@ export default function Signup({ onLogin }) {
       {/* Navbar */}
       <nav className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <img src="/logo/logo.png" alt="HexaLabs" className="h-9 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          <img src="/logo/logo.png" alt="Hexalabs" className="h-9 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-1.5 text-xs text-gray-500">
@@ -281,7 +281,7 @@ export default function Signup({ onLogin }) {
           <div className="bg-gray-50 border-t border-gray-100">
             <div className="max-w-6xl mx-auto px-6 py-14">
               <div className="text-center mb-10">
-                <h2 className="text-2xl font-bold text-gray-900">Why HexaLabs Cloud Portal?</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Why Hexalabs Cloud Portal?</h2>
                 <p className="text-gray-500 mt-2">Everything you need to deliver world-class cloud training</p>
               </div>
 
@@ -314,7 +314,7 @@ export default function Signup({ onLogin }) {
                   company: 'EdTech Training Provider, Hyderabad',
                 },
                 {
-                  quote: 'We switched from Whizlabs to HexaLabs for our corporate training. 5 cloud providers, white-label branding, and 60% lower costs. Our clients think it is our own platform.',
+                  quote: 'We switched from Whizlabs to Hexalabs for our corporate training. 5 cloud providers, white-label branding, and 60% lower costs. Our clients think it is our own platform.',
                   name: 'Amit S.',
                   role: 'CEO',
                   company: 'Cloud Training Academy, Pune',
@@ -339,8 +339,8 @@ export default function Signup({ onLogin }) {
           <div className="border-t border-gray-100 px-6 py-6">
             <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <img src="/logo/logo.png" alt="HexaLabs" className="h-7 object-contain opacity-60" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                <span className="text-xs text-gray-400">HexaLabs Cloud Solutions Pvt. Ltd.</span>
+                <img src="/logo/logo.png" alt="Hexalabs" className="h-7 object-contain opacity-60" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <span className="text-xs text-gray-400">Hexalabs</span>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-400">
                 <span className="flex items-center gap-1"><FaCertificate className="text-green-600" /> ISO 9001:2015</span>

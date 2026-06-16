@@ -246,7 +246,7 @@ const SmartChatbot = () => {
       'Contact Support': () => window.open('tel:+918884907660'),
       'Browse Docs': () => window.open('https://docs.hexalabs.online'),
       'View Documentation': () => window.open('https://docs.hexalabs.online'),
-      'Video Tutorials': () => window.open('https://youtube.com/hexalabs'),
+      'Video Tutorials': () => window.open('https://youtube.com/@hexalabs'),
       'VM Help': () => handleQuickQuestion('how to start vm'),
       'Billing Help': () => handleQuickQuestion('billing question'),
       'Technical Support': () => handleQuickQuestion('get help'),

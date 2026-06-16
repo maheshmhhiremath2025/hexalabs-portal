@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import apiCaller from '../../services/apiCaller';
-import { FaDatabase, FaTrash, FaSpinner, FaRocket, FaDownload, FaExclamationTriangle, FaChartBar, FaPlay, FaPowerOff } from 'react-icons/fa';
+import { FaDatabase, FaTrash, FaKey, FaSpinner, FaRocket, FaDownload, FaExclamationTriangle, FaChartBar, FaPlay, FaPowerOff } from 'react-icons/fa';
 import BulkEmailInput from '../../components/BulkEmailInput';
 
 const TTL_OPTIONS = [
@@ -13,7 +13,7 @@ const TTL_OPTIONS = [
     { label: '72 hours', value: 72 },
 ];
 
-export default function OciSandbox() {
+export default function OciSandbox({ userDetails }) {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -27,6 +27,13 @@ export default function OciSandbox() {
     const [ttlHours, setTtlHours] = useState(4);
     const [dailyCapHours, setDailyCapHours] = useState(12);
     const [totalCapHours, setTotalCapHours] = useState(0);
+    const [batchExpiresAt, setBatchExpiresAt] = useState('');
+    const [orgs, setOrgs] = useState([]);
+    const [selectedOrg, setSelectedOrg] = useState('');
+    const [filterOrg, setFilterOrg] = useState('');
+    const [selectedEmails, setSelectedEmails] = useState(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+    const isSuper = userDetails?.userType === 'superadmin';
     const [deployEmails, setDeployEmails] = useState('');
     const [deploying, setDeploying] = useState(false);
     const [deployResults, setDeployResults] = useState(null);
@@ -34,21 +41,79 @@ export default function OciSandbox() {
     const pollRef = useRef(null);
 
     const fetchUsers = useCallback(async (silent = false) => {
+        if (isSuper && !filterOrg) {
+            setUsers([]);
+            setSelectedEmails(new Set());
+            if (!silent) setLoading(false);
+            return;
+        }
         if (!silent) setLoading(true);
         try {
-            const res = await apiCaller.get('/oci-sandbox');
+            const url = isSuper && filterOrg ? `/oci-sandbox?organization=${encodeURIComponent(filterOrg)}` : '/oci-sandbox';
+            const res = await apiCaller.get(url);
             setUsers(res.data);
+            setSelectedEmails(new Set());
         } catch {
             if (!silent) setError('Error fetching OCI sandbox users.');
         } finally {
             if (!silent) setLoading(false);
         }
-    }, []);
+    }, [isSuper, filterOrg]);
 
     useEffect(() => {
         fetchUsers();
         fetchTemplates();
+        if (userDetails?.userType === 'superadmin') {
+            apiCaller.get('/admin/organization')
+                .then(r => setOrgs(r.data?.organization || []))
+                .catch(() => {});
+        }
     }, []);
+
+    useEffect(() => { if (isSuper) fetchUsers(); }, [filterOrg]);
+
+    const toggleSelected = (email) => {
+        setSelectedEmails(prev => {
+            const next = new Set(prev);
+            if (next.has(email)) next.delete(email); else next.add(email);
+            return next;
+        });
+    };
+    const toggleSelectAll = () => {
+        setSelectedEmails(prev => prev.size === users.length ? new Set() : new Set(users.map(u => u.email)));
+    };
+    const handleBulkDelete = async () => {
+        const emails = [...selectedEmails];
+        if (emails.length === 0) return;
+        if (!window.confirm(`Delete ${emails.length} OCI sandbox user(s)?\n\nThis will mark them as deleted (compartments cleaned up by automation). Cannot be undone.`)) return;
+        setBulkDeleting(true); setError(null); setSuccess(null);
+        try {
+            const res = await apiCaller.post('/sandbox/bulk-delete-users', { cloud: 'oci', emails });
+            const jobId = res.data?.jobId;
+            if (!jobId) throw new Error('No jobId returned');
+            let attempts = 0;
+            const poll = setInterval(async () => {
+                attempts++;
+                if (attempts > 180) { clearInterval(poll); setBulkDeleting(false); setError('Bulk delete timed out'); return; }
+                try {
+                    const s = await apiCaller.get(`/sandbox/bulk-delete-status/${jobId}`);
+                    if (s.data?.status === 'done' || s.data?.status === 'failed') {
+                        clearInterval(poll);
+                        setBulkDeleting(false);
+                        const ok = s.data.completed || 0;
+                        const total = s.data.total || emails.length;
+                        const failedCount = s.data.failed || 0;
+                        setSuccess(`Bulk delete: ${ok}/${total} succeeded${failedCount ? `, ${failedCount} failed` : ''}`);
+                        setSelectedEmails(new Set());
+                        fetchUsers();
+                    }
+                } catch {}
+            }, 2000);
+        } catch (e) {
+            setBulkDeleting(false);
+            setError(`Bulk delete failed: ${e.response?.data?.error || e.message}`);
+        }
+    };
 
     // Auto-poll when any user has deletionStatus === 'deleting'
     useEffect(() => {
@@ -98,6 +163,10 @@ export default function OciSandbox() {
     const handleTemplateDeploy = async () => {
         const emails = getEmailList();
         if (!selectedTemplateSlug || emails.length === 0) return;
+        if (isSuper && !selectedOrg) {
+            setError('Please select an Organization to deploy to.');
+            return;
+        }
 
         setDeploying(true);
         setError(null);
@@ -111,6 +180,8 @@ export default function OciSandbox() {
                 ttlHours,
                 dailyCapHours,
                 totalCapHours,
+                batchExpiresAt: batchExpiresAt || null,
+                organization: selectedOrg || undefined,
             });
             const data = res.data;
             setDeployResults(data);
@@ -124,6 +195,23 @@ export default function OciSandbox() {
             setError(err.response?.data?.message || 'Bulk deploy failed.');
         } finally {
             setDeploying(false);
+        }
+    };
+
+    
+    const [resettingUser, setResettingUser] = useState(null);
+    const handleResetPassword = async (email) => {
+        if (!window.confirm(`Reset password for ${email}?\n\nNew password will be: Welcome1234!\nShare it with the learner via your usual channel.`)) return;
+        setResettingUser(email);
+        setError(null);
+        try {
+            await apiCaller.patch(superadminApiRoutes.usersApi, { email, resetPassword: true });
+            setSuccess(`Password reset for ${email}. New password: Welcome1234!`);
+            setTimeout(() => setSuccess(null), 6000);
+        } catch (e) {
+            setError(`Could not reset ${email}. ${e.response?.data?.message || ''}`);
+        } finally {
+            setResettingUser(null);
         }
     };
 
@@ -170,6 +258,22 @@ export default function OciSandbox() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Template dropdown */}
+                        {isSuper && (
+                            <div>
+                                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                    Deploy to Organization
+                                </label>
+                                <select
+                                    value={selectedOrg}
+                                    onChange={(e) => setSelectedOrg(e.target.value)}
+                                    className="w-full appearance-none px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                                >
+                                    <option value="">Select an organization...</option>
+                                    {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Required. Sandboxes will be visible to this org's admin.</p>
+                            </div>
+                        )}
                         <div>
                             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
                                 OCI Template
@@ -202,6 +306,20 @@ export default function OciSandbox() {
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
+                        </div>
+
+                        {/* Batch end date — hard cutoff, IAM + DB record permanently deleted after */}
+                        <div>
+                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Batch ends on
+                            </label>
+                            <input
+                                type="datetime-local"
+                                value={batchExpiresAt}
+                                onChange={(e) => setBatchExpiresAt(e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Optional. After this date, the user is permanently deleted.</p>
                         </div>
 
                         {/* Daily cap */}
@@ -363,20 +481,54 @@ export default function OciSandbox() {
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                 <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-800">Users ({users.length})</h3>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
-                        Oracle Cloud
-                    </span>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {isSuper && (
+                            <select
+                                value={filterOrg}
+                                onChange={e => setFilterOrg(e.target.value)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                                title="Filter by organization"
+                            >
+                                <option value="">— Select organization —</option>
+                                {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        )}
+                        {selectedEmails.size > 0 && (
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={bulkDeleting}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 transition-colors"
+                            >
+                                {bulkDeleting ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
+                                Delete {selectedEmails.size} selected
+                            </button>
+                        )}
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                            Oracle Cloud
+                        </span>
+                    </div>
                 </div>
                 {loading ? (
                     <div className="px-5 py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
+                ) : isSuper && !filterOrg ? (
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">Select an organization above to view its sandbox users.</div>
                 ) : users.length === 0 ? (
-                    <div className="px-5 py-10 text-center text-sm text-gray-400">No OCI sandbox users yet</div>
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">No OCI sandbox users in this organization.</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-[13px]">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
-                                    {['Email', 'Username', 'Compartment', 'Region', 'Status', 'Expires', ''].map(h => (
+                                    <th className="px-3 py-2.5 text-left">
+                                        <input
+                                            type="checkbox"
+                                            checked={users.length > 0 && selectedEmails.size === users.length}
+                                            onChange={toggleSelectAll}
+                                            className="rounded border-gray-300"
+                                            title="Select all"
+                                        />
+                                    </th>
+                                    {['Email', 'Username', 'Compartment', 'Region', 'Session TTL', 'Status', 'Batch Expires', ''].map(h => (
                                         <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
@@ -384,16 +536,27 @@ export default function OciSandbox() {
                             <tbody className="divide-y divide-gray-100">
                                 {users.map(u => {
                                     const expired = u.expiresAt && new Date(u.expiresAt) < new Date();
+                                    const batchExpired = u.batchExpiresAt && new Date(u.batchExpiresAt) < new Date();
                                     const isDeleting = u.deletionStatus === 'deleting';
                                     const deleteFailed = u.deletionStatus === 'failed';
                                     return (
                                         <tr key={u._id} className={`hover:bg-gray-50/50 ${isDeleting ? 'opacity-50' : ''}`}>
+                                            <td className="px-3 py-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedEmails.has(u.email)}
+                                                    onChange={() => toggleSelected(u.email)}
+                                                    disabled={isDeleting}
+                                                    className="rounded border-gray-300"
+                                                />
+                                            </td>
                                             <td className="px-4 py-2.5">
                                                 <div className="font-medium text-gray-800">{u.email}</div>
                                             </td>
                                             <td className="px-4 py-2.5 font-mono text-gray-700">{u.username || '-'}</td>
                                             <td className="px-4 py-2.5 text-gray-600">{u.compartment || '-'}</td>
                                             <td className="px-4 py-2.5 text-gray-600">{u.region || '-'}</td>
+                                            <td className="px-4 py-2.5 text-gray-600">{u.sandboxTtlHours ? `${u.sandboxTtlHours}h` : '-'}</td>
                                             <td className="px-4 py-2.5">
                                                 {isDeleting ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-700">
@@ -415,13 +578,25 @@ export default function OciSandbox() {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-2.5 text-gray-500">
-                                                {u.expiresAt ? new Date(u.expiresAt).toLocaleString('en-IN') : '-'}
+                                            <td className="px-4 py-2.5">
+                                                <span className={batchExpired ? 'text-red-500 font-semibold' : 'text-gray-700'}>
+                                                    {u.batchExpiresAt
+                                                        ? new Date(u.batchExpiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                                                        : <span className="text-gray-400 italic">no expiry</span>}
+                                                </span>
                                             </td>
                                             <td className="px-4 py-2.5 text-right">
                                                 {isDeleting ? (
                                                     <FaSpinner className="w-3 h-3 animate-spin text-gray-400 inline" />
-                                                ) : (
+                                                ) : (<>
+                                                    <button
+                                                        onClick={() => handleResetPassword(u.email)}
+                                                        disabled={resettingUser === u.email}
+                                                        title="Reset password to Welcome1234!"
+                                                        className="p-1.5 mr-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {resettingUser === u.email ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaKey className="w-3 h-3" />}
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDelete(u._id, u.email)}
                                                         disabled={deleting === u._id}
@@ -430,7 +605,7 @@ export default function OciSandbox() {
                                                     >
                                                         {deleting === u._id ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
                                                     </button>
-                                                )}
+                                                </>)}
                                             </td>
                                         </tr>
                                     );

@@ -25,12 +25,22 @@ const {
   getGuidedLabAnalytics,
   getGuidedLabSandboxes,
   deleteGuidedLabSandbox,
+  startTocPipeline,
+  getTocPipelineStatus,
+  getTocPipelineResult,
+  saveTocLabSuite,
 } = require('../controllers/guidedLab');
 
 // ─── AI Generation (must be before /:id catch-all) ─────────────────────
 router.post('/generate', upload.single('file'), generateFromFile);
 router.post('/import-steps', upload.single('file'), importFromFile);
 router.post('/improve-step', improveStepField);
+
+// ─── TOC-to-Lab Suite Pipeline (must be before /:id catch-all) ─────────
+router.post('/toc-pipeline', upload.single('file'), startTocPipeline);
+router.get('/toc-pipeline/:jobId', getTocPipelineStatus);
+router.get('/toc-pipeline/:jobId/result', getTocPipelineResult);
+router.post('/toc-pipeline/:jobId/save', saveTocLabSuite);
 
 // ─── Lab clipboard (copy from guide → paste in container terminal) ─────
 router.post('/paste-to-lab', pasteToLab);

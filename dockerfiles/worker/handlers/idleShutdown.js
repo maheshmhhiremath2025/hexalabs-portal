@@ -129,9 +129,9 @@ async function idleShutdownChecker() {
           const lastLog = vm.logs[vm.logs.length - 1];
           if (lastLog && !lastLog.stop) {
             lastLog.stop = new Date();
-            lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+            lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 60000); // minutes, not seconds
             vm.duration = (vm.duration || 0) + lastLog.duration;
-            vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
+            vm.quota.consumed = Math.round((vm.duration / 60) * 100) / 100; // duration is minutes -> hours
           }
           vm.remarks = 'Stopped by user (no cost while deallocated)';
           await vm.save();
@@ -170,9 +170,9 @@ async function idleShutdownChecker() {
             const lastLog = vm.logs[vm.logs.length - 1];
             if (lastLog && !lastLog.stop) {
               lastLog.stop = new Date();
-              lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+              lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 60000); // minutes, not seconds
               vm.duration = (vm.duration || 0) + lastLog.duration;
-              vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
+              vm.quota.consumed = Math.round((vm.duration / 60) * 100) / 100; // duration is minutes -> hours
             }
             vm.remarks = 'Auto-stopped (idle)';
             await vm.save();

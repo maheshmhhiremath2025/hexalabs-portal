@@ -12,6 +12,12 @@ async function handleVMOperations(req, res) {
 
     const vmNames = data.map(v => v.name).filter(Boolean);
 
+    // Multi-cloud routing: look up each VM's cloud once so Start/Stop go to the right worker queue.
+    // AWS VMs use aws-start-vm/aws-stop-vm (DCV + EC2). Everything else is azure-* (legacy default).
+    const cloudDocs = await VM.find({ name: { $in: vmNames } }).select('name cloud').lean();
+    const cloudOf = new Map(cloudDocs.map(v => [v.name, v.cloud === 'aws' ? 'aws' : 'azure']));
+    const queueFor = (vmName, op) => (cloudOf.get(vmName) === 'aws' ? `aws-${op}-vm` : `azure-${op}-vm`);
+
     try {
         if (startVm) {
             // Refuse Start while any selected VM is mid-stop (cooldown active)
@@ -34,7 +40,8 @@ async function handleVMOperations(req, res) {
                 });
             }
 
-            data.forEach(vm => queues['azure-start-vm'].add(vm));
+            /* jobid-dedup-2026-05-27: minute-bucket jobId so duplicate clicks/retries within the same minute silently coalesce */
+            data.forEach(vm => queues[queueFor(vm.name, 'start')].add(vm, { jobId: `start-${vm.name}-${Math.floor(Date.now()/60000)}` }));
             return res.status(200).json({ message: "Start Request Submitted" });
         }
 
@@ -44,7 +51,7 @@ async function handleVMOperations(req, res) {
             { name: { $in: vmNames } },
             { $set: { stoppingUntil: cooldownEnd } }
         );
-        data.forEach(vm => queues['azure-stop-vm'].add(vm));
+        data.forEach(vm => queues[queueFor(vm.name, 'stop')].add(vm));
         return res.status(200).json({ message: "Stop Request Submitted" });
     } catch (error) {
         logger.error("Error adding to ques", error);

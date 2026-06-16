@@ -60,8 +60,33 @@ const azureSandbox = async () => {
                         try {
                             const { ClientSecretCredential } = require('@azure/identity');
                             const { ResourceManagementClient } = require('@azure/arm-resources');
+                            const { ManagementLockClient } = require('@azure/arm-locks');
                             const credential = new ClientSecretCredential(process.env.TENANT_ID, process.env.CLIENT_ID, process.env.CLIENT_SECRET);
                             const resourceClient = new ResourceManagementClient(credential, process.env.SUBSCRIPTION_ID);
+
+                            // Strip any learner-applied resource locks before delete.
+                            // Hit a `ReadOnly` lock on a VM inside lab-b2b-navaneetha.kumar-5xxe-sbx
+                            // that blocked cleanup indefinitely (learner-applied via az lock create).
+                            // Lock-bypass = forever-orphan VM bill. List + remove every lock in
+                            // the RG scope (which covers nested-resource locks too) before delete.
+                            try {
+                                const lockClient = new ManagementLockClient(credential, process.env.SUBSCRIPTION_ID);
+                                const locks = [];
+                                for await (const l of lockClient.managementLocks.listAtResourceGroupLevel(sb.resourceGroupName)) {
+                                    locks.push(l);
+                                }
+                                for (const l of locks) {
+                                    try {
+                                        const scope = l.id.replace(/\/providers\/Microsoft\.Authorization\/locks\/.*$/, '');
+                                        await lockClient.managementLocks.deleteByScope(scope, l.name);
+                                        logger.info(`Azure RG ${sb.resourceGroupName}: stripped lock "${l.name}" before delete`);
+                                    } catch (lockErr) {
+                                        logger.warn(`Azure RG ${sb.resourceGroupName}: failed to strip lock ${l.name}: ${lockErr.message}`);
+                                    }
+                                }
+                            } catch (listLockErr) {
+                                logger.warn(`Azure RG ${sb.resourceGroupName}: lock-list pre-check failed (proceeding anyway): ${listLockErr.message}`);
+                            }
 
                             await resourceClient.resourceGroups.beginDeleteAndWait(sb.resourceGroupName);
                             logger.info(`Azure RG ${sb.resourceGroupName} deleted (expired) for ${email}`);
@@ -91,15 +116,27 @@ const azureSandbox = async () => {
                         continue;
                     }
 
-                    // Check if all sandboxes are deleted
-                    const allDeleted = sandbox.every(sb => sb.status === 'deleted');
-                    if (!allDeleted) continue; // Wait for sandbox cleanup to finish
+                    // P1-12: gate on allDeleted-OR-abandoned. A single
+                    // sandbox stuck in a non-'deleted' state (delete API
+                    // failure, RG already gone, etc.) used to block AAD-user
+                    // reap forever. Treat sandboxes whose expiresAt is more
+                    // than 24h in the past as effectively-done for gating.
+                    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    const allDeletedOrAbandoned = sandbox.every(sb =>
+                        sb.status === 'deleted' ||
+                        (sb.expiresAt && new Date(sb.expiresAt) < oneDayAgo)
+                    );
+                    if (!allDeletedOrAbandoned) continue; // Wait for sandbox cleanup to finish
 
                     try {
-                        // Check if student still has remaining quota
+                        // Check if student still has remaining quota.
+                        // endDatePassed is the absolute cohort cutoff; once it fires,
+                        // hasQuotaLeft must be false so the soft-cleanup branch doesn't
+                        // loop forever for unlimited-quota users (totalCap=0).
                         const totalCap = user.totalCapHours || 0;
                         const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
-                        const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
+                        const endDatePassed = user.endDate && new Date(user.endDate) < now;
+                        const hasQuotaLeft = !endDatePassed && (totalCap === 0 || hoursUsed < totalCap);
 
                         if (hasQuotaLeft) {
                             // Keep user for re-launch — just clear expiry

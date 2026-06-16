@@ -1,10 +1,56 @@
 const {
   createContainer, stopContainer, startContainer, deleteContainer,
   getContainers, getAvailableImages, getCostComparison, CONTAINER_IMAGES,
-  buildAccessUrl, buildExtraAccessUrls,
 } = require('../services/containerService');
 const { logger } = require('../plugins/logger');
 const { notifyResourceWelcomeEmail, notifyOpsDeploySummary, isLikelyDeliverable } = require('../services/emailNotifications');
+const Container = require('../models/container');
+
+// Tenant-scoping helpers (mirrors controllers/admin.js).
+function orgScope(req) {
+  return req.user?.userType === 'superadmin' ? null : (req.user?.organization || null);
+}
+function isAdmin(req) {
+  const t = req.user?.userType;
+  return t === 'admin' || t === 'superadmin';
+}
+
+// Returns { allowed: boolean, missing: string[] } — missing IDs were not found
+// or belong to another org. Used by start/stop/delete handlers.
+async function scopeContainerIds(containerIds, scopeOrg) {
+  if (!scopeOrg) return { allowed: containerIds, missing: [] };
+  const docs = await Container.find(
+    { containerId: { $in: containerIds } },
+    'containerId organization'
+  ).lean();
+  const allowed = [];
+  const missing = [];
+  const orgByCid = new Map(docs.map(d => [d.containerId, d.organization]));
+  for (const id of containerIds) {
+    if (orgByCid.get(id) === scopeOrg) allowed.push(id);
+    else missing.push(id);
+  }
+  return { allowed, missing };
+}
+
+// User-role scoping: only containers the caller personally owns (matched by email).
+// Used by start/stop so learners can control their own workspaces but not their
+// classmates'.
+async function scopeContainerIdsByEmail(containerIds, email) {
+  if (!email) return { allowed: [], missing: containerIds };
+  const docs = await Container.find(
+    { containerId: { $in: containerIds } },
+    'containerId email'
+  ).lean();
+  const allowed = [];
+  const missing = [];
+  const emailByCid = new Map(docs.map(d => [d.containerId, d.email]));
+  for (const id of containerIds) {
+    if (emailByCid.get(id) === email) allowed.push(id);
+    else missing.push(id);
+  }
+  return { allowed, missing };
+}
 
 // In-memory deploy job tracker
 const deployJobs = new Map();
@@ -15,8 +61,12 @@ const deployJobs = new Map();
  */
 async function handleCreateContainers(req, res) {
   try {
-    const { trainingName, organization, imageKey, count = 1, emails = [],
+    const { trainingName, imageKey, count = 1, emails = [],
       cpus = 2, memory = 2048, allocatedHours = 100, expiresAt } = req.body;
+    // admin is locked to their own org; superadmin may target any org via body
+    const organization = req.user?.userType === 'admin'
+      ? req.user.organization
+      : (req.body.organization || req.user?.organization);
 
     if (!trainingName || !organization) {
       return res.status(400).json({ message: 'trainingName and organization required' });
@@ -60,6 +110,10 @@ async function handleCreateContainers(req, res) {
             azureEquivalentRate: comparison.azureRate,
             expiresAt: expiresAt || null,
           });
+          if (req.body.batchExpiresAt) {
+            const Container = require('../models/container');
+            await Container.updateOne({ name }, { $set: { batchExpiresAt: new Date(req.body.batchExpiresAt) } }).catch(()=>{});
+          }
           job.completed++;
           job.results.push({ success: true, ...result, email });
 
@@ -142,6 +196,9 @@ async function handleDeployStatus(req, res) {
   const job = deployJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ message: 'Job not found' });
 
+  // Strip costComparison (Azure rate + savings %) for non-superadmin — leaks cost basis.
+  const isSuper = req.user?.userType === 'superadmin';
+
   res.json({
     status: job.status,
     total: job.total,
@@ -150,7 +207,7 @@ async function handleDeployStatus(req, res) {
     current: job.current,
     progress: job.total > 0 ? Math.round(((job.completed + job.failed) / job.total) * 100) : 0,
     results: job.status === 'done' ? job.results : [],
-    costComparison: job.costComparison,
+    ...(isSuper ? { costComparison: job.costComparison } : {}),
     duration: job.duration || Math.round((Date.now() - job.startedAt) / 1000),
   });
 }
@@ -161,17 +218,13 @@ async function handleDeployStatus(req, res) {
  */
 async function handleGetContainers(req, res) {
   try {
-    const { trainingName, organization } = req.query;
+    const { trainingName } = req.query;
+    let { organization } = req.query;
     if (!trainingName) return res.status(400).json({ message: 'trainingName required' });
+    // admin role is locked to their own org regardless of query
+    if (req.user?.userType === 'admin') organization = req.user.organization;
     const containers = await getContainers(trainingName, organization);
-    // Enrich with computed access URLs for the frontend
-    const enriched = containers.map(c => {
-      const obj = c.toObject ? c.toObject() : c;
-      obj.accessUrl = buildAccessUrl(c);
-      obj.extraAccessUrls = buildExtraAccessUrls(c);
-      return obj;
-    });
-    res.json(enriched);
+    res.json(containers);
   } catch (err) {
     logger.error(`Get containers error: ${err.message}`);
     res.status(500).json({ message: 'Failed to fetch containers' });
@@ -187,8 +240,27 @@ async function handleStartContainers(req, res) {
     const { containerIds } = req.body;
     if (!containerIds?.length) return res.status(400).json({ message: 'containerIds required' });
 
+    // Role-aware scoping:
+    //   superadmin       — unrestricted
+    //   admin            — limited to own organization
+    //   user (learner)   — limited to containers they personally own (by email)
+    //   anything else    — reject
+    const userType = req.user?.userType;
+    let allowed, missing;
+    if (userType === 'user') {
+      ({ allowed, missing } = await scopeContainerIdsByEmail(containerIds, req.user?.email));
+    } else if (userType === 'admin' || userType === 'superadmin') {
+      ({ allowed, missing } = await scopeContainerIds(containerIds, orgScope(req)));
+    } else {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (missing.length === containerIds.length) {
+      const msg = userType === 'user' ? 'No containers found that you own' : 'No containers in your organization match those IDs';
+      return res.status(403).json({ message: msg });
+    }
+
     const results = [];
-    for (const id of containerIds) {
+    for (const id of allowed) {
       try {
         await startContainer(id);
         results.push({ id, success: true });
@@ -196,6 +268,7 @@ async function handleStartContainers(req, res) {
         results.push({ id, success: false, error: err.message });
       }
     }
+    for (const id of missing) results.push({ id, success: false, error: 'Forbidden — container outside your organization' });
     res.json({ message: `${results.filter(r => r.success).length}/${containerIds.length} started`, results });
   } catch (err) {
     res.status(500).json({ message: 'Failed to start containers' });
@@ -211,8 +284,22 @@ async function handleStopContainers(req, res) {
     const { containerIds } = req.body;
     if (!containerIds?.length) return res.status(400).json({ message: 'containerIds required' });
 
+    const userType = req.user?.userType;
+    let allowed, missing;
+    if (userType === 'user') {
+      ({ allowed, missing } = await scopeContainerIdsByEmail(containerIds, req.user?.email));
+    } else if (userType === 'admin' || userType === 'superadmin') {
+      ({ allowed, missing } = await scopeContainerIds(containerIds, orgScope(req)));
+    } else {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (missing.length === containerIds.length) {
+      const msg = userType === 'user' ? 'No containers found that you own' : 'No containers in your organization match those IDs';
+      return res.status(403).json({ message: msg });
+    }
+
     const results = [];
-    for (const id of containerIds) {
+    for (const id of allowed) {
       try {
         await stopContainer(id);
         results.push({ id, success: true });
@@ -220,6 +307,7 @@ async function handleStopContainers(req, res) {
         results.push({ id, success: false, error: err.message });
       }
     }
+    for (const id of missing) results.push({ id, success: false, error: 'Forbidden — container outside your organization' });
     res.json({ message: `${results.filter(r => r.success).length}/${containerIds.length} stopped`, results });
   } catch (err) {
     res.status(500).json({ message: 'Failed to stop containers' });
@@ -232,13 +320,22 @@ async function handleStopContainers(req, res) {
  */
 async function handleDeleteContainers(req, res) {
   try {
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
     const { containerIds } = req.body;
     if (!containerIds?.length) return res.status(400).json({ message: 'containerIds required' });
 
-    for (const id of containerIds) {
+    const { allowed, missing } = await scopeContainerIds(containerIds, orgScope(req));
+    if (missing.length === containerIds.length) {
+      return res.status(403).json({ message: 'No containers in your organization match those IDs' });
+    }
+
+    for (const id of allowed) {
       await deleteContainer(id);
     }
-    res.json({ message: `${containerIds.length} containers deleted` });
+    res.json({
+      message: `${allowed.length} containers deleted`,
+      forbidden: missing.length ? missing : undefined,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete containers' });
   }
@@ -257,6 +354,10 @@ async function handleGetImages(req, res) {
  * Show cost savings vs Azure.
  */
 async function handleCostCompare(req, res) {
+  // Reveals Azure cost basis + savings vs Synergific — superadmin internal tooling only.
+  if (req.user?.userType !== 'superadmin') {
+    return res.status(403).json({ message: 'Superadmin access required' });
+  }
   const cpus = parseInt(req.query.cpus || '2');
   const memory = parseInt(req.query.memory || '4096');
   res.json(await getCostComparison(cpus, memory));

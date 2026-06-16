@@ -64,6 +64,22 @@ const sandboxTemplateSchema = new mongoose.Schema({
     gcp: [String],
   },
 
+  // Managed policies / role ARNs to attach to each provisioned sandbox user
+  // alongside the inline CoursePolicy. Used by aws-data-lab to attach
+  // AmazonSSMFullAccess + EC2InstanceConnect etc. so EMR post-create flows
+  // (SSH into master, Session Manager) work for learners out of the box.
+  managedPolicyArns: {
+    aws: [String],                               // e.g. ["arn:aws:iam::aws:policy/AmazonEC2FullAccess"]
+    azure: [String],
+    gcp: [String],
+  },
+
+  // Azure-specific: the ARM resource types the sandbox student can create.
+  // Read by services/azureSandboxPolicies.applyAllSandboxPolicies — anything
+  // not in this list is rejected by the "Allowed resource types" Azure Policy.
+  // Falls back to DEFAULT_ALLOWED_RESOURCE_TYPES if empty.
+  allowedResourceTypes: [String],
+
   // Auto-generated IAM/RBAC policy
   iamPolicy: { type: mongoose.Schema.Types.Mixed }, // Generated JSON policy document
   policyInitiativeId: { type: String }, // Azure Policy Set Definition ID (for pre-built initiatives)

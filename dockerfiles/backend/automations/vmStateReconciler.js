@@ -70,17 +70,46 @@ async function getVmPowerState(resourceGroup, vmName) {
 async function reconcileStoppedVm(vmDoc, powerState) {
   const currentTime = new Date();
 
+  // PATCH 2026-05-25 v2: Skip if ANY recency signal suggests this doc was just
+  // touched (recovery, bulk-restore, recent log activity). Reconciler runs every
+  // 5 min; deferring one cycle is safe. EY cohort lost 37 VMs to this race during
+  // the 2026-05-23 outage; v1 patch only checked createdAt/log.start which both
+  // miss the "bulk-restored VM" case where Mongo doc is old but Azure VM is new.
+  const SAFE_WINDOW_MS = 30 * 60 * 1000;  // patched 2026-06-07: 10->30 min, covers bulk-stop wait when worker fleet is saturated
+  const lastLog = vmDoc.logs?.[vmDoc.logs.length - 1];
+  const sigs = [vmDoc.updatedAt, vmDoc.lastActivityAt, lastLog?.start, lastLog?.stop]
+    .filter(Boolean)
+    .map(t => new Date(t).getTime());
+  const newestSignal = sigs.length ? Math.max.apply(null, sigs) : 0;
+  if (newestSignal > 0 && (Date.now() - newestSignal) < SAFE_WINDOW_MS) {
+    logger.info(`[reconciler] ${vmDoc.name}: skipping — touched ${Math.round((Date.now() - newestSignal) / 60000)}m ago (safety window)`);
+    return;
+  }
+
   // 1. Close the open log entry
   const logIndex = vmDoc.logs.findIndex(log => !log.stop);
   let durationMins = 0;
 
   if (logIndex !== -1) {
     const startTime = new Date(vmDoc.logs[logIndex].start);
-    durationMins = Math.ceil((currentTime - startTime) / 60000);
+    const rawDuration = Math.ceil((currentTime - startTime) / 60000);
+    // PATCH 2026-05-25 v2: HARD CAP on stale open log entries. If a log entry
+    // has been open > 24h, something went wrong (idleShutdown auto-stops at
+    // 30 min); the previous destruction never closed the log, so charging
+    // "real elapsed time" inflates quota by hundreds of hours. Cap at
+    // idleThreshold instead. Legitimate sessions <24h still charge correctly.
+    const STALE_LOG_THRESHOLD_MIN = 24 * 60;
+    const idleThreshold = vmDoc.idleMinutes || 30;
+    if (rawDuration > STALE_LOG_THRESHOLD_MIN) {
+      durationMins = idleThreshold;
+      logger.warn(`[reconciler] ${vmDoc.name}: stale open log (${Math.round(rawDuration/60)}h old) — clamping duration to ${idleThreshold}m to prevent quota inflation`);
+    } else {
+      durationMins = rawDuration;
+    }
   }
 
   const totalDuration = (vmDoc.duration || 0) + durationMins;
-  const consumedQuota = (vmDoc.quota?.consumed || 0) + durationMins;
+  const consumedQuota = Math.round(((vmDoc.quota?.consumed || 0) + durationMins / 60) * 100) / 100;  // patched 2026-06-07: consumed stored as HOURS, was adding minutes (unit mismatch)
 
   const updatePayload = {
     isRunning: false,
@@ -95,7 +124,7 @@ async function reconcileStoppedVm(vmDoc, powerState) {
     updatePayload[`logs.${logIndex}.duration`] = durationMins;
   }
 
-  if (consumedQuota >= (vmDoc.quota?.total || Infinity)) {
+  if (consumedQuota * 60 >= (vmDoc.quota?.total || Infinity)) {  // patched 2026-06-07: HOURS->MINUTES normalize
     updatePayload.isAlive = false;
     updatePayload.remarks = 'Quota Exceeded (reconciled)';
   }
@@ -104,23 +133,13 @@ async function reconcileStoppedVm(vmDoc, powerState) {
 
   logger.info(`[reconciler] ${vmDoc.name}: DB updated (was ${powerState} externally, duration: ${durationMins} min, total: ${totalDuration} min)`);
 
-  // 2. If VM still exists (deallocated/stopped but not deleted), queue the proper
-  //    stop flow so it snapshots the disk and cleans up resources.
+  // 2. If VM still exists (deallocated/stopped but not deleted), do NOT queue
+  //    destructive stop (snapshot+delete). The vmAutoRestart automation will
+  //    restart the VM on its next 3-minute cycle. Previously this queued
+  //    snapshot+delete which permanently destroyed spot-evicted VMs before
+  //    the eviction handler could restart them.
   if (powerState === 'deallocated' || powerState === 'stopped') {
-    if (stopQueue) {
-      try {
-        await stopQueue.add({
-          name: vmDoc.name,
-          resourceGroup: vmDoc.resourceGroup,
-          reconciled: true,
-        });
-        logger.info(`[reconciler] ${vmDoc.name}: queued proper stop (snapshot + cleanup)`);
-      } catch (qErr) {
-        logger.error(`[reconciler] ${vmDoc.name}: failed to queue stop — ${qErr.message}`);
-      }
-    } else {
-      logger.warn(`[reconciler] ${vmDoc.name}: stop queue unavailable — VM left deallocated (disk still charged). Manual cleanup needed.`);
-    }
+    logger.info(`[reconciler] ${vmDoc.name}: deallocated — skipping destructive stop queue, vmAutoRestart will handle recovery`);
   } else if (powerState === 'deleted') {
     // VM is gone in Azure. This is the EXPECTED state right after the worker's
     // stop sequence finishes (deallocate -> snapshot -> delete VM -> delete disk).
@@ -152,6 +171,7 @@ async function vmStateReconciler() {
     const runningVms = await VM.find({
       isRunning: true,
       isAlive: true,
+      cloud: { $ne: "aws" },
       os: { $not: /RDS Session/ },
     });
 
@@ -167,6 +187,15 @@ async function vmStateReconciler() {
           continue; // All good — DB matches Azure
         }
 
+        if (powerState === 'unknown') {
+          // Transient API state (mid-deallocation, eventual consistency, etc.).
+          // Don't reconcile — that would mark isRunning=false WITHOUT queuing
+          // the snapshot+delete cleanup, leaving the OS disk attached and billing
+          // forever. Skip; the next 5-min cycle will catch it once Azure settles.
+          logger.info(`[reconciler] ${vm.name}: Azure returned 'unknown' — likely transient, skipping this cycle`);
+          continue;
+        }
+
         // VM is not running in Azure but DB says it is — reconcile
         logger.warn(`[reconciler] ${vm.name}: DB says running but Azure says "${powerState}" — reconciling`);
         await reconcileStoppedVm(vm, powerState);
@@ -178,6 +207,38 @@ async function vmStateReconciler() {
 
     if (reconciled > 0) {
       logger.info(`[reconciler] Reconciled ${reconciled} VMs that were stopped externally`);
+    }
+
+    // REVERSE-SYNC for always-on cohorts (admintrack): when Azure has the VM
+    // running but DB says isRunning=false (e.g. external recovery via az vm start
+    // after a Spot eviction), flip mongo back to isRunning=true so the portal
+    // UI matches reality. Scoped to trainingName='admintrack' only — other VMs
+    // may be intentionally stopped by their learner and shouldn't be flipped.
+    const alwaysOnDown = await VM.find({
+      isRunning: false,
+      isAlive: true,
+      trainingName: 'admintrack',
+      os: { $not: /RDS Session/ },
+    });
+
+    let reverseSynced = 0;
+    for (const vm of alwaysOnDown) {
+      try {
+        const powerState = await getVmPowerState(vm.resourceGroup, vm.name);
+        if (powerState === 'running') {
+          await VM.updateOne(
+            { _id: vm._id },
+            { $set: { isRunning: true, remarks: 'Running (auto-resynced)' } }
+          );
+          logger.info(`[reconciler] ${vm.name}: Azure=running, DB was isRunning=false — flipped DB to true`);
+          reverseSynced++;
+        }
+      } catch (err) {
+        logger.error(`[reconciler] reverse-sync failed for ${vm.name}: ${err.message}`);
+      }
+    }
+    if (reverseSynced > 0) {
+      logger.info(`[reconciler] Reverse-synced ${reverseSynced} admintrack VMs (DB was stale-down, Azure was running)`);
     }
   } catch (err) {
     logger.error(`[reconciler] VM state reconciler error: ${err.message}`);

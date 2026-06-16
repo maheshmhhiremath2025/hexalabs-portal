@@ -141,6 +141,11 @@ const sandboxDeploymentCleanup = async () => {
     logger.info(`[sandbox-deploy-cleanup] found ${expired.length} expired deployment(s)`);
 
     for (const d of expired) {
+      // Track whether the cloud-side teardown succeeded for THIS deployment.
+      // P1-10: don't unconditionally mark state='deleted' — that masks leaked
+      // resources. Mirror the awsSandbox.js retry pattern instead.
+      let cleanupSuccess = true;
+      let cleanupErrorMsg = null;
       try {
         if (d.cloud === 'aws') {
           const username = d.aws?.iamUsername || d.username;
@@ -149,6 +154,7 @@ const sandboxDeploymentCleanup = async () => {
               await deleteAwsUser(username);
             } catch (e) {
               logger.error(`[sandbox-deploy-cleanup] AWS delete failed for ${username}: ${e.message}`);
+              cleanupSuccess = false; cleanupErrorMsg = `AWS: ${e.message}`;
             }
           }
         } else if (d.cloud === 'azure') {
@@ -159,29 +165,99 @@ const sandboxDeploymentCleanup = async () => {
               logger.info(`[sandbox-deploy-cleanup] queued Azure RG delete: ${rg}`);
             } catch (e) {
               logger.error(`[sandbox-deploy-cleanup] Azure enqueue failed for ${rg}: ${e.message}`);
+              cleanupSuccess = false; cleanupErrorMsg = `Azure: ${e.message}`;
             }
+          } else if (rg) {
+            cleanupSuccess = false; cleanupErrorMsg = 'Azure queue unavailable';
           }
         } else if (d.cloud === 'gcp') {
           const projectId = d.gcp?.projectId;
-          if (projectId && queues && queues['gcp-delete-project']) {
+          // Path 3: if the user's gcpsandboxuser doc has persistentProjectId == this
+          // project, KEEP the project. TTL expiry releases the session, but the
+          // project must survive so the next relaunch reset-in-place skips GCP's
+          // 30-day soft-delete window.
+          let isPersistent = false;
+          try {
+            const GcpSandboxUser = require('../models/gcpSandboxUser');
+            const userEmail = d.userEmail || d.email;
+            if (userEmail) {
+              const gDoc = await GcpSandboxUser.findOne({ email: userEmail }, 'persistentProjectId').lean();
+              if (gDoc && gDoc.persistentProjectId && gDoc.persistentProjectId === projectId) {
+                isPersistent = true;
+              }
+            }
+          } catch (e) {
+            logger.warn(`[sandbox-deploy-cleanup] persistentProjectId lookup failed: ${e.message}`);
+          }
+          if (isPersistent) {
+            logger.info(`[sandbox-deploy-cleanup] skipping GCP project delete — persistentProjectId set: ${projectId}`);
+          } else if (projectId && queues && queues['gcp-delete-project']) {
             try {
               await queues['gcp-delete-project'].add({ projectId });
               logger.info(`[sandbox-deploy-cleanup] queued GCP project delete: ${projectId}`);
             } catch (e) {
               logger.error(`[sandbox-deploy-cleanup] GCP enqueue failed for ${projectId}: ${e.message}`);
+              cleanupSuccess = false; cleanupErrorMsg = `GCP: ${e.message}`;
             }
+          } else if (projectId) {
+            cleanupSuccess = false; cleanupErrorMsg = 'GCP queue unavailable';
+          }
+        } else if (d.cloud === 'oci') {
+          // OCI teardown is synchronous (no Bull queue) because the createOciSandbox
+          // path is also synchronous. Direct call into services/ociSandbox.deleteOciSandbox.
+          const compartmentId = d.oci?.compartmentId;
+          const userId = d.oci?.userId;
+          const policyId = d.oci?.policyId;
+          if (compartmentId && userId) {
+            try {
+              const { deleteOciSandbox } = require('../services/ociSandbox');
+              await deleteOciSandbox(compartmentId, userId, policyId);
+              logger.info(`[sandbox-deploy-cleanup] OCI sandbox torn down: compartment=${compartmentId}`);
+            } catch (e) {
+              logger.error(`[sandbox-deploy-cleanup] OCI delete failed for ${compartmentId}: ${e.message}`);
+              cleanupSuccess = false; cleanupErrorMsg = `OCI: ${e.message}`;
+            }
+          } else {
+            cleanupSuccess = false; cleanupErrorMsg = 'OCI compartment/user OCID missing on deployment doc';
           }
         }
 
-        // Mark as deleted regardless of downstream success so we don't retry
-        // forever. If a specific cloud call failed above, that's logged and
-        // can be re-run manually.
-        await SandboxDeployment.updateOne(
-          { _id: d._id },
-          { $set: { state: 'deleted', deletedAt: new Date() } }
-        );
+        // Skip if max retries exceeded — same pattern as awsSandbox.js
+        const MAX_CLEANUP_RETRIES = 3;
+        if (!cleanupSuccess && (d.cleanupAttempts || 0) >= MAX_CLEANUP_RETRIES) {
+          logger.error(`[CRITICAL] sandbox-deploy-cleanup for ${d._id} exceeded ${MAX_CLEANUP_RETRIES} retries — leaving state=cleanup_failed`);
+          await SandboxDeployment.updateOne(
+            { _id: d._id },
+            { $set: { state: 'cleanup_failed', cleanupError: cleanupErrorMsg } }
+          );
+          continue;
+        }
+
+        if (cleanupSuccess) {
+          await SandboxDeployment.updateOne(
+            { _id: d._id },
+            { $set: { state: 'deleted', deletedAt: new Date() } }
+          );
+        } else {
+          await SandboxDeployment.updateOne(
+            { _id: d._id },
+            {
+              $set: { state: 'cleanup_failed', cleanupError: cleanupErrorMsg, cleanupFailedAt: new Date() },
+              $inc: { cleanupAttempts: 1 },
+            }
+          );
+        }
       } catch (err) {
         logger.error(`[sandbox-deploy-cleanup] error draining ${d._id}: ${err.message}`);
+        try {
+          await SandboxDeployment.updateOne(
+            { _id: d._id },
+            {
+              $set: { state: 'cleanup_failed', cleanupError: err.message, cleanupFailedAt: new Date() },
+              $inc: { cleanupAttempts: 1 },
+            }
+          );
+        } catch {}
       }
     }
 

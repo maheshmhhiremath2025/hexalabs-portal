@@ -95,9 +95,9 @@ async function nightPause() {
         const lastLog = c.logs[c.logs.length - 1];
         if (lastLog && !lastLog.stop) {
           lastLog.stop = now;
-          lastLog.duration = Math.floor((now - new Date(lastLog.start)) / 1000);
+          lastLog.duration = Math.floor((now - new Date(lastLog.start)) / 60000);
           c.duration = (c.duration || 0) + lastLog.duration;
-          c.quota.consumed = Math.round((c.duration / 3600) * 100) / 100;
+          c.quota.consumed = Math.round((c.duration / 60) * 100) / 100;
         }
         await c.save();
         paused++;
@@ -111,7 +111,7 @@ async function nightPause() {
     // Notify ops (one summary, not per-student)
     if (sendEmail && process.env.GMAIL_USER) {
       sendEmail(process.env.GMAIL_USER,
-        `[HexaLabs] Night pause — ${paused} containers stopped`,
+        `[GetLabs] Night pause — ${paused} containers stopped`,
         `<p>${paused} containers were automatically stopped at ${PAUSE_HOUR}:00 IST to save costs.</p>
          <p>They will auto-resume at ${RESUME_HOUR}:00 IST.</p>
          <p>Containers: ${toPause.map(c => c.name).join(', ')}</p>`
@@ -158,7 +158,7 @@ async function nightPause() {
     // Notify ops
     if (sendEmail && process.env.GMAIL_USER) {
       sendEmail(process.env.GMAIL_USER,
-        `[HexaLabs] Morning resume — ${resumed} containers restarted`,
+        `[GetLabs] Morning resume — ${resumed} containers restarted`,
         `<p>${resumed} containers were automatically restarted at ${RESUME_HOUR}:00 IST.</p>
          <p>All labs are ready for the day.</p>`
       ).catch(() => {});

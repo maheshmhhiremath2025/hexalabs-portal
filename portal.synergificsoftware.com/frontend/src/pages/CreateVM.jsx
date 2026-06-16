@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cloudLabelFor } from '../utils/cloudLabels';
 import apiCaller from '../services/apiCaller';
 import { parseEmailFile } from '../utils/csvEmailParser';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -107,91 +108,171 @@ function categorizeTemplateByName(templateName) {
   return 'Operating System';
 }
 
-// Keyword image mapping - extended for marketplace
+// Keyword image mapping (Simple Icons CDN — reliable, SVG, brand colors)
 const IMAGE_KEYWORDS = {
-  // OS Images
-  java: 'https://www.vectorlogo.zone/logos/java/java-ar21.svg',
-  datadog: 'https://cdn.iconscout.com/icon/free/png-256/datadog-3-569972.png',
-  jenkins: 'https://cdn.iconscout.com/icon/free/png-256/jenkins-4-569480.png',
-  genai: 'https://upload.wikimedia.org/wikipedia/commons/6/69/OpenAI_Logo.svg',
-  hyperv: 'https://upload.wikimedia.org/wikipedia/commons/5/58/Hyper-V_Logo.png',
-  jumpserver: 'https://upload.wikimedia.org/wikipedia/commons/1/19/Windows_logo_-_2002%E2%80%932012_%28Black%29.svg',
-  redhat: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Red_Hat_logo_2019.svg/1200px-Red_Hat_logo_2019.svg.png',
-  ubuntu: 'https://assets.ubuntu.com/v1/29985a98-ubuntu-logo32.png',
-  centos: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/CentOS_logo.svg/1200px-CentOS_logo.svg.png',
-  alma: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/AlmaLinux_Logo.svg',
-  debian: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/Debian_logo.svg',
-  fedora: 'https://upload.wikimedia.org/wikipedia/commons/3/3f/Fedora_logo.svg',
-  rocky: 'https://rockylinux.org/assets/images/rocky-logo.svg',
-  windows: 'https://upload.wikimedia.org/wikipedia/commons/8/87/Windows_logo_-_2021.svg',
-  linux: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/Tux.png/600px-Tux.png',
-  
-  // Marketplace/Application Images
-  python: 'https://cdn-icons-png.flaticon.com/512/1822/1822899.png',
-  node: 'https://cdn.iconscout.com/icon/free/png-256/node-js-1174925.png',
-  docker: 'https://cdn.iconscout.com/icon/free/png-256/docker-13-1175232.png',
-  kubernetes: 'https://cdn.iconscout.com/icon/free/png-256/kubernetes-226091.png',
-  terraform: 'https://cdn.iconscout.com/icon/free/png-256/terraform-3629026-3030176.png',
-  ansible: 'https://cdn.iconscout.com/icon/free/png-256/ansible-14-461410.png',
-  prometheus: 'https://cdn.iconscout.com/icon/free/png-256/prometheus-556457.png',
-  grafana: 'https://cdn.iconscout.com/icon/free/png-256/grafana-2752275-2284883.png',
-  elasticsearch: 'https://cdn.iconscout.com/icon/free/png-256/elastic-282714.png',
-  logstash: 'https://cdn.iconscout.com/icon/free/png-256/logstash-283971.png',
-  kibana: 'https://cdn.iconscout.com/icon/free/png-256/kibana-282718.png',
-  apache: 'https://cdn.iconscout.com/icon/free/png-256/apache-16-1175234.png',
-  nginx: 'https://cdn.iconscout.com/icon/free/png-256/nginx-2-226091.png',
-  mysql: 'https://cdn.iconscout.com/icon/free/png-256/mysql-5-1175110.png',
-  postgresql: 'https://cdn.iconscout.com/icon/free/png-256/postgresql-226047.png',
-  mariadb: 'https://cdn.iconscout.com/icon/free/png-256/mariadb-226047.png',
-  mongodb: 'https://cdn.iconscout.com/icon/free/png-256/mongodb-4-1175139.png',
-  redis: 'https://cdn.iconscout.com/icon/free/png-256/redis-1175109.png',
-  rabbitmq: 'https://cdn.iconscout.com/icon/free/png-256/rabbitmq-226031.png',
-  elastic: 'https://cdn.iconscout.com/icon/free/png-256/elastic-282714.png',
-  hadoop: 'https://cdn.iconscout.com/icon/free/png-256/hadoop-282704.png',
-  spark: 'https://cdn.iconscout.com/icon/free/png-256/apache-spark-282723.png',
-  kafka: 'https://cdn.iconscout.com/icon/free/png-256/apache-kafka-282726.png',
-  jenkinsci: 'https://cdn.iconscout.com/icon/free/png-256/jenkins-5-1175082.png',
-  gitlab: 'https://cdn.iconscout.com/icon/free/png-256/gitlab-13-1175107.png',
-  git: 'https://cdn.iconscout.com/icon/free/png-256/git-18-1175101.png',
-  circleci: 'https://cdn.iconscout.com/icon/free/png-256/circleci-282724.png',
-  azure: 'https://cdn.iconscout.com/icon/free/png-256/azure-4-1175238.png',
-  aws: 'https://cdn.iconscout.com/icon/free/png-256/amazon-282222.png',
-  gcp: 'https://cdn.iconscout.com/icon/free/png-256/google-cloud-4490.png',
-  valheim: 'https://cdn.iconscout.com/icon/free/png-256/valheim-5499300-4580292.png',
-  grafana_labs: 'https://cdn.iconscout.com/icon/free/png-256/grafana-2752275-2284883.png',
-  android: 'https://cdn.iconscout.com/icon/free/png-256/android-11-432553.png',
-  ios: 'https://cdn.iconscout.com/icon/free/png-256/apple-42-433485.png',
-  wordpress: 'https://cdn.iconscout.com/icon/free/png-256/wordpress-2752021-2284836.png',
-  joomla: 'https://cdn.iconscout.com/icon/free/png-256/joomla-2752024-2284839.png',
-  drupal: 'https://cdn.iconscout.com/icon/free/png-256/drupal-2752025-2284840.png',
-  magento: 'https://cdn.iconscout.com/icon/free/png-256/magento-2752026-2284841.png',
-  prestashop: 'https://cdn.iconscout.com/icon/free/png-256/prestashop-2752027-2284842.png',
-  laravel: 'https://cdn.iconscout.com/icon/free/png-256/laravel-2752028-2284843.png',
-  django: 'https://cdn.iconscout.com/icon/free/png-256/django-2752029-2284844.png',
-  flask: 'https://cdn.iconscout.com/icon/free/png-256/flask-2752030-2284845.png',
-  react: 'https://cdn.iconscout.com/icon/free/png-256/react-2752031-2284846.png',
-  vue: 'https://cdn.iconscout.com/icon/free/png-256/vue-2752032-2284847.png',
-  angular: 'https://cdn.iconscout.com/icon/free/png-256/angular-2752033-2284848.png',
+  // ---- LONGEST / MOST SPECIFIC PATTERNS FIRST ----
+  // (Insertion order is preserved; the resolver picks the FIRST match.)
+
+  // Hexalabs custom labs / multi-word brand
+  'powerbi-sql': 'https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg',
+  'powerbi':     'https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg',
+  'power-bi':    'https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg',
+  'docker-guidedlab': 'https://cdn.simpleicons.org/docker/2496ED',
+  'devops-guidedlab': 'https://cdn.simpleicons.org/githubactions/2088FF',
+  'devops':           'https://cdn.simpleicons.org/githubactions/2088FF',
+  'guidedlab':        'https://cdn.simpleicons.org/coursera/0056D2',
+
+  // Cloud & data platforms
+  'azure-databricks': 'https://cdn.simpleicons.org/databricks/FF3621',
+  'databricks':       'https://cdn.simpleicons.org/databricks/FF3621',
+  'snowflake':        'https://cdn.simpleicons.org/snowflake/29B5E8',
+
+  // Windows family (longer patterns first)
+  'win-hyperv': 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+  'hyperv':     'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+  'jumpserver': 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+  'windows-test': 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+  'windows':      'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+  'win-':         'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows11/windows11-original.svg',
+
+  // Linux distros
+  'ubuntuvtx': 'https://cdn.simpleicons.org/ubuntu/E95420',
+  'ubuntu':    'https://cdn.simpleicons.org/ubuntu/E95420',
+  'rhel':      'https://cdn.simpleicons.org/redhat/EE0000',
+  'redhat':    'https://cdn.simpleicons.org/redhat/EE0000',
+  'centos':    'https://cdn.simpleicons.org/centos/262577',
+  'alma':      'https://cdn.simpleicons.org/almalinux/000000',
+  'rocky':     'https://cdn.simpleicons.org/rockylinux/10B981',
+  'fedora':    'https://cdn.simpleicons.org/fedora/51A2DA',
+  'debian':    'https://cdn.simpleicons.org/debian/A81D33',
+  'kali':      'https://cdn.simpleicons.org/kalilinux/557C94',
+
+  // CI/CD & dev tools
+  'jenkinsci': 'https://cdn.simpleicons.org/jenkins/D24939',
+  'jenkins':   'https://cdn.simpleicons.org/jenkins/D24939',
+  'gitlab':    'https://cdn.simpleicons.org/gitlab/FC6D26',
+  'github':    'https://cdn.simpleicons.org/github/181717',
+  'circleci':  'https://cdn.simpleicons.org/circleci/343434',
+  'argocd':    'https://cdn.simpleicons.org/argo/EF7B4D',
+  'git':       'https://cdn.simpleicons.org/git/F05032',
+
+  // Config mgmt / IaC
+  'ansible-controller': 'https://cdn.simpleicons.org/ansible/EE0000',
+  'ansible-node':       'https://cdn.simpleicons.org/ansible/EE0000',
+  'ansible-winnode':    'https://cdn.simpleicons.org/ansible/EE0000',
+  'ansible':            'https://cdn.simpleicons.org/ansible/EE0000',
+  'terraform':          'https://cdn.simpleicons.org/terraform/844FBA',
+  'puppet':             'https://cdn.simpleicons.org/puppet/FFAE1A',
+  'chef':               'https://cdn.simpleicons.org/jenkins/D24939',
+  'vagrant':            'https://cdn.simpleicons.org/vagrant/1868F2',
+
+  // Containers / orchestration
+  'kubernetes': 'https://cdn.simpleicons.org/kubernetes/326CE5',
+  'k8s':        'https://cdn.simpleicons.org/kubernetes/326CE5',
+  'openshift':  'https://cdn.simpleicons.org/redhatopenshift/EE0000',
+  'docker':     'https://cdn.simpleicons.org/docker/2496ED',
+  'rancher':    'https://cdn.simpleicons.org/rancher/0075A8',
+
+  // Databases
+  'postgredocker': 'https://cdn.simpleicons.org/postgresql/4169E1',
+  'postgres':      'https://cdn.simpleicons.org/postgresql/4169E1',
+  'mysql':         'https://cdn.simpleicons.org/mysql/4479A1',
+  'mariadb':       'https://cdn.simpleicons.org/mariadb/003545',
+  'mongodb':       'https://cdn.simpleicons.org/mongodb/47A248',
+  'mongo':         'https://cdn.simpleicons.org/mongodb/47A248',
+  'redis':         'https://cdn.simpleicons.org/redis/DC382D',
+  'cassandra':     'https://cdn.simpleicons.org/apachecassandra/1287B1',
+  'cockroach':     'https://cdn.simpleicons.org/cockroachlabs/6933FF',
+  'sqlserver':     'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/microsoftsqlserver/microsoftsqlserver-plain.svg',
+  'mssql':         'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/microsoftsqlserver/microsoftsqlserver-plain.svg',
+  'sql':           'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/microsoftsqlserver/microsoftsqlserver-plain.svg',
+
+  // Observability
+  'prometheus':    'https://cdn.simpleicons.org/prometheus/E6522C',
+  'grafana_labs':  'https://cdn.simpleicons.org/grafana/F46800',
+  'grafana':       'https://cdn.simpleicons.org/grafana/F46800',
+  'elasticsearch': 'https://cdn.simpleicons.org/elasticsearch/005571',
+  'elastic':       'https://cdn.simpleicons.org/elasticstack/005571',
+  'logstash':      'https://cdn.simpleicons.org/logstash/005571',
+  'kibana':        'https://cdn.simpleicons.org/kibana/005571',
+  'datadog':       'https://cdn.simpleicons.org/datadog/632CA6',
+  'splunk':        'https://cdn.simpleicons.org/splunk/000000',
+  'newrelic':      'https://cdn.simpleicons.org/newrelic/008C99',
+
+  // Web servers / runtimes
+  'apache':  'https://cdn.simpleicons.org/apache/D22128',
+  'nginx':   'https://cdn.simpleicons.org/nginx/009639',
+  'tomcat':  'https://cdn.simpleicons.org/apachetomcat/F8DC75',
+
+  // Languages / frameworks
+  'wordpress': 'https://cdn.simpleicons.org/wordpress/21759B',
+  'laravel':   'https://cdn.simpleicons.org/laravel/FF2D20',
+  'django':    'https://cdn.simpleicons.org/django/092E20',
+  'flask':     'https://cdn.simpleicons.org/flask/000000',
+  'react':     'https://cdn.simpleicons.org/react/61DAFB',
+  'vue':       'https://cdn.simpleicons.org/vuedotjs/4FC08D',
+  'angular':   'https://cdn.simpleicons.org/angular/DD0031',
+  'spring':    'https://cdn.simpleicons.org/spring/6DB33F',
+  'java':      'https://cdn.simpleicons.org/openjdk/000000',
+  'python':    'https://cdn.simpleicons.org/python/3776AB',
+  'node':      'https://cdn.simpleicons.org/nodedotjs/339933',
+  'android':   'https://cdn.simpleicons.org/android/3DDC84',
+  'ios':       'https://cdn.simpleicons.org/apple/000000',
+
+  // Big data / streaming
+  'rabbitmq': 'https://cdn.simpleicons.org/rabbitmq/FF6600',
+  'kafka':    'https://cdn.simpleicons.org/apachekafka/231F20',
+  'spark':    'https://cdn.simpleicons.org/apachespark/E25A1C',
+  'hadoop':   'https://cdn.simpleicons.org/apachehadoop/66CCFF',
+  'airflow':  'https://cdn.simpleicons.org/apacheairflow/017CEE',
+  'flink':    'https://cdn.simpleicons.org/apacheflink/E6526F',
+
+  // AI / GenAI
+  'genai':    'https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg',
+  'openai':   'https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg',
+  'huggingface': 'https://cdn.simpleicons.org/huggingface/FFD21E',
+
+  // Misc
+  'valheim':  'https://cdn.simpleicons.org/linux/FCC624',
+  'linux':    'https://cdn.simpleicons.org/linux/FCC624',
 };
 
+// Inline SVG fallback — never 404s. Generic server/cloud glyph.
+const FALLBACK_ICON = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#475569\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"6\" rx=\"1.5\"/><rect x=\"3\" y=\"14\" width=\"18\" height=\"6\" rx=\"1.5\"/><circle cx=\"7\" cy=\"7\" r=\"0.8\" fill=\"#475569\"/><circle cx=\"7\" cy=\"17\" r=\"0.8\" fill=\"#475569\"/></svg>'
+);
+
 // Function to get image URL for a template name
-function getImageForTemplate(name) {
-  if (!name) return IMAGE_KEYWORDS.linux;
-
-  const lowerName = name.toLowerCase();
-
-  // Try exact keyword matches
-  for (const key in IMAGE_KEYWORDS) {
-    if (lowerName.includes(key)) {
-      return IMAGE_KEYWORDS[key];
+function getImageForTemplate(name, osHint, cloudHint) {
+  // Hexalabs brand discipline: never serve a vendor logo (AWS / Azure / GCP / OCI).
+  // For cloud-tagged templates we strip the cloud prefix so the lookup matches the
+  // OS / app inside the template name rather than the vendor wordmark.
+  let lookupName = (name || '');
+  if (cloudHint === 'aws' || lookupName.toLowerCase().startsWith('aws-')) {
+    lookupName = lookupName.replace(/^aws[-_]?/i, '');
+  } else if (cloudHint === 'gcp' || lookupName.toLowerCase().startsWith('gcp-')) {
+    lookupName = lookupName.replace(/^gcp[-_]?/i, '');
+  } else if (cloudHint === 'oci' || lookupName.toLowerCase().startsWith('oci-')) {
+    lookupName = lookupName.replace(/^oci[-_]?/i, '');
+  }
+  name = lookupName;
+  const lowerName = (name || '').toLowerCase();
+  // Insertion-ordered keys: longest/most-specific patterns are listed first in IMAGE_KEYWORDS.
+  if (lowerName) {
+    for (const key of Object.keys(IMAGE_KEYWORDS)) {
+      if (lowerName.includes(key)) return IMAGE_KEYWORDS[key];
     }
   }
-
-  // If no keyword matched, check for windows or linux generically
-  if (lowerName.includes('windows')) return IMAGE_KEYWORDS.windows;
-  if (lowerName.includes('linux')) return IMAGE_KEYWORDS.linux;
-
-  return IMAGE_KEYWORDS.linux;
+  // Fall back to display.os hint (Windows / Linux / Ubuntu / etc.)
+  const lowerOs = (osHint || '').toLowerCase();
+  if (lowerOs) {
+    for (const key of Object.keys(IMAGE_KEYWORDS)) {
+      if (lowerOs.includes(key)) return IMAGE_KEYWORDS[key];
+    }
+    if (lowerOs.includes('linux')) return IMAGE_KEYWORDS.linux;
+    if (lowerOs.includes('windows') || lowerOs.includes('server')) return IMAGE_KEYWORDS.windows;
+  }
+  return FALLBACK_ICON;
 }
 
 // Function to categorize templates by name
@@ -236,7 +317,7 @@ const KPI = ({ label, value, hint, icon }) => (
 const TemplateCard = ({ template, onClick, badge, showRate = false }) => {
   const name = template.name || template.display?.os || 'Unknown';
   const description = template.description || template.display?.description || 'No description available';
-  const icon = getImageForTemplate(name);
+  const icon = getImageForTemplate(name, template.display?.os, template.cloud || template.creation?.cloud);
   const rate = showRate ? (template.rate ? INR.format(Number(template.rate)) : 'Free') : null;
 
   const handleDeployClick = () => {
@@ -251,7 +332,15 @@ const TemplateCard = ({ template, onClick, badge, showRate = false }) => {
       className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all duration-200"
     >
       <div className="flex items-start justify-between mb-3">
-        <img src={icon} alt={name} className="w-12 h-12 object-contain" />
+        <img src={icon} alt={name} className="w-12 h-12 object-contain" onError={(e) => { if (e.target.src !== FALLBACK_ICON) e.target.src = FALLBACK_ICON; }} />
+        {(() => {
+          const lbl = cloudLabelFor(template.cloud || template.creation?.cloud || 'azure', 'admin');
+          return (
+            <span title={lbl.sub} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${lbl.chipClass}`}>
+              {lbl.codename.replace('Hexalabs ', '')}
+            </span>
+          );
+        })()}
         {badge && (
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${
             badge === 'OS' ? 'bg-blue-100 text-blue-600' :
@@ -385,14 +474,11 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   const [emailTokens, setEmailTokens] = useState([]);
   const [trainingName, setTrainingName] = useState('');
   const [allocatedHours, setAllocatedHours] = useState(1);
-  // Remote access: 'none' | 'guacamole' | 'meshcentral'
-  const [remoteAccess, setRemoteAccess] = useState('none');
+  const [guacamole, setGuacamole] = useState(false);
   const [autoShutdown, setAutoShutdown] = useState(false);
-  const [idleMinutes, setIdleMinutes] = useState(15);
+  const [idleMinutes, setIdleMinutes] = useState(30);
   const [labExpiry, setLabExpiry] = useState(false);
   const [expiryDate, setExpiryDate] = useState('');
-  const [guidedLabId, setGuidedLabId] = useState('');
-  const [guidedLabs, setGuidedLabs] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
@@ -408,7 +494,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
   // Live deploy progress — persisted in localStorage so a page refresh
   // doesn't drop the progress card. Max 2h lifetime; stale entries
   // older than that are discarded on load.
-  const DEPLOY_PROGRESS_KEY = 'hexalabs.deployProgress';
+  const DEPLOY_PROGRESS_KEY = 'getlabs.deployProgress';
   const DEPLOY_PROGRESS_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
   const [deployProgress, setDeployProgress] = useState(() => {
@@ -506,7 +592,6 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
 
   useEffect(() => {
     fetchTemplates();
-    apiCaller.get('/guided-labs').then(res => setGuidedLabs(res.data || [])).catch(() => {});
     return () => { if (abortRef.current) abortRef.current.abort(); };
   }, [fetchTemplates]);
 
@@ -520,14 +605,14 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     const totalTemplates = templates.length;
     const totalVMs = templates.reduce((acc, t) => acc + (t.estimatedCount ?? 0), 0) || Math.max(0, Math.floor(totalTemplates * 3));
     const avgPrice = templates.length ? Math.round((templates.reduce((s, t) => s + (Number(t.rate || 0) || 0), 0) / templates.length)) : 0;
-    const estMonthly = Math.round((allocatedHours || 1) * (totalVMs || 1) * (remoteAccess === 'guacamole' ? 5 : 0.8));
-
+    const estMonthly = Math.round((allocatedHours || 1) * (totalVMs || 1) * (guacamole ? 5 : 0.8));
+    
     // Marketplace-specific stats
     const marketplaceTemplates = categorizedTemplates['Marketplace'] || [];
     const marketplaceCount = marketplaceTemplates.length;
-
+    
     return { totalTemplates, totalVMs, avgPrice, estMonthly, marketplaceCount };
-  }, [templates, categorizedTemplates, allocatedHours, remoteAccess]);
+  }, [templates, categorizedTemplates, allocatedHours, guacamole]);
 
   // Charts data
   const osDistribution = useMemo(() => {
@@ -613,7 +698,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
     setTrainingName('');
     setEmailTokens([]);
     setAllocatedHours(1);
-    setRemoteAccess('none');
+    setGuacamole(false);
     setCurrentStep(1);
   };
 
@@ -658,12 +743,10 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
       trainingName,
       allocatedHours: (Number(allocatedHours) || 0) * 60, // minutes
       createVmCount: validEmails.length,
-      guacamole: remoteAccess === 'guacamole',
-      meshCentral: remoteAccess === 'meshcentral',
+      guacamole,
       autoShutdown,
       idleMinutes: autoShutdown ? idleMinutes : 0,
       expiresAt: labExpiry && expiryDate ? new Date(expiryDate).toISOString() : null,
-      guidedLabId: guidedLabId || undefined,
     };
 
     setConfirm({
@@ -926,10 +1009,10 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                             <div className="flex items-center gap-3 mb-4">
                               <img 
-                                src={getImageForTemplate(selectedTemplate.name)} 
+                                src={getImageForTemplate(selectedTemplate.name, selectedTemplate.display?.os, selectedTemplate.cloud || selectedTemplate.creation?.cloud)} 
                                 alt={selectedTemplate.name} 
                                 className="w-12 h-12 object-contain"
-                              />
+                               onError={(e) => { if (e.target.src !== FALLBACK_ICON) e.target.src = FALLBACK_ICON; }} />
                               <div>
                                 <h4 className="font-semibold text-slate-800">{selectedTemplate.name}</h4>
                                 <p className="text-sm text-slate-500">{selectedTemplate.description || 'No description available'}</p>
@@ -1122,95 +1205,43 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             <div>
                               <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
                                 <Monitor className="w-4 h-4" />
-                                Remote Access Method
+                                Access Type
                               </label>
-
-                              {/* No browser access */}
-                              <div
-                                className={`p-4 border rounded-xl transition-colors cursor-pointer ${
-                                  remoteAccess === 'none'
-                                    ? 'border-slate-400 bg-slate-50 ring-1 ring-slate-400'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50'
-                                }`}
-                                onClick={() => setRemoteAccess('none')}
-                              >
-                                <label className="flex items-start gap-3 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name="remoteAccess"
-                                    checked={remoteAccess === 'none'}
-                                    onChange={() => setRemoteAccess('none')}
-                                    className="w-4 h-4 text-slate-600 focus:ring-slate-200 mt-1"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-700">No Browser Access</div>
-                                    <div className="text-xs text-slate-500 mt-1">
-                                      Users connect via RDP/SSH client only. No web-based remote desktop.
+                              {selectedTemplate?.dcv ? (
+                                <div className="p-4 border border-emerald-200 rounded-xl bg-emerald-50">
+                                  <div className="flex items-start gap-3">
+                                    <div className="text-emerald-600 mt-0.5">✓</div>
+                                    <div className="flex-1">
+                                      <div className="text-sm font-semibold text-emerald-800">Browser Access: NICE DCV (built-in)</div>
+                                      <div className="text-xs text-emerald-700 mt-1">
+                                        This template ships with NICE DCV — high-FPS H.264 streaming, native clipboard, no plugins. No extra charge.
+                                      </div>
                                     </div>
                                   </div>
-                                </label>
-                              </div>
-
-                              {/* Guacamole */}
-                              <div
-                                className={`p-4 border rounded-xl transition-colors cursor-pointer mt-3 ${
-                                  remoteAccess === 'guacamole'
-                                    ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-400'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50'
-                                }`}
-                                onClick={() => setRemoteAccess('guacamole')}
-                              >
-                                <label className="flex items-start gap-3 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name="remoteAccess"
-                                    checked={remoteAccess === 'guacamole'}
-                                    onChange={() => setRemoteAccess('guacamole')}
-                                    className="w-4 h-4 text-blue-600 focus:ring-blue-200 mt-1"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-700">Guacamole</div>
-                                    <div className="text-xs text-slate-500 mt-1">
-                                      Web-based remote desktop via Apache Guacamole. Works with all OS types (Windows RDP, Linux SSH/VNC).
+                                </div>
+                              ) : (
+                                <div className="p-4 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors cursor-pointer">
+                                  <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      id="guacamole"
+                                      checked={guacamole}
+                                      onChange={(e) => setGuacamole(e.target.checked)}
+                                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-200 mt-1"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="text-sm font-medium text-slate-700">Enable Browser Access (Guacamole)</div>
+                                      <div className="text-xs text-slate-500 mt-1">
+                                        Provides web-based access to VMs without requiring additional software
+                                      </div>
+                                      {(userDetails?.userType === 'admin' || userDetails?.userType === 'superadmin') && (
+                                      <div className="text-xs text-blue-600 font-medium mt-1">
+                                        Additional +₹5/hr per VM
+                                      </div>
+                                      )}
                                     </div>
-                                    {(userDetails?.userType === 'admin' || userDetails?.userType === 'superadmin') && (
-                                    <div className="text-xs text-blue-600 font-medium mt-1">
-                                      Additional +₹5/hr per VM
-                                    </div>
-                                    )}
-                                  </div>
-                                </label>
-                              </div>
-
-                              {/* MeshCentral — Windows only */}
-                              {selectedTemplate?.creation?.os?.toLowerCase().includes('windows') && (
-                              <div
-                                className={`p-4 border rounded-xl transition-colors cursor-pointer mt-3 ${
-                                  remoteAccess === 'meshcentral'
-                                    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50'
-                                }`}
-                                onClick={() => setRemoteAccess('meshcentral')}
-                              >
-                                <label className="flex items-start gap-3 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name="remoteAccess"
-                                    checked={remoteAccess === 'meshcentral'}
-                                    onChange={() => setRemoteAccess('meshcentral')}
-                                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-200 mt-1"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-700">MeshCentral</div>
-                                    <div className="text-xs text-slate-500 mt-1">
-                                      Agent-based browser desktop for Windows VMs. Faster than Guacamole — no server-side transcoding.
-                                    </div>
-                                    <div className="text-xs text-emerald-600 font-medium mt-1">
-                                      No additional cost
-                                    </div>
-                                  </div>
-                                </label>
-                              </div>
+                                  </label>
+                                </div>
                               )}
                             </div>
 
@@ -1240,7 +1271,6 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                           onChange={(e) => setIdleMinutes(Number(e.target.value))}
                                           className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                                         >
-                                          <option value={15}>15 minutes</option>
                                           <option value={30}>30 minutes</option>
                                           <option value={60}>1 hour</option>
                                           <option value={120}>2 hours</option>
@@ -1248,7 +1278,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                       </div>
                                     )}
                                     <div className="text-xs text-green-600 font-medium mt-1">
-                                      {autoShutdown ? `VMs will auto-stop after ${idleMinutes} min of inactivity` : 'Disabled — VMs stay running 24/7'}
+                                      {autoShutdown ? `✓ Confirmed: VMs auto-stop after ${idleMinutes} min idle` : 'Disabled — VMs stay running 24/7'}
                                     </div>
                                   </div>
                                 </label>
@@ -1296,34 +1326,6 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 </label>
                               </div>
                             </div>
-
-                            {/* Guided Lab (Optional) */}
-                            {guidedLabs.length > 0 && (
-                            <div>
-                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-                                <BookOpen className="w-4 h-4" />
-                                Guided Lab (Optional)
-                              </label>
-                              <div className="p-4 border border-slate-200 rounded-xl bg-white">
-                                <select
-                                  value={guidedLabId}
-                                  onChange={(e) => setGuidedLabId(e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                >
-                                  <option value="">No guided lab</option>
-                                  {guidedLabs.map(l => (
-                                    <option key={l._id} value={l._id}>
-                                      {l.icon} {l.title} ({l.stepCount || l.steps?.length || 0} steps, {l.difficulty})
-                                    </option>
-                                  ))}
-                                </select>
-                                <div className="text-xs text-slate-500 mt-2">
-                                  Attach a guided lab to show step-by-step instructions in the student's lab console.
-                                </div>
-                              </div>
-                            </div>
-                            )}
-
                           </div>
                         </div>
                       </div>
@@ -1358,9 +1360,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-slate-600">Browser Access</span>
-                              <span className="text-sm font-medium">
-                                {remoteAccess === 'guacamole' ? 'Guacamole' : remoteAccess === 'meshcentral' ? 'MeshCentral' : 'None'}
-                              </span>
+                              <span className="text-sm font-medium">{selectedTemplate?.dcv ? 'NICE DCV (built-in)' : (guacamole ? 'Guacamole enabled' : 'Disabled')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-slate-600">Auto-Shutdown</span>
@@ -1391,9 +1391,9 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 {INR.format((Number(selectedTemplate.rate) || 0) * emailTokens.filter(t => t.isValid).length)}/hr
                               </span>
                             </div>
-                            {remoteAccess === 'guacamole' && (
+                            {guacamole && (
                               <div className="flex justify-between">
-                                <span className="text-sm text-slate-600">Browser Access (Guacamole)</span>
+                                <span className="text-sm text-slate-600">Browser Access</span>
                                 <span className="text-sm font-medium">
                                   {INR.format(5 * emailTokens.filter(t => t.isValid).length)}/hr
                                 </span>
@@ -1404,7 +1404,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                                 <span className="text-sm font-semibold text-slate-700">Total Estimated</span>
                                 <span className="text-sm font-bold text-blue-600">
                                   {INR.format(
-                                    ((Number(selectedTemplate.rate) || 0) + (remoteAccess === 'guacamole' ? 5 : 0)) *
+                                    ((Number(selectedTemplate.rate) || 0) + (guacamole ? 5 : 0)) *
                                     Math.max(1, emailTokens.filter(t => t.isValid).length)
                                   )}/hr
                                 </span>
@@ -1438,7 +1438,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                             <div className="text-sm font-medium text-amber-800">Estimated Cost</div>
                             <div className="text-lg font-bold text-amber-900">
                               {INR.format(
-                                ((Number(selectedTemplate.rate) || 0) + (remoteAccess === 'guacamole' ? 5 : 0)) *
+                                ((Number(selectedTemplate.rate) || 0) + (guacamole ? 5 : 0)) *
                                 Math.max(1, emailTokens.filter(t => t.isValid).length) *
                                 allocatedHours
                               )}

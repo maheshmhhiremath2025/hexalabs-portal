@@ -29,6 +29,11 @@ const vmSchema = new mongoose.Schema({
   isAlive: { type: Boolean, required: true, default: true },
   quota: { type: quotaSchema, required: true },
   remarks: { type: String, default: 'Alive' },
+  cloud: { type: String, default: 'azure' },
+  dcv: { type: Boolean, default: false },
+  dcvPort: { type: Number },
+  stoppedAmiId: { type: String },                          // AMI snapshot taken on stop; cleared on start/delete                              // External nginx proxy port for NICE DCV (hexalabs.online:<dcvPort> -> EC2:8443)
+  cloudInstanceId: { type: String },
   kasmVnc: { type: Boolean, default: false },
   // Linux VMs that have xrdp+xfce baked in — backend uses this to register a
   // second Guacamole RDP connection (<vmName>-desktop) so the student can
@@ -47,6 +52,12 @@ const vmSchema = new mongoose.Schema({
   // Mirror of the backend field — so worker's updateOne({stopAttempts:0})
   // isn't silently dropped by Mongoose strict-mode on this schema.
   stopAttempts: { type: Number, default: 0 },
+  // Workshop (template builder) — added 2026-06-10. Phase 1, additive only.
+  // isBuildVM=true means this VM is a trainer's template-build session, not a learner VM.
+  // Existing learner VMs default to isBuildVM=false → no change in behavior.
+  isBuildVM:           { type: Boolean, default: false },
+  templateBuildOf:     { type: String, default: null },     // trainer email
+  targetTemplateName:  { type: String, default: null },     // eventual template name
 }, { timestamps: true });
 
 const VM = mongoose.model('VM', vmSchema);

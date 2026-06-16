@@ -26,13 +26,6 @@ const containerSchema = new mongoose.Schema({
   // Access
   vncPort: { type: Number },                   // noVNC web port
   sshPort: { type: Number },                   // SSH port (if exposed)
-  extraPorts: [{
-    containerPort: { type: Number, required: true },
-    hostPort: { type: Number, required: true },
-    label: { type: String, required: true },
-    _id: false,
-  }],
-  vncLabel: { type: String, default: null },   // Label for primary port (e.g. 'Terminal', 'JupyterLab')
   password: { type: String, required: true },
   username: { type: String, default: 'labuser' },
   // Host info
@@ -61,6 +54,7 @@ const containerSchema = new mongoose.Schema({
   dockerHostId: { type: mongoose.Schema.Types.ObjectId, ref: 'DockerHost' },
   dockerHostIp: { type: String, default: 'localhost' },
   dockerHostPort: { type: Number, default: 2376 },
+  batchExpiresAt: { type: Date, default: null },
 }, { timestamps: true });
 
 containerSchema.index({ trainingName: 1, organization: 1 });

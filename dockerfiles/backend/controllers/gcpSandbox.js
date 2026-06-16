@@ -7,8 +7,12 @@ const { notifySandboxWelcomeEmail } = require('./../services/emailNotifications'
 
 async function handleGetGcpSandboxUsers(req, res) {
     try {
-        if (req.user.userType !== 'superadmin') return res.status(403).send('Unauthorized');
-        const users = await GcpSandboxUser.find().lean();
+        const { userType, organization } = req.user || {};
+        if (userType !== 'superadmin' && userType !== 'admin') return res.status(403).send('Unauthorized');
+        const filter = {};
+        if (userType === 'admin') filter.organization = organization;
+        else if (userType === 'superadmin' && req.query.organization) filter.organization = req.query.organization;
+        const users = await GcpSandboxUser.find(filter).lean();
         res.json(users);
     } catch (err) {
         logger.error('GCP sandbox get users error:', err.message);
@@ -17,6 +21,9 @@ async function handleGetGcpSandboxUsers(req, res) {
 }
 
 async function handleCreateGcpSandboxUser(req, res) {
+    const targetOrgSingle = req.user?.userType === 'superadmin' && req.body.organization
+        ? req.body.organization
+        : req.user?.organization;
     try {
         if (req.user.userType !== 'superadmin') return res.status(403).send('Unauthorized');
         const { googleEmail, duration = 5, sandboxTtlHours = 4, credits = 1, budgetLimit = 500 } = req.body;
@@ -34,6 +41,8 @@ async function handleCreateGcpSandboxUser(req, res) {
             budgetLimit,
             startDate: new Date(),
             endDate: new Date(Date.now() + duration * 24 * 60 * 60 * 1000),
+            batchExpiresAt: req.body.batchExpiresAt ? new Date(req.body.batchExpiresAt) : null,
+            organization: targetOrgSingle,
         });
 
         logger.info(`GCP sandbox user created: ${googleEmail}`);
@@ -231,10 +240,22 @@ async function handleBulkDeployGcp(req, res) {
         if (!emails || !Array.isArray(emails) || emails.length === 0) {
             return res.status(400).json({ message: 'emails array required' });
         }
+        if (req.user.userType === 'admin' && emails.length > 200) {
+            return res.status(400).json({ message: `Batch size of ${emails.length} exceeds the 200-student cap for admin role.` });
+        }
+        // admin is locked to their own org; superadmin may target any org via body
+        const targetOrg = req.user.userType === 'superadmin' && req.body.organization
+            ? req.body.organization
+            : req.user.organization;
         if (!ttlHours || ttlHours < 1) return res.status(400).json({ message: 'ttlHours required (minimum 1)' });
 
         const template = await SandboxTemplate.findOne({ slug: templateSlug, isActive: true, cloud: 'gcp' });
         if (!template) return res.status(404).json({ message: 'GCP template not found' });
+
+        // Org-template entitlement: auto-associate for superadmin; clear 403 for admin.
+        const { ensureTemplateAssociation } = require('../services/orgTemplateAssociation');
+        const _assoc = await ensureTemplateAssociation({ targetOrg, templateSlug, userType: req.user.userType, adminEmail: req.user.email });
+        if (!_assoc.ok) return res.status(_assoc.status).json({ message: _assoc.error });
 
         const { createGcpSandbox } = require('../services/directSandbox');
         const results = [];
@@ -253,7 +274,8 @@ async function handleBulkDeployGcp(req, res) {
                 const gcpResult = await createGcpSandbox(
                     projectId,
                     trimmed,
-                    template.sandboxConfig?.budgetInr || 500
+                    template.sandboxConfig?.budgetInr || 500,
+                    template.slug || null,
                 );
 
                 const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : new Date(Date.now() + ttlHours * 60 * 60 * 1000);
@@ -270,7 +292,10 @@ async function handleBulkDeployGcp(req, res) {
                         budgetLimit: template.sandboxConfig?.budgetInr || 500,
                         startDate: new Date(),
                         endDate: expiresAt,
+                        organization: targetOrg,
                     });
+                } else {
+                    user.organization = targetOrg;
                 }
 
                 user.sandbox.push({
@@ -313,7 +338,7 @@ async function handleBulkDeployGcp(req, res) {
                     email: trimmed, cloud: 'gcp', portalPassword: 'Welcome1234!',
                     sandboxUsername: trimmed, sandboxPassword: 'Use your Google account',
                     sandboxAccessUrl: gcpResult.accessUrl,
-                    region: template.sandboxConfig?.region || 'asia-south1',
+                    region: template.sandboxConfig?.region || 'us-central1',
                     expiresAt, templateName: template.name,
                     allowedServices: template.allowedServices, blockedServices: template.blockedServices,
                     projectId,

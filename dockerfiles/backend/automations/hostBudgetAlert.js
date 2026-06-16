@@ -25,6 +25,7 @@
  */
 
 const Container = require('../models/container');
+const DockerHost = require('../models/dockerHost');
 const { logger } = require('../plugins/logger');
 
 let sendEmail;
@@ -46,8 +47,18 @@ async function hostBudgetAlert() {
   try {
     if (!sendEmail || !ALERT_EMAIL) return;
 
+    // Reality check: only alert if an Azure docker host is actually active.
+    // Without this, the alert fires based on backend process uptime alone — even
+    // when the host VM was terminated days ago and nothing is being billed.
+    const activeHost = await DockerHost.findOne({
+      provider: 'azure',
+      status: { $in: ['idle', 'ready', 'busy'] },
+    });
+    if (!activeHost) return;  // No host running -> no bill -> no alert
+
     const now = Date.now();
-    const uptimeHours = (now - processStartTime) / 3600000;
+    const provisionedAt = activeHost.provisionedAt ? new Date(activeHost.provisionedAt).getTime() : processStartTime;
+    const uptimeHours = (now - provisionedAt) / 3600000;
     const estimatedCostInr = Math.round(uptimeHours * HOURLY_RATE_INR);
 
     // Check if any containers are alive/running
@@ -60,7 +71,7 @@ async function hostBudgetAlert() {
         lastAlertTime = now;
         logger.info(`[host-budget] Alert: host running ${Math.round(uptimeHours)}h with 0 alive containers`);
         await sendEmail(ALERT_EMAIL,
-          `[HexaLabs] Cost alert — Host running with no active labs`,
+          `[GetLabs] Cost alert — Host running with no active labs`,
           `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
             <div style="background:#ef4444;padding:16px 20px;border-radius:8px 8px 0 0;">
               <h2 style="color:white;margin:0;font-size:16px;">Host Running with No Labs</h2>
@@ -82,7 +93,7 @@ async function hostBudgetAlert() {
         lastAlertTime = now;
         logger.info(`[host-budget] Alert: estimated cost ₹${estimatedCostInr} exceeds threshold ₹${BUDGET_THRESHOLD_INR}`);
         await sendEmail(ALERT_EMAIL,
-          `[HexaLabs] Budget alert — Host cost ₹${estimatedCostInr} exceeds ₹${BUDGET_THRESHOLD_INR}`,
+          `[GetLabs] Budget alert — Host cost ₹${estimatedCostInr} exceeds ₹${BUDGET_THRESHOLD_INR}`,
           `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
             <div style="background:#f59e0b;padding:16px 20px;border-radius:8px 8px 0 0;">
               <h2 style="color:white;margin:0;font-size:16px;">Host Budget Alert</h2>

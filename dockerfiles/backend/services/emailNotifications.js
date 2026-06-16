@@ -1,5 +1,5 @@
 // Customer-facing emails go through emailTemplate.js for consistent
-// "HexaLabs Cloud Portal" branding (gradient header, sections, plain-text
+// "Hexalabs Cloud Portal" branding (gradient header, sections, plain-text
 // fallback). Ops emails (notifyOpsDeploySummary) stay plain-tabular since
 // they're internal records, not customer-facing.
 //
@@ -346,15 +346,13 @@ async function notifyResourceWelcomeEmail({
     vm:                'Virtual Machine',
     workspace:         'Workspace',
     'windows-desktop': 'Windows Desktop',
-    rosa:              'Red Hat OpenShift on AWS',
-    aro:               'Azure Red Hat OpenShift',
   };
-  const badges = { vm: 'VM', workspace: 'WORKSPACE', 'windows-desktop': 'WINDOWS', rosa: 'ROSA', aro: 'ARO' };
+  const badges = { vm: 'VM', workspace: 'WORKSPACE', 'windows-desktop': 'WINDOWS' };
   const label = labels[resourceType] || 'Lab Resource';
   const badge = badges[resourceType] || 'LAB';
   const subject = `${trainingName || resourceName} — your ${label.toLowerCase()} is ready`;
   const isWindows = resourceType === 'windows-desktop';
-  const isCluster = resourceType === 'rosa' || resourceType === 'aro';
+  const isCluster = false;
 
   // Step 2 rows — what you need if you're NOT using the 1-click link
   let accessRows;
@@ -563,7 +561,7 @@ async function notifyStuckStop({ vmName, organization, trainingName, resourceGro
       ]),
       steps('What to check', [
         { text: "docker ps --filter name=worker — all 10 replicas should be Up (healthy), not Restarting" },
-        { text: "pm2 logs hexalabs-backend --err — look for recurring errors" },
+        { text: "pm2 logs synergific-backend --err — look for recurring errors" },
         { text: "Azure portal: is the VM truly running or in a stuck state (e.g. deallocating for hours)?" },
         { text: "After fixing: db.vms.updateOne({name: '" + vmName + "'}, {$set: {stopAttempts: 0}}) to silence the alert and re-arm detection." },
       ]),
@@ -651,7 +649,7 @@ async function sendBulkDeploySummary({
       <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 6px 6px;padding:18px 22px;background:#fff;">
         <p style="font-size:13px;color:#374151;margin:0 0 14px;">
           The table below lists every ${kindLabel.slice(0, -1).toLowerCase()} provisioned for this training.
-          Please share the individual credentials with each learner ${orgAdmins.length ? '— only the org admin and the HexaLabs ops team are on this email.' : '.'}
+          Please share the individual credentials with each learner ${orgAdmins.length ? '— only the org admin and the Hexalabs ops team are on this email.' : '.'}
         </p>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -725,13 +723,13 @@ function escapeHtml(s) {
 //
 // Two emails per submission:
 //   1. Confirmation to the requester — "thanks, we'll be in touch".
-//   2. Notification to internal ops (itops) with full details.
+//   2. Notification to internal ops with full details.
 //
 // Both use the unified email template so a demo request reads like any
-// other official HexaLabs email.
+// other official Hexalabs email.
 
 async function notifyDemoRequestConfirmation({ name, email, company, demoDate, preferredTiming }) {
-  const subject = `We received your demo request — HexaLabs Cloud Portal`;
+  const subject = `We received your demo request — Hexalabs Cloud Portal`;
 
   const sections = [
     info('What happens next',
@@ -752,7 +750,7 @@ async function notifyDemoRequestConfirmation({ name, email, company, demoDate, p
   const { html, text } = renderEmail({
     title: 'Demo request received',
     badge: 'DEMO',
-    intro: `Hi ${name.split(' ')[0] || 'there'},<br><br>Thanks for requesting a demo of HexaLabs Cloud Portal. We've got your details and one of our team will reach out shortly.`,
+    intro: `Hi ${name.split(' ')[0] || 'there'},<br><br>Thanks for requesting a demo of Hexalabs Cloud Portal. We've got your details and one of our team will reach out shortly.`,
     sections,
   });
 
@@ -760,8 +758,8 @@ async function notifyDemoRequestConfirmation({ name, email, company, demoDate, p
 }
 
 async function notifyDemoRequestOps({ name, email, company, demoDate, preferredTiming, ipAddress, userAgent }) {
-  const subject = `[HexaLabs Ops] New demo request — ${company} (${name})`;
-  const to = joinEmails(INTERNAL_CC);  // itops
+  const subject = `[Hexalabs Ops] New demo request — ${company} (${name})`;
+  const to = joinEmails(INTERNAL_CC);
 
   // Plain-text body — easy to forward / paste into CRM
   const text = [
@@ -776,7 +774,7 @@ async function notifyDemoRequestOps({ name, email, company, demoDate, preferredT
     `User-Agent:       ${userAgent || '—'}`,
     `Submitted at:     ${new Date().toISOString()}`,
     '',
-    `Reply-to link:    mailto:${email}?subject=Re%3A%20Your%20HexaLabs%20demo%20request`,
+    `Reply-to link:    mailto:${email}?subject=Re%3A%20Your%20Hexalabs%20demo%20request`,
   ].join('\n');
 
   const html = `
@@ -795,13 +793,106 @@ async function notifyDemoRequestOps({ name, email, company, demoDate, preferredT
           <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">IP / UA</td><td style="color:#6b7280;font-size:11px;">${ipAddress || '—'}  ·  ${(userAgent || '').slice(0, 80)}</td></tr>
         </table>
         <div style="margin-top:16px;">
-          <a href="mailto:${email}?subject=Re%3A%20Your%20HexaLabs%20demo%20request" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">Reply to ${name.split(' ')[0]}</a>
+          <a href="mailto:${email}?subject=Re%3A%20Your%20Hexalabs%20demo%20request" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">Reply to ${name.split(' ')[0]}</a>
         </div>
         <p style="color:#9ca3af;font-size:11px;margin:16px 0 0;">Stored in DemoRequest collection. Update status from the admin panel once you've reached out.</p>
       </div>
     </div>`;
 
   await sendEmail(to, subject, html, text, { cc: '' });  // no extra CC — TO already has both internal addresses
+}
+
+// To be appended into services/emailNotifications.js. Two helpers:
+//   - sendPasswordResetLink: self-signup users with deliverable mailboxes
+//   - notifyAdminOfCohortReset: cohort-deploy users (mailbox often dummy);
+//     org admin handles the reset offline
+//
+// Both use the existing INTERNAL_CC + sendEmail plumbing.
+
+async function sendPasswordResetLink({ email, name, resetUrl }) {
+  const subject = `[${BRAND.name}] Reset your password`;
+  const greet = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+  const txt = [
+    `${BRAND.name} — Password reset`,
+    '',
+    `${greet}`,
+    '',
+    `We received a request to reset the password for ${email}.`,
+    `Open this link to set a new password (valid for 30 minutes):`,
+    resetUrl,
+    '',
+    `If you didn't request this, you can safely ignore this email.`,
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#1e3a8a;background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);padding:18px 22px;border-radius:6px 6px 0 0;">
+        <div style="color:#fff;font-size:15px;font-weight:600;">Reset your password</div>
+      </div>
+      <div style="padding:22px;background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 6px 6px;">
+        <p style="font-size:13px;color:#374151;">${greet}</p>
+        <p style="font-size:13px;color:#374151;">We received a request to reset the password for <strong>${escapeHtml(email)}</strong>.</p>
+        <p style="margin:24px 0;text-align:center;">
+          <a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 22px;border-radius:6px;font-size:13px;font-weight:600;">Set a new password</a>
+        </p>
+        <p style="font-size:12px;color:#6b7280;">This link is valid for 30 minutes. If you didn't request this, you can safely ignore this email.</p>
+        <p style="font-size:11px;color:#9ca3af;margin-top:24px;">Or copy this URL into your browser: ${escapeHtml(resetUrl)}</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(email, subject, html, txt);
+}
+
+async function notifyAdminOfCohortReset({ learnerEmail, organization, requestIp }) {
+  const orgAdmins = await getOrgAdminEmails(organization);
+  const toList = orgAdmins.length ? orgAdmins : INTERNAL_CC;
+  const to = joinEmails(toList);
+  const cc = joinEmails(INTERNAL_CC.filter(e => !toList.includes(e)));
+
+  if (!to) {
+    logger.warn(`notifyAdminOfCohortReset: no recipient for ${organization}, skipping`);
+    return;
+  }
+
+  const subject = `[${BRAND.name}] Password reset requested — ${learnerEmail}`;
+  const txt = [
+    `${BRAND.name} — Password reset request`,
+    '',
+    `Learner ${learnerEmail} (org: ${organization}) requested a password reset.`,
+    `This account was provisioned via bulk-deploy, so the reset link cannot be sent to the learner directly.`,
+    '',
+    `Action: open the portal → admin roster → find ${learnerEmail} → click "Reset password".`,
+    `The new password will be Welcome1234! — share it with the learner via your usual channel.`,
+    '',
+    `Request IP: ${requestIp || '-'}`,
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#9a3412;background:linear-gradient(135deg,#9a3412 0%,#ea580c 100%);padding:18px 22px;border-radius:6px 6px 0 0;">
+        <div style="color:#fff;font-size:15px;font-weight:600;">Password reset requested</div>
+        <div style="color:rgba(255,255,255,0.85);font-size:12px;margin-top:3px;">${escapeHtml(organization)} · ${escapeHtml(learnerEmail)}</div>
+      </div>
+      <div style="padding:22px;background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 6px 6px;">
+        <p style="font-size:13px;color:#374151;">A learner has requested a password reset on the Hexalabs portal:</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin:12px 0;">
+          <tr><td style="padding:6px 0;color:#6b7280;width:140px;">Learner</td><td style="font-family:monospace;">${escapeHtml(learnerEmail)}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Organization</td><td>${escapeHtml(organization)}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Request IP</td><td style="font-family:monospace;font-size:11px;">${escapeHtml(requestIp || '-')}</td></tr>
+        </table>
+        <p style="font-size:13px;color:#374151;">Because this account was created through bulk-deploy, the reset link cannot be emailed to the learner directly. Please reset on their behalf:</p>
+        <ol style="font-size:13px;color:#374151;padding-left:18px;">
+          <li>Open <a href="https://hexalabs.online" style="color:#2563eb;">hexalabs.online</a> and sign in as administrator.</li>
+          <li>Go to your roster, locate <strong>${escapeHtml(learnerEmail)}</strong>, click <em>Reset password</em>.</li>
+          <li>Share the new password (Welcome1234!) with the learner via your usual channel.</li>
+        </ol>
+        <p style="font-size:11px;color:#9ca3af;margin-top:24px;">If you didn't expect this request, ignore this email — no change has been made to the account.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(to, subject, html, txt, { cc });
 }
 
 module.exports = {
@@ -819,8 +910,11 @@ module.exports = {
   // new in 2026-04-19 bulk-routing upgrade:
   notifySandboxBulkSummary,
   isLikelyDeliverable,
+  sendBulkDeploySummary,
   getOrgAdminEmails,
   // new in 2026-04-20 demo-request flow:
   notifyDemoRequestConfirmation,
   notifyDemoRequestOps,
+  sendPasswordResetLink,
+  notifyAdminOfCohortReset,
 };

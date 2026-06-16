@@ -35,21 +35,13 @@ const handler = async (job) => {
       logger.info(`Guacamole integration initiated for VM ${data.vmName}`, data.template.os);
     }
 
-    // Step 2b: Install MeshAgent on Windows VMs if meshCentral is enabled
-    const isWindows = (data.template.os || '').toLowerCase().includes('windows');
-    if (data.meshCentral && isWindows) {
-      await queues['meshcentral-setup'].add({
-        vmName: createdVm.vmName,
-        publicIp: createdVm.publicIpAddress,
-        resourceGroup: data.template.resourceGroup,
-        adminUsername: createdVm.adminUsername,
-        adminPassword: createdVm.adminPassword,
-        os: data.template.os,
-      });
-      logger.info(`MeshCentral agent setup queued for ${data.vmName}`);
+    // Step 3: Save VM details to the database
+    // Bug-audit 2026-05-21: quota.total is in MINUTES. Guard against caller passing hours.
+    if (typeof data.allocatedHours === 'number' && data.allocatedHours >= 1 && data.allocatedHours < 60) {
+      logger.warn(`[azure-create-vm] suspicious data.allocatedHours=${data.allocatedHours} for ${data.vmName} - multiplying x60`);
+      data.allocatedHours = data.allocatedHours * 60;
     }
 
-    // Step 3: Save VM details to the database
     const vmDetails = {
       name: data.vmName,
       templateName: data.templateName,
@@ -58,7 +50,6 @@ const handler = async (job) => {
       duration: 0,
       isRunning: true,
       guacamole: data.guacamole,
-      meshCentral: !!data.meshCentral,
       kasmVnc: !!data.kasmVnc,
       hasXrdp: !!data.hasXrdp,
       os: data.template.os,
@@ -131,7 +122,6 @@ const handler = async (job) => {
         ],
         schedules: [],
         ports: data.template.os === 'Windows' ? [3389, 22] : [22],
-        ...(data.guidedLabId && { guidedLabId: data.guidedLabId }),
       };
       await Training.create(newTraining);
       logger.info(`Training document created for ${trainingName} in ${data.user.organization}`);

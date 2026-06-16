@@ -2,17 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { useBranding } from '../contexts/BrandingContext';
+import apiCaller from '../services/apiCaller';
 import {
   FaHome, FaTachometerAlt, FaLaptop, FaUsers, FaChevronDown, FaBars, FaTimes,
   FaSignOutAlt, FaHeadset, FaFileInvoiceDollar, FaHistory, FaNetworkWired,
   FaClock, FaRocket, FaShieldAlt, FaTrashAlt, FaStopCircle, FaCloud,
   FaCubes, FaFileAlt, FaSuperscript, FaChevronLeft, FaChevronRight, FaChartLine, FaDocker, FaChartBar, FaCut, FaWindows, FaDatabase,
   FaGraduationCap,
-  FaBookOpen,
   FaRobot,
+  FaMagic,
   FaCog,
   FaTachometerAlt as FaQuota,
   FaRedhat,
+  FaServer,
 } from 'react-icons/fa';
 
 function NavItem({ to, icon: Icon, label, collapsed, onClick }) {
@@ -25,14 +27,14 @@ function NavItem({ to, icon: Icon, label, collapsed, onClick }) {
       className={clsx(
         'group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-100',
         active
-          ? 'bg-white/10 text-white'
-          : 'text-surface-400 hover:text-white hover:bg-white/5'
+          ? 'bg-teal-500/[0.14] text-white'
+          : 'text-slate-400 hover:text-white hover:bg-teal-500/[0.08]'
       )}
     >
       <Icon className="text-sm flex-shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
       {collapsed && (
-        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md bg-surface-700 px-2.5 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md bg-[#112418] border border-emerald-900/50 px-2.5 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
           {label}
         </span>
       )}
@@ -50,10 +52,10 @@ function Accordion({ id, icon: Icon, label, collapsed, openMap, setOpenMap, chil
   if (collapsed) {
     return (
       <div className="relative group">
-        <button onClick={toggle} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-surface-400 hover:bg-white/5 hover:text-white transition-colors">
+        <button onClick={toggle} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-slate-400 hover:bg-teal-500/[0.08] hover:text-white transition-colors">
           <Icon className="text-sm" />
         </button>
-        <div className="invisible absolute left-full top-0 z-50 ml-3 min-w-[200px] overflow-hidden rounded-lg border border-surface-700 bg-surface-800 p-2 text-sm shadow-xl opacity-0 group-hover:visible group-hover:opacity-100 transition-opacity">
+        <div className="invisible absolute left-full top-0 z-50 ml-3 min-w-[200px] overflow-hidden rounded-lg border border-emerald-900/50 bg-[#112418] p-2 text-sm shadow-xl opacity-0 group-hover:visible group-hover:opacity-100 transition-opacity">
           {children}
         </div>
       </div>
@@ -62,10 +64,10 @@ function Accordion({ id, icon: Icon, label, collapsed, openMap, setOpenMap, chil
 
   return (
     <div>
-      <button onClick={toggle} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-surface-400 hover:bg-white/5 hover:text-white transition-colors">
+      <button onClick={toggle} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-slate-400 hover:bg-teal-500/[0.08] hover:text-white transition-colors">
         <Icon className="text-sm" />
         <span className="flex-1 truncate text-left">{label}</span>
-        <FaChevronDown className={clsx('text-[10px] text-surface-500 transition-transform duration-150', open && 'rotate-180')} />
+        <FaChevronDown className={clsx('text-[10px] text-slate-500 transition-transform duration-150', open && 'rotate-180')} />
       </button>
       {open && (
         <div className="ml-4 pl-3 border-l border-white/10 space-y-0.5 py-1">
@@ -80,6 +82,19 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openSections, setOpenSections] = useState({ instance: false, deploy: false, maintenance: false, sandboxes: false });
   const { branding } = useBranding();
+  // Lab Console visibility for sandbox-style learners — gated on whether
+  // the user actually owns at least one VM or Container. Default true (fail
+  // open) so a slow / failed fetch doesn't hide a real learner's lab.
+  const [hasLabResources, setHasLabResources] = useState(true);
+  useEffect(() => {
+    const t = userDetails?.userType;
+    if (t !== 'sandboxuser' && t !== 'awssandboxuser') return;
+    let cancelled = false;
+    apiCaller.get('/user/has-lab-resources')
+      .then(r => { if (!cancelled) setHasLabResources(!!r.data?.hasResources); })
+      .catch(() => { /* fail open — already true */ });
+    return () => { cancelled = true; };
+  }, [userDetails?.userType]);
 
   const email = userDetails?.email || '';
   const userType = userDetails?.userType || 'user';
@@ -88,8 +103,8 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
 
   const content = (
     <aside
-      className="fixed inset-y-0 left-0 z-40 flex flex-col bg-surface-900 transition-all duration-200"
-      style={{ width: sidebarWidth }}
+      className="fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200"
+      style={{ width: sidebarWidth, background: '#0c1a16' }}
     >
       {/* Accent stripe */}
       <div className="h-[3px] w-full flex-shrink-0" style={{ background: `linear-gradient(90deg, ${branding.primaryColor}, ${branding.accentColor})` }} />
@@ -98,7 +113,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
       <div className="flex items-center h-14 px-3 border-b border-white/10 flex-shrink-0">
         <Link to="/" className="flex items-center gap-2.5 min-w-0">
           {collapsed ? (
-            <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-lg bg-white/10">
+            <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-lg bg-emerald-900/40">
               <img
                 src={branding.logoUrl || `/logo/${org}-logo.png`}
                 onError={(e) => { e.currentTarget.src = '/logo/logo.png'; }}
@@ -111,7 +126,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
               <img
                 src={branding.logoUrl || '/logo/logo.png'}
                 onError={(e) => { e.currentTarget.src = '/logo/logo.png'; }}
-                alt={branding.companyName || 'HexaLabs'}
+                alt={branding.companyName || 'Hexalabs'}
                 className="h-7 object-contain"
               />
             </>
@@ -119,7 +134,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
         </Link>
         <button
           onClick={onToggleCollapse}
-          className="ml-auto p-1.5 text-surface-500 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+          className="ml-auto p-1.5 text-slate-500 hover:text-white hover:bg-teal-500/[0.12] rounded-md transition-colors"
         >
           {collapsed ? <FaChevronRight className="text-xs" /> : <FaChevronLeft className="text-xs" />}
         </button>
@@ -127,7 +142,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-        {!collapsed && <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Main</div>}
+        {!collapsed && <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-teal-700/80">Main</div>}
 
         {/* Self-service users get a simplified nav */}
         {userType === 'selfservice' ? (
@@ -145,11 +160,8 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
         {(userType === 'admin' || userType === 'superadmin') && (
           <NavItem to="/courses" icon={FaGraduationCap} label="Course Catalog" collapsed={collapsed} />
         )}
-        {(userType === 'admin' || userType === 'superadmin') && (
-          <NavItem to="/guided-labs" icon={FaBookOpen} label="Guided Labs" collapsed={collapsed} />
-        )}
 
-        {!collapsed && (userType !== 'sandboxuser' && userType !== 'awssandboxuser') && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">Infrastructure</div>}
+        {!collapsed && (userType !== 'sandboxuser' && userType !== 'awssandboxuser') && <div className="px-3 mt-4 mb-2 text-[10px] font-semibold uppercase tracking-wider text-teal-700/80">Infrastructure</div>}
 
         {(userType === 'admin' || userType === 'superadmin' || userType === 'user') && (
           <>
@@ -170,38 +182,45 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
               <NavItem to="/createvm" icon={FaLaptop} label="Deploy VM" collapsed={false} />
               <NavItem to="/containers" icon={FaDocker} label="Deploy Workspace" collapsed={false} />
               <NavItem to="/templates" icon={FaCubes} label="Workspace Templates" collapsed={false} />
+              <NavItem to="/workshop" icon={FaRocket} label="Workshop" collapsed={false} />
+              {userType === 'superadmin' && (
+                <NavItem to="/template-routing" icon={FaServer} label="Template Routing" collapsed={false} />
+              )}
               <NavItem to="/rds" icon={FaWindows} label="Windows Desktop" collapsed={false} />
-              <NavItem to="/rosa" icon={FaRedhat} label="ROSA Clusters" collapsed={false} />
-              <NavItem to="/aro" icon={FaCloud} label="ARO Clusters" collapsed={false} />
+              <NavItem to="/guided-labs" icon={FaFileAlt} label="Guided Labs" collapsed={false} />
+              <NavItem to="/guided-labs/toc-suite" icon={FaMagic} label="AI Lab Suite" collapsed={false} />
+              <NavItem to="/rosa" icon={FaRedhat} label="ROSA Cluster" collapsed={false} />
+              <NavItem to="/aro" icon={FaCloud} label="ARO Cluster" collapsed={false} />
             </Accordion>
           )}
 
           </>
         )}
 
-        {/* Sandbox users only see My Sandboxes — their assigned sandboxes appear there automatically */}
-        {(userType === 'sandboxuser' || userType === 'awssandboxuser') && (
+        {/* Lab Console for sandbox-style learners — kept here so their sidebar shows a containers entry when they have one (xray-style: sandbox + container together). The page itself renders an empty list if nothing is assigned. */}
+        {(userType === 'sandboxuser' || userType === 'awssandboxuser') && hasLabResources && (
+          <NavItem to="/vm/vmdetails" icon={FaLaptop} label="Lab Console" collapsed={collapsed} />
+        )}
+
+        {/* My Sandboxes — visible to ANY learner role and admin/superadmin. The page returns "no sandboxes assigned" when empty, so the surface is safe to show unconditionally. This is the data-driven replacement for the old userType==='sandboxuser' gate. */}
+        {(userType === 'user' || userType === 'sandboxuser' || userType === 'awssandboxuser' || userType === 'admin' || userType === 'superadmin') && (
           <NavItem to="/my-sandboxes" icon={FaCubes} label="My Sandboxes" collapsed={collapsed} />
         )}
 
         {(userType === 'admin' || userType === 'superadmin') && (
         <Accordion id="sandboxes" icon={FaCubes} label="Sandboxes" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
-          {userType === 'superadmin' && (
+          {(userType === 'admin' || userType === 'superadmin') && (
             <>
               <NavItem to="/sandbox/azure/users" icon={FaUsers} label="Azure Lab Users" collapsed={false} />
               <NavItem to="/sandbox/aws/users" icon={FaUsers} label="AWS Lab Users" collapsed={false} />
               <NavItem to="/sandbox/gcp/users" icon={FaUsers} label="GCP Lab Users" collapsed={false} />
               <NavItem to="/sandbox/oci-sandbox" icon={FaDatabase} label="OCI Lab Users" collapsed={false} />
+              <NavItem to="/sandbox-builder" icon={FaMagic} label="AI Template Builder" collapsed={false} />
             </>
           )}
         </Accordion>
         )}
 
-        {(userType === 'admin' || userType === 'superadmin') && (
-          <Accordion id="b2b" icon={FaRobot} label="B2B Sales" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
-            <NavItem to="/b2b/courses" icon={FaRobot} label="Course Analyses" collapsed={false} />
-          </Accordion>
-        )}
 
         {(userType === 'admin' || userType === 'superadmin') && (
           <Accordion id="finance" icon={FaFileInvoiceDollar} label="Finance" collapsed={collapsed} openMap={openSections} setOpenMap={setOpenSections}>
@@ -242,7 +261,7 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
           href="https://hexalabs.online/support"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-surface-500 hover:text-white hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-slate-400 hover:text-white hover:bg-teal-500/[0.08] transition-colors"
         >
           <FaHeadset className="text-sm" />
           {!collapsed && <span>Support</span>}
@@ -250,12 +269,12 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
 
         {!collapsed && (
           <div className="flex items-center gap-2.5 px-3 py-2">
-            <div className="h-8 w-8 rounded-full bg-white/10 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+            <div className="h-8 w-8 rounded-full bg-emerald-900/50 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
               {(email?.[0] || 'U').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-surface-300 truncate">{email}</div>
-              <div className="text-[10px] text-surface-500 capitalize">{userType}</div>
+              <div className="text-xs font-medium text-slate-300 truncate">{email}</div>
+              <div className="text-[10px] text-slate-500 capitalize">{userType}</div>
             </div>
           </div>
         )}
@@ -279,7 +298,8 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
       {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-4 z-50 p-2.5 bg-surface-800 text-white shadow-lg rounded-lg border border-surface-700 lg:hidden"
+        className="fixed left-4 top-4 z-50 p-2.5 text-white shadow-lg rounded-lg border border-emerald-900/50 lg:hidden"
+        style={{ background: '#0c1a16' }}
       >
         <FaBars />
       </button>

@@ -5,8 +5,34 @@
 require('dotenv').config();
 const { logger } = require('../plugins/logger');
 
+// Generic propagation-retry helper. Cloud IAM principals (AWS users, AAD
+// users, GCP project members) take 5-30s to propagate after creation, and
+// follow-up attach/bind calls fail with predictable transient errors. We
+// retry up to 6 times with linear backoff (5s, 10s, 15s, ...) — total
+// budget ~105s. On terminal failure we THROW so the relaunch route
+// surfaces a 500 and the user retries cleanly, instead of silently
+// continuing with a half-provisioned sandbox.
+async function withPropagationRetry(label, fn, transientPattern) {
+  const re = transientPattern || /NoSuchEntity|PrincipalNotFound|does not exist|propagat|EtagMismatch|FAILED_PRECONDITION|409/i;
+  let last;
+  for (let i = 0; i < 6; i++) {
+    try { return await fn(); }
+    catch (e) {
+      last = e;
+      if (re.test(e.message) && i < 5) {
+        logger.warn(`[propagation-retry] ${label} attempt ${i+1}/6: ${e.message.slice(0, 100)}`);
+        await new Promise(r => setTimeout(r, 5000 * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw last;
+}
+
+
 // ===== AZURE =====
-async function createAzureSandbox(resourceGroupName, location = 'southindia', userId, userEmail, customRoleId) {
+async function createAzureSandbox(resourceGroupName, location = 'southindia', userId, userEmail, options = {}) {
   const { ClientSecretCredential } = require('@azure/identity');
   const { ResourceManagementClient } = require('@azure/arm-resources');
   const { AuthorizationManagementClient } = require('@azure/arm-authorization');
@@ -19,44 +45,68 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
   const resourceClient = new ResourceManagementClient(credential, subscriptionId);
   const authClient = new AuthorizationManagementClient(credential, subscriptionId);
 
-  // 1. Create Azure AD user for sandbox access
+  // 1. Provision Entra (Azure AD) user for sandbox access.
+  //    Static-user policy: if caller passes options.reuseUser={upn,password},
+  //    look up the existing user by UPN, reuse it, and SKIP user creation.
+  //    Only create a fresh Entra user on first-ever sandbox for this learner.
   let azureUsername = '';
   let azurePassword = '';
   let azureObjectId = '';
   const domain = process.env.IDENTITY_DOMAIN || process.env.AZURE_DOMAIN || 'hexalabs.online';
 
+  // Build the identity Graph client up-front so the reuse branch can use it too.
+  let graphClient = null;
   try {
-    // Use identity credential (separate app with User.ReadWrite.All permission)
     const identityCredential = new ClientSecretCredential(
       process.env.IDENTITY_TENANT_ID || process.env.TENANT_ID,
       process.env.IDENTITY_CLIENT_ID || process.env.CLIENT_ID,
       process.env.IDENTITY_CLIENT_SECRET || process.env.CLIENT_SECRET
     );
     const tokenRes = await identityCredential.getToken('https://graph.microsoft.com/.default');
-    const graphClient = Client.init({
-      authProvider: (done) => done(null, tokenRes.token),
-    });
-
-    // Generate username from email
-    const cleanName = (userEmail || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 15);
-    azureUsername = `sb-${cleanName}-${Date.now().toString(36).slice(-4)}@${domain}`;
-    azurePassword = `Sb${crypto.randomBytes(4).toString('hex')}!1`;
-
-    const newUser = await graphClient.api('/users').post({
-      accountEnabled: true,
-      displayName: `Sandbox - ${cleanName}`,
-      mailNickname: `sb-${cleanName}`,
-      userPrincipalName: azureUsername,
-      passwordProfile: {
-        forceChangePasswordNextSignIn: false,
-        password: azurePassword,
-      },
-    });
-    azureObjectId = newUser.id;
-    logger.info(`Azure AD user created: ${azureUsername} (${azureObjectId})`);
+    graphClient = Client.init({ authProvider: (done) => done(null, tokenRes.token) });
   } catch (e) {
-    logger.error(`Azure AD user creation failed: ${e.message}`);
-    // Continue — resource group still gets created, just no portal access
+    logger.error(`Graph client init failed: ${e.message}`);
+  }
+
+  // Reuse branch
+  const reuseUPN = options.reuseUser?.upn;
+  const reusePass = options.reuseUser?.password;
+  if (reuseUPN && graphClient) {
+    try {
+      const existing = await graphClient.api(`/users/${encodeURIComponent(reuseUPN)}`).get();
+      azureObjectId = existing.id;
+      azureUsername = reuseUPN;
+      azurePassword = reusePass || '';
+      logger.info(`Azure AD user reused (static): ${azureUsername} (${azureObjectId})`);
+    } catch (e) {
+      // Prior user is gone (deleted out-of-band, tenant purged, etc.) — fall through to create new.
+      logger.warn(`Azure AD reuse failed for ${reuseUPN}: ${e.message}; creating fresh user`);
+    }
+  }
+
+  // Create branch (first-ever sandbox OR reuse fell through)
+  if (!azureObjectId && graphClient) {
+    try {
+      const cleanName = (userEmail || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 15);
+      azureUsername = `sb-${cleanName}-${Date.now().toString(36).slice(-4)}@${domain}`;
+      azurePassword = `Sb${crypto.randomBytes(4).toString('hex')}!1`;
+
+      const newUser = await graphClient.api('/users').post({
+        accountEnabled: true,
+        displayName: `Sandbox - ${cleanName}`,
+        mailNickname: `sb-${cleanName}`,
+        userPrincipalName: azureUsername,
+        passwordProfile: {
+          forceChangePasswordNextSignIn: false,
+          password: azurePassword,
+        },
+      });
+      azureObjectId = newUser.id;
+      logger.info(`Azure AD user created: ${azureUsername} (${azureObjectId})`);
+    } catch (e) {
+      logger.error(`Azure AD user creation failed: ${e.message}`);
+      // Continue — resource group still gets created, just no portal access
+    }
   }
 
   // 2. Create resource group
@@ -66,17 +116,55 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
   });
   logger.info(`Azure RG created: ${resourceGroupName}`);
 
-  // 3. Assign role to the new Azure AD user
+  // 3. Assign role to the new Azure AD user — retry on PrincipalNotFound
+  // since AAD principals can take 5-30s to propagate to RBAC after creation.
   if (azureObjectId) {
+    const CUSTOM_ROLE_ID = `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975`;
+    const scope = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}`;
+    let assigned = false;
+    for (let i = 0; i < 6; i++) {
+      try {
+        await authClient.roleAssignments.create(scope, crypto.randomUUID(),
+          { principalId: azureObjectId, roleDefinitionId: CUSTOM_ROLE_ID, scope });
+        logger.info(`Role assigned to ${azureUsername} on ${resourceGroupName} (attempt ${i+1})`);
+        assigned = true;
+        break;
+      } catch (e) {
+        if (/already exists|RoleAssignmentExists/i.test(e.message)) { assigned = true; break; }
+        if (/PrincipalNotFound|does not exist|propagat/i.test(e.message) && i < 5) {
+          logger.warn(`Role assign attempt ${i+1}/6 for ${azureUsername} on ${resourceGroupName}: ${e.message}`);
+          await new Promise(r => setTimeout(r, 5000 * (i + 1)));
+          continue;
+        }
+        logger.error(`Role assignment for ${azureUsername} on ${resourceGroupName} failed: ${e.message}`);
+        throw e;
+      }
+    }
+    if (!assigned) throw new Error(`Role assignment failed after 6 retries for ${azureUsername} on ${resourceGroupName}`);
+  }
+
+  // 4. Apply Azure Policy "Allowed virtual machine SKUs" if caller supplied a list.
+  //    Closes the gap discovered 2026-05-18 where templates documented "B-series only"
+  //    but the custom role allowed Microsoft.Compute/* with no SKU filter and no
+  //    Azure Policy was assigned, letting stripedata learners deploy Standard_D2s_v3.
+  if (Array.isArray(options.allowedVmSkus)) {
     try {
-      const CUSTOM_ROLE_ID = customRoleId || `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975`;
-      await authClient.roleAssignments.create(
-        `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}`,
-        crypto.randomUUID(),
-        { principalId: azureObjectId, roleDefinitionId: CUSTOM_ROLE_ID, scope: `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}` }
-      );
-      logger.info(`Role assigned to ${azureUsername} on ${resourceGroupName}`);
-    } catch (e) { logger.error(`Role assignment: ${e.message}`); }
+      const { PolicyClient } = require('@azure/arm-policy');
+      const policyClient = new PolicyClient(credential, subscriptionId);
+      const scope = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}`;
+      await policyClient.policyAssignments.create(scope, 'sandbox-allowed-vm-skus', {
+        displayName: 'Sandbox - Allowed VM SKUs',
+        description: 'Restrict VM SKUs deployable inside this sandbox. Wired from SandboxTemplate.allowedInstanceTypes.azure.',
+        policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/cccc23c7-8427-4f53-ad12-b6a63eb452b3',
+        parameters: { listOfAllowedSKUs: { value: options.allowedVmSkus } },
+        enforcementMode: 'Default',
+      });
+      logger.info(`Azure Policy allowed-vm-skus assigned to ${resourceGroupName}: [${options.allowedVmSkus.join(', ')}]`);
+    } catch (e) {
+      logger.error(`Failed to assign allowed-vm-skus policy to ${resourceGroupName}: ${e.message}`);
+    }
+  } else {
+    logger.warn(`createAzureSandbox: no allowedVmSkus passed by caller for ${resourceGroupName} - SKU policy NOT applied. Caller should pass template.allowedInstanceTypes.azure to close the gap.`);
   }
 
   return {
@@ -86,7 +174,7 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
     portalUrl: 'https://portal.azure.com',
     username: azureUsername,
     password: azurePassword,
-    objectId: azureObjectId || undefined,
+    objectId: azureObjectId,
   };
 }
 
@@ -119,7 +207,10 @@ async function createAwsSandbox(username, email, overrideCreds) {
       'arn:aws:iam::475184346033:policy/sandbox4',
     ];
     for (const arn of policies) {
-      try { await client.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: arn })); } catch {}
+      await withPropagationRetry(
+        `AWS AttachUserPolicy ${arn.split('/').pop()} on ${username}`,
+        () => client.send(new AttachUserPolicyCommand({ UserName: username, PolicyArn: arn }))
+      );
     }
   }
 
@@ -136,7 +227,10 @@ async function createAwsSandbox(username, email, overrideCreds) {
       } catch {}
     }
     if (restrictionPolicy) {
-      await client.send(new PutUserPolicyCommand({ UserName: username, PolicyName: 'SandboxCostRestrictions', PolicyDocument: restrictionPolicy }));
+      await withPropagationRetry(
+        `AWS PutUserPolicy SandboxCostRestrictions on ${username}`,
+        () => client.send(new PutUserPolicyCommand({ UserName: username, PolicyName: 'SandboxCostRestrictions', PolicyDocument: restrictionPolicy }))
+      );
     }
 
     // Always apply the instance-type + region lock policy
@@ -175,11 +269,14 @@ async function createAwsSandbox(username, email, overrideCreds) {
         },
       ],
     });
-    await client.send(new PutUserPolicyCommand({
-      UserName: username,
-      PolicyName: 'InstanceTypeAndRegionLock',
-      PolicyDocument: instanceRegionPolicy,
-    }));
+    await withPropagationRetry(
+      `AWS PutUserPolicy InstanceTypeAndRegionLock on ${username}`,
+      () => client.send(new PutUserPolicyCommand({
+        UserName: username,
+        PolicyName: 'InstanceTypeAndRegionLock',
+        PolicyDocument: instanceRegionPolicy,
+      }))
+    );
   } catch (e) {
     logger.error(`Failed to attach cost restriction policies for ${username}: ${e.message}`);
   }
@@ -198,9 +295,39 @@ async function createAwsSandbox(username, email, overrideCreds) {
 }
 
 // ===== GCP =====
-async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
+async function createGcpSandbox(projectId, userEmail, budgetLimit = 500, templateSlug = null) {
   const { google } = require('googleapis');
   const parentId = process.env.PARENTID || 'organizations/628552726767';
+
+  // Helper: add a user binding with ETag-conflict retry. Used by step 7b/7c/7d.
+  async function _gcpAddBinding(cloudResourceManager, projectId, role, memberKey, label) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        const cur = (await cloudResourceManager.projects.getIamPolicy({
+          resource: `projects/${projectId}`,
+          requestBody: {},
+        })).data || { bindings: [] };
+        cur.bindings = cur.bindings || [];
+        let b = cur.bindings.find(x => x.role === role);
+        if (b && b.members.includes(memberKey)) return;
+        if (b) b.members.push(memberKey);
+        else cur.bindings.push({ role, members: [memberKey] });
+        await cloudResourceManager.projects.setIamPolicy({
+          resource: `projects/${projectId}`,
+          requestBody: { policy: cur },
+        });
+        logger.info(`GCP ${label} (${role}) bound to ${memberKey} on ${projectId}`);
+        return;
+      } catch (e) {
+        if (/concurrent policy changes|ETag/i.test(e.message) && attempt < 5) {
+          await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+          continue;
+        }
+        logger.error(`GCP ${label} binding failed on ${projectId}: ${e.message}`);
+        return;
+      }
+    }
+  }
   const keyFile = process.env.KEYFILENAME;
 
   const auth = new google.auth.GoogleAuth({
@@ -258,15 +385,13 @@ async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
       members: [`user:${userEmail}`],
     });
 
-    await cloudResourceManager.projects.setIamPolicy({
-      resource: `projects/${projectId}`,
-      requestBody: {
-        policy: {
-          bindings,
-          etag: existingPolicy.etag,
-        },
-      },
-    });
+    await withPropagationRetry(
+      `GCP setIamPolicy ${userEmail} -> editor on ${projectId}`,
+      () => cloudResourceManager.projects.setIamPolicy({
+        resource: `projects/${projectId}`,
+        requestBody: { policy: { bindings, etag: existingPolicy.etag } },
+      })
+    );
 
     iamBindingSuccess = true;
     logger.info(`GCP IAM binding set: ${userEmail} → roles/editor on ${projectId}`);
@@ -358,6 +483,26 @@ async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
       'servicenetworking.googleapis.com',         // Service Networking (needed by Cloud SQL)
     ];
 
+    // Per-template API extensions (added on top of the standard list)
+    const TEMPLATE_API_EXTENSIONS = {
+      "gcp-appengine-lab": [
+        "appengine.googleapis.com",       // App Engine Standard
+        "appengineflex.googleapis.com",   // App Engine Flex
+      ],
+      "gcp-vertex-ai-explore-lab": [
+        "aiplatform.googleapis.com",
+        "notebooks.googleapis.com",
+        "generativelanguage.googleapis.com",
+        "ml.googleapis.com",
+        "artifactregistry.googleapis.com",
+      ],
+    };
+    if (templateSlug && TEMPLATE_API_EXTENSIONS[templateSlug]) {
+      for (const extra of TEMPLATE_API_EXTENSIONS[templateSlug]) {
+        if (!requiredApis.includes(extra)) requiredApis.push(extra);
+      }
+    }
+
     // Enable APIs in parallel batches of 5 to avoid rate limits
     const batchSize = 5;
     let enabled = 0;
@@ -376,6 +521,23 @@ async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
     logger.info(`GCP APIs enabled: ${enabled}/${requiredApis.length} for ${projectId}`);
   } catch (e) {
     logger.error(`GCP API enable failed: ${e.message}`);
+  }
+
+  // Per-template project quotas. For Vertex AI Explore, hard-cap CPUs to 2
+  // (1 small VM at a time). GPUs default to 0 in new GCP projects so no
+  // override needed for that.
+  if (templateSlug === 'gcp-vertex-ai-explore-lab') {
+    try {
+      const serviceUsage = google.serviceusage({ version: 'v1beta1', auth });
+      const parent = 'projects/' + projectId + '/services/compute.googleapis.com/consumerQuotaMetrics/compute.googleapis.com%2Fcpus_all_regions/limits/%2Fproject';
+      await serviceUsage.services.consumerQuotaMetrics.limits.consumerOverrides.create({
+        parent, force: true,
+        requestBody: { overrideValue: '2' },
+      });
+      logger.info('GCP CPUS_ALL_REGIONS quota override = 2 applied for ' + projectId);
+    } catch (qErr) {
+      logger.warn('GCP CPU quota override failed for ' + projectId + ': ' + (qErr.message || '').slice(0, 80));
+    }
   }
 
   // 6. Apply GCP Org Policies for cost control
@@ -407,6 +569,128 @@ async function createGcpSandbox(projectId, userEmail, budgetLimit = 500) {
     logger.info(`GCP org policies applied to ${projectId}`);
   } catch (e) {
     logger.error(`GCP org policy setup failed: ${e.message}`);
+  }
+
+  // 7. (gcp-appengine-lab only) Create the custom Dynatrace GCP Monitor role
+  //     on this project + bind it to the learner. Adds permissions beyond
+  //     roles/editor that Dynatrace's helm chart and pub/sub ingest need:
+  //     iam.roles.create/list/update, iam.serviceAccounts.set/getIamPolicy,
+  //     pubsub topics IAM, project setIamPolicy, serviceusage.enable.
+  if (templateSlug === "gcp-appengine-lab") {
+    try {
+      const iam = google.iam({ version: "v1", auth });
+      const DT_ROLE_ID = "synergificDtGcpMonitor";
+      const DT_PERMS = [
+        "container.clusters.get",
+        "container.configMaps.create",
+        "container.configMaps.delete",
+        "container.configMaps.get",
+        "container.configMaps.update",
+        "container.deployments.create",
+        "container.deployments.delete",
+        "container.deployments.get",
+        "container.deployments.update",
+        "container.namespaces.create",
+        "container.namespaces.get",
+        "container.pods.get",
+        "container.pods.list",
+        "container.secrets.create",
+        "container.secrets.delete",
+        "container.secrets.get",
+        "container.secrets.list",
+        "container.secrets.update",
+        "container.serviceAccounts.create",
+        "container.serviceAccounts.delete",
+        "container.serviceAccounts.get",
+        "iam.roles.create",
+        "iam.roles.list",
+        "iam.roles.update",
+        "iam.serviceAccounts.actAs",
+        "iam.serviceAccounts.create",
+        "iam.serviceAccounts.getIamPolicy",
+        "iam.serviceAccounts.list",
+        "iam.serviceAccounts.setIamPolicy",
+        "pubsub.subscriptions.create",
+        "pubsub.subscriptions.get",
+        "pubsub.subscriptions.list",
+        "pubsub.topics.attachSubscription",
+        "pubsub.topics.create",
+        "pubsub.topics.getIamPolicy",
+        "pubsub.topics.list",
+        "pubsub.topics.setIamPolicy",
+        "pubsub.topics.update",
+        "resourcemanager.projects.get",
+        "resourcemanager.projects.getIamPolicy",
+        "resourcemanager.projects.setIamPolicy",
+        "serviceusage.services.enable",
+        "serviceusage.services.get",
+      ];
+
+      // 7a. Create the custom role on the project
+      try {
+        await iam.projects.roles.create({
+          parent: `projects/${projectId}`,
+          requestBody: {
+            roleId: DT_ROLE_ID,
+            role: {
+              title: "Dynatrace GCP Monitor helm deployment role",
+              description: "Role for Dynatrace GCP Monitor helm and pubsub deployment",
+              stage: "GA",
+              includedPermissions: DT_PERMS,
+            },
+          },
+        });
+        logger.info(`GCP custom role ${DT_ROLE_ID} created on ${projectId}`);
+      } catch (roleErr) {
+        if (!String(roleErr.message).match(/already exists/i)) throw roleErr;
+        logger.info(`GCP custom role ${DT_ROLE_ID} already exists on ${projectId}`);
+      }
+
+      // 7b. Bind the learner to the new custom role (in addition to roles/editor)
+      const cloudResourceManager = google.cloudresourcemanager({ version: "v3", auth });
+      const customRoleName = `projects/${projectId}/roles/${DT_ROLE_ID}`;
+      await _gcpAddBinding(cloudResourceManager, projectId, customRoleName, `user:${userEmail}`, `custom DT role`);
+
+      // 7c. Bind roles/appengine.appAdmin (lets the learner click "Create Application")
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/appengine.appAdmin", `user:${userEmail}`, "appengine.appAdmin");
+
+      // 7d. Bind roles/iam.serviceAccountUser (deploy code as App Engine SA, Cloud Build, etc.)
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/iam.serviceAccountUser", `user:${userEmail}`, "iam.serviceAccountUser");
+
+      // 7d-extras. Owner-equivalent role bundle for gcp-appengine-lab learners.
+      //   roles/owner cannot be granted to external Gmail accounts via API
+      //   (ORG_MUST_INVITE_EXTERNAL_OWNERS); these 5 roles together give every
+      //   project-level admin power the learner needs for end-to-end Dynatrace
+      //   + App Engine + Pub/Sub work.
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/resourcemanager.projectIamAdmin", `user:${userEmail}`, "projectIamAdmin");
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/iam.securityAdmin", `user:${userEmail}`, "iam.securityAdmin");
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/iam.serviceAccountAdmin", `user:${userEmail}`, "iam.serviceAccountAdmin");
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/serviceusage.serviceUsageAdmin", `user:${userEmail}`, "serviceusage.serviceUsageAdmin");
+      await _gcpAddBinding(cloudResourceManager, projectId, "roles/appengine.serviceAdmin", `user:${userEmail}`, "appengine.serviceAdmin");
+
+      // 7e. Pre-create the App Engine application with us-central region.
+      //     Avoids the "Create Application" greyed-button UX issue and locks
+      //     region to us-central so the learner can't pick a wrong region.
+      try {
+        const ae = google.appengine({ version: "v1", auth });
+        const op = await ae.apps.create({ requestBody: { id: projectId, locationId: "us-central" } });
+        const opName = op.data.name.split("/").pop();
+        for (let i = 0; i < 24; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const o = await ae.apps.operations.get({ appsId: projectId, operationsId: opName });
+            if (o.data.done) { break; }
+          } catch (e) { break; }
+        }
+        logger.info(`GCP App Engine app pre-created (us-central) on ${projectId}`);
+      } catch (e) {
+        if (!/already exists/i.test(e.message)) {
+          logger.error(`GCP App Engine app pre-create failed for ${projectId}: ${e.message}`);
+        }
+      }
+    } catch (e) {
+      logger.error(`GCP dt-monitor-role setup failed for ${projectId}: ${e.message}`);
+    }
   }
 
   return {

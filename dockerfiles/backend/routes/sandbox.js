@@ -1,5 +1,5 @@
 const express = require('express');
-const { handleCreateSandboxUser, handleCreateSandbox, handleDeleteSandbox, handleGetSandbox, handleDeleteSandboxUser, handleGetSandboxUser, handleBulkCreateUsers, handleBulkStatus, handleBulkDeployAzure } = require('../controllers/sandbox');
+const { handleCreateSandboxUser, handleCreateSandbox, handleDeleteSandbox, handleGetSandbox, handleDeleteSandboxUser, handleGetSandboxUser, handleBulkCreateUsers, handleBulkStatus, handleBulkDeployAzure, handleBulkDeleteSandboxUsers, handleBulkDeleteStatus } = require('../controllers/sandbox');
 const { handleBulkDeploy } = require('../controllers/bulkDeploy');
 const router = express.Router();
 
@@ -13,5 +13,7 @@ router.post('/bulk-create', handleBulkCreateUsers);
 router.get('/bulk-status/:jobId', handleBulkStatus);
 router.post('/bulk-deploy', handleBulkDeploy);
 router.post('/bulk-deploy-azure', handleBulkDeployAzure);
+router.post('/bulk-delete-users', handleBulkDeleteSandboxUsers);
+router.get('/bulk-delete-status/:jobId', handleBulkDeleteStatus);
 
 module.exports = router

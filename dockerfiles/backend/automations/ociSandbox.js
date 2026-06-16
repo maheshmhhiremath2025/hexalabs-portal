@@ -10,10 +10,12 @@ const ociSandboxCleanup = async () => {
         logger.info("Running OCI sandbox cleanup...");
         const now = new Date();
 
-        // Find expired sandboxes that have not been deleted yet
+        // Find expired sandboxes that have not been deleted yet.
+        // P1-11: also exclude docs already in-flight from a prior tick.
         const expiredUsers = await OciSandboxUser.find({
             expiresAt: { $lte: now },
             status: { $ne: 'deleted' },
+            deletionStatus: { $ne: 'deleting' },
         });
 
         for (const user of expiredUsers) {
@@ -30,6 +32,9 @@ const ociSandboxCleanup = async () => {
             }
 
             try {
+                // P1-11: mark in-flight before any cloud call.
+                await OciSandboxUser.updateOne({ _id: user._id }, { $set: { deletionStatus: 'deleting' } });
+
                 // Check if student still has remaining quota
                 const totalCap = user.totalCapHours || 0;
                 const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
@@ -43,10 +48,11 @@ const ociSandboxCleanup = async () => {
                     logger.info(`OCI sandbox ${user.email}: resources cleaned but quota remaining — keeping for re-launch`);
                     await OciSandboxUser.updateOne({ _id: user._id }, {
                         $set: { expiresAt: null, status: 'expired', cleanupAttempts: 0, cleanupError: null,
-                                compartmentId: null, userId: null, policyId: null },
+                                compartmentId: null, userId: null, policyId: null, deletionStatus: 'none' },
                     });
                 } else {
                     user.status = 'deleted';
+                    user.deletionStatus = 'none';
                     await user.save();
                     logger.info(`OCI sandbox marked as deleted: ${user.email} (quota exhausted)`);
                 }
@@ -55,7 +61,7 @@ const ociSandboxCleanup = async () => {
                 try {
                     await OciSandboxUser.updateOne({ _id: user._id }, {
                         $inc: { cleanupAttempts: 1 },
-                        $set: { cleanupError: e.message, cleanupFailedAt: now },
+                        $set: { cleanupError: e.message, cleanupFailedAt: now, deletionStatus: 'none' },
                     });
                 } catch (dbErr) {
                     logger.error(`Failed to update cleanup status for OCI user ${user.email}: ${dbErr.message}`);

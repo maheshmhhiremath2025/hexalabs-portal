@@ -56,10 +56,11 @@ const handler = async (job) => {
       logger.warn(`No open log entry for ${vmName} — proceeding with stop (duration=0)`);
     }
 
+    /* unit-normalize-2026-05-27 — quota.consumed stored as HOURS (decimal), duration in minutes */
     const startTime = logIndex !== -1 ? vmDoc.logs[logIndex].start : null;
     const durationMins = startTime ? Math.ceil((currentTime - new Date(startTime)) / 60000) : 0;
     const totalDuration = (vmDoc.duration || 0) + durationMins;
-    const consumedQuota = (vmDoc.quota?.consumed || 0) + durationMins;
+    const consumedQuota = Math.round(((vmDoc.quota?.consumed || 0) + durationMins / 60) * 100) / 100;
 
     // ---------------------------------------------------------------
     // 2. UPDATE DB FIRST — mark as stopped BEFORE touching Azure
@@ -77,7 +78,12 @@ const handler = async (job) => {
       dbUpdatePayload['quota.consumed'] = consumedQuota;
     }
 
-    if (consumedQuota >= (vmDoc.quota?.total || Infinity)) {
+    // Unit-mismatch fix 2026-06-04: quota.consumed is HOURS, quota.total is MINUTES.
+    // Compare in the same unit. Without `* 60`, this guard never fired (165h < 9900
+    // numeric), so VMs that truly exhausted quota never got isAlive=false and the
+    // per-minute quotaChecker kept queueing stop jobs forever (cycle of death).
+    const totalMinutes = vmDoc.quota?.total || Infinity;
+    if (consumedQuota * 60 >= totalMinutes) {
       dbUpdatePayload.isAlive = false;
       dbUpdatePayload.remarks = 'Quota Exceeded';
     }
@@ -93,6 +99,41 @@ const handler = async (job) => {
     cascadeRdsSessions(vmName, 'stop').catch(e =>
       logger.error(`[stop-vm] ${vmName}: rds cascade failed — ${e.message}`)
     );
+
+    // ---------------------------------------------------------------
+    // 2b. If this VM is a docker host, close any open container log entries.
+    //     Without this, container.duration never accrues for sessions that ran
+    //     across the snapshot cycle, AND getEffectiveDuration over-counts later
+    //     by treating the stale 'start' as live wall-clock time. /* close-open-container-logs-2026-05-27 */
+    // ---------------------------------------------------------------
+    try {
+      const Container = require('./../models/container');
+      const hostIp = vmDoc.publicIp;
+      if (hostIp) {
+        const liveContainers = await Container.find({
+          dockerHostIp: hostIp,
+          isRunning: true,
+        });
+        for (const c of liveContainers) {
+          const logs = c.logs || [];
+          const lastIdx = logs.length - 1;
+          if (lastIdx < 0) continue;
+          const last = logs[lastIdx];
+          if (!last.start || last.stop) continue;
+          const elapsed = Math.max(0, Math.ceil((currentTime - new Date(last.start)) / 60000));
+          last.stop = currentTime;
+          last.duration = elapsed;
+          c.duration = (c.duration || 0) + elapsed;
+          c.quota = c.quota || { total: 0, consumed: 0 };
+          c.quota.consumed = Math.round(((c.quota.consumed || 0) + elapsed / 60) * 100) / 100;
+          c.isRunning = false;  // mirror host state
+          await c.save();
+        }
+        logger.info(`Closed open log entries for ${liveContainers.length} containers on ${vmName} pre-snapshot`);
+      }
+    } catch (e) {
+      logger.error(`[stop-vm] ${vmName}: container-log close failed — ${e.message}`);
+    }
 
     // ---------------------------------------------------------------
     // 3. Deallocate VM for consistent snapshot

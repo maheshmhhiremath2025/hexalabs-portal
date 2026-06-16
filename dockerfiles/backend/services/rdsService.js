@@ -126,8 +126,8 @@ async function createRdsServer({
   // Azure VM name: max 15 chars, alphanumeric + hyphen, must start/end with alphanumeric
   const cleanName = trainingName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
   const vmName = `rds${cleanName}`;
-  const rg = resourceGroup || process.env.RDS_RESOURCE_GROUP || 'hexalabs';
-  const adminPassword = 'HexaLabs@2024!';
+  const rg = resourceGroup || process.env.RDS_RESOURCE_GROUP || 'synergific';
+  const adminPassword = 'GetLabs@2024!';
 
   logger.info(`Creating RDS server ${vmName} (${sizeConfig.vmSize}) for ${userCount} users`);
 

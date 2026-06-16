@@ -31,7 +31,7 @@ const sandboxuserSchema = new mongoose.Schema({
             expiresAt: { type: Date },
             warningEmailSent: { type: Boolean, default: false },
             estimatedCost: { type: Number, default: 0 },
-            status: { type: String, enum: ['provisioning', 'provisioned', 'ready', 'expired', 'failed'], default: 'provisioning' },
+            status: { type: String, enum: ['provisioning', 'ready', 'expired', 'failed', 'deleted'], default: 'provisioning' },
             accessUrl: { type: String },       // e.g. https://portal.azure.com
             credentials: {
                 username: { type: String },
@@ -64,6 +64,8 @@ const sandboxuserSchema = new mongoose.Schema({
     cleanupError: { type: String },
     cleanupFailedAt: { type: Date },
     deletionStatus: { type: String, enum: ['none', 'deleting', 'failed'], default: 'none' },
+    batchExpiresAt: { type: Date, default: null },
+    organization: { type: String, index: true },
 },
     { timestamps: true })
 

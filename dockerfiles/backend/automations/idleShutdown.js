@@ -66,9 +66,18 @@ async function isVmIdle(resourceGroup, vmName, idleMinutes = 15, cpuThreshold = 
     }
 
     if (dataPoints === 0) return false; // No data = can't determine idle
+    // Require that the available data covers at least 80% of the configured
+    // idle window. Without this floor, a VM that is only 5-10 min old gets
+    // judged on 5-10 data points (idle right after Windows boot), and gets
+    // stopped well before idleMinutes has actually elapsed since creation.
+    const minDataPoints = Math.ceil(idleMinutes * 0.90);
+    if (dataPoints < minDataPoints) {
+      logger.info(`VM ${vmName}: only ${dataPoints}/${minDataPoints} CPU data points — too new to judge idle (need ${idleMinutes}min window)`);
+      return false;
+    }
     const avgCpu = totalCpu / dataPoints;
 
-    logger.info(`VM ${vmName}: avg CPU ${avgCpu.toFixed(1)}% over ${idleMinutes}min (threshold: ${cpuThreshold}%)`);
+    logger.info(`VM ${vmName}: avg CPU ${avgCpu.toFixed(1)}% over ${idleMinutes}min (${dataPoints} pts, threshold: ${cpuThreshold}%)`);
     return avgCpu < cpuThreshold;
   } catch (err) {
     logger.error(`Failed to check idle status for ${vmName}: ${err.message}`);
@@ -103,6 +112,7 @@ async function idleShutdownChecker() {
       isRunning: true,
       isAlive: true,
       autoShutdown: true,
+      cloud: { $ne: "aws" },
     });
 
     if (!vms.length) return;
@@ -129,9 +139,9 @@ async function idleShutdownChecker() {
           const lastLog = vm.logs[vm.logs.length - 1];
           if (lastLog && !lastLog.stop) {
             lastLog.stop = new Date();
-            lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+            lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 60000);
             vm.duration = (vm.duration || 0) + lastLog.duration;
-            vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
+            vm.quota.consumed = Math.round((vm.duration / 60) * 100) / 100;
           }
           vm.remarks = 'Stopped by user (no cost while deallocated)';
           await vm.save();
@@ -191,9 +201,9 @@ async function idleShutdownChecker() {
             const lastLog = vm.logs[vm.logs.length - 1];
             if (lastLog && !lastLog.stop) {
               lastLog.stop = new Date();
-              lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 1000);
+              lastLog.duration = Math.floor((lastLog.stop - lastLog.start) / 60000);
               vm.duration = (vm.duration || 0) + lastLog.duration;
-              vm.quota.consumed = Math.round((vm.duration / 3600) * 100) / 100;
+              vm.quota.consumed = Math.round((vm.duration / 60) * 100) / 100;
             }
             vm.remarks = 'Auto-stopped (idle)';
             vm.stopAttempts = 0;   // success — clear the stuck-stop counter

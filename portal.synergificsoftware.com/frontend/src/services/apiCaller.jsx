@@ -1,8 +1,13 @@
 import axios from 'axios';
 
 // Create an Axios instance
+const _WL_CANONICAL_HOSTS = new Set(['hexalabs.online', 'www.hexalabs.online', 'hsdf.hexalabs.online', 'hexalabs.online', 'www.hexalabs.online', 'localhost']);
+const _WL_HOST = (typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '');
+const _WL_IS_WHITELABEL = _WL_HOST && !_WL_CANONICAL_HOSTS.has(_WL_HOST);
+const _WL_API_BASE = _WL_IS_WHITELABEL ? '/api' : (import.meta.env.VITE_API_URL || 'https://api.hexalabs.online');
+
 const apiCaller = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'https://api.hexalabs.online',
+    baseURL: _WL_API_BASE,
     withCredentials: true, // Send cookies with requests if needed
 });
 

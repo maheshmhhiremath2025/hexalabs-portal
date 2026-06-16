@@ -174,10 +174,19 @@ const BillingDetails = ({ selectedTraining, apiRoutes }) => {
   }, [totalAmount]);
 
   const formattedDuration = useMemo(() => {
-    if (!totalDuration) return '0 hours';
-    return totalDuration >= 24 
-      ? `${Math.floor(totalDuration / 24)}d ${totalDuration % 24}h`
-      : `${totalDuration} hours`;
+    if (!totalDuration) return '0h';
+    // Floating-point fix 2026-06-06: totalDuration is a decimal hours value
+    // (e.g. 668.27); `totalDuration % 24` produced 20.269999999999982 instead
+    // of 20.27. Convert to integer minutes before any modulo / division so the
+    // arithmetic is exact, then format days+hours+minutes.
+    const totalMin = Math.round(totalDuration * 60);
+    const d = Math.floor(totalMin / 1440);
+    const remM = totalMin % 1440;
+    const h = Math.floor(remM / 60);
+    const m = remM % 60;
+    if (d > 0) return m ? `${d}d ${h}h ${m}m` : `${d}d ${h}h`;
+    if (h > 0) return m ? `${h}h ${m}m` : `${h}h`;
+    return `${m}m`;
   }, [totalDuration]);
 
   // Generate VM status data for donut chart

@@ -1,6 +1,15 @@
 const LabFeedback = require('../models/labFeedback');
 const { logger } = require('../plugins/logger');
 
+// Tenant-scoping helpers (mirrors controllers/admin.js).
+function orgScope(req) {
+  return req.user?.userType === 'superadmin' ? null : (req.user?.organization || null);
+}
+function isAdmin(req) {
+  const t = req.user?.userType;
+  return t === 'admin' || t === 'superadmin';
+}
+
 /**
  * POST /selfservice/feedback
  * Public — submit lab feedback. One submission per email+trainingName.
@@ -119,10 +128,15 @@ async function handleGetTrainingRatings(req, res) {
  */
 async function handleAdminListFeedback(req, res) {
   try {
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
     const { trainingName, organization, minRating, page = 1, limit = 50 } = req.query;
     const filter = {};
     if (trainingName) filter.trainingName = trainingName;
-    if (organization) filter.organization = organization;
+    // Tenant scoping: org-admin is forced to own org regardless of query;
+    // superadmin can filter to any org via the query param.
+    const scopeOrg = orgScope(req);
+    if (scopeOrg) filter.organization = scopeOrg;
+    else if (organization) filter.organization = organization;
     if (minRating) filter.rating = { $gte: Number(minRating) };
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -144,7 +158,12 @@ async function handleAdminListFeedback(req, res) {
  */
 async function handleAdminFeedbackSummary(req, res) {
   try {
-    const summary = await LabFeedback.aggregate([
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
+    // Tenant scoping: org-admin's summary is restricted to own org's feedback.
+    const scopeOrg = orgScope(req);
+    const pipeline = [];
+    if (scopeOrg) pipeline.push({ $match: { organization: scopeOrg } });
+    pipeline.push(
       {
         $group: {
           _id: '$trainingName',
@@ -168,8 +187,9 @@ async function handleAdminFeedbackSummary(req, res) {
           },
           _id: 0,
         },
-      },
-    ]);
+      }
+    );
+    const summary = await LabFeedback.aggregate(pipeline);
 
     res.json(summary);
   } catch (err) {

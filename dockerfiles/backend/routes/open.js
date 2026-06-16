@@ -13,7 +13,7 @@ router.get("/gcpLogs", handleGcpLogs)
 // Accepts: { name, email, company, demoDate?, preferredTiming? }
 // Saves to DemoRequest collection + sends:
 //   1. Confirmation email to the requester
-//   2. Notification email to itops
+//   2. Notification email to ops
 // Rate-limited per IP: max 3 submissions per hour (prevents spam).
 
 const demoRateMap = new Map();  // ip -> { count, firstAt }

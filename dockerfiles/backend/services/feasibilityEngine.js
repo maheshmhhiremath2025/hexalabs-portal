@@ -2,7 +2,7 @@
  * Feasibility Engine
  *
  * Given a structured course analysis and the cloud service catalog, decide
- * whether HexaLabs can run this course as a sandbox, and if so, under what
+ * whether GetLabs can run this course as a sandbox, and if so, under what
  * conditions.
  *
  * Verdicts:
@@ -17,7 +17,7 @@
 const { catalog } = require('../data/cloudServiceCatalog');
 
 const SPECIAL_FLAG_RULES = [
-  { match: /gpu/i,           flag: 'GPU requested — HexaLabs sandbox does not provision GPU instances.' },
+  { match: /gpu/i,           flag: 'GPU requested — GetLabs sandbox does not provision GPU instances.' },
   { match: /bare.?metal/i,   flag: 'Bare-metal requested — not supported in sandbox.' },
   { match: /dedicated.?host/i, flag: 'Dedicated host requested — not supported.' },
   { match: /multi.?region/i, flag: 'Multi-region requested — increases cost, review budget cap.' },

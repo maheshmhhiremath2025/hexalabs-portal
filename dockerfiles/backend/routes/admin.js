@@ -29,7 +29,7 @@ const {
     handleGetInvoicePdf
 } = require('./../controllers/admin');
 const { handleDashboardFunction } = require("../controllers/Dashboard/handleDashboardFunction");
-const { handleGetQuota, handleIncreaseQuota } = require('../controllers/quota');
+const { handleGetQuota, handleIncreaseQuota, handleGetQuotaVms, handleGetQuotaHistory, handleQuotaAction } = require('../controllers/quota');
 const { handleGetMyUser } = require('../controllers/myuser');
 const { handleAnalyticsOverview, handleCustomerAnalytics, handleIdleAnalytics, handleStudentAnalytics } = require('../controllers/analytics');
 const { handleUpdateUserSchedule, handleListRestrictedUsers, handleScheduleSuggestions } = require('../controllers/accessControl');
@@ -120,7 +120,9 @@ router.put("/ledger/transactions/:transactionId", handleUpdateTransaction);
 router.post("/ledger/order", handleCreateOrder);
 router.post("/ledger/paymentVerify", handlePaymentVerify);
 router.get("/quota", handleGetQuota);
-router.post("/quota", handleIncreaseQuota);
+router.post("/quota", handleQuotaAction);
+router.get("/quota/vms", handleGetQuotaVms);
+router.get("/quota/history", handleGetQuotaHistory);
 router.get("/myuser", handleGetMyUser);
 router.post("/capture", handleCaptureVm);
 
@@ -182,6 +184,22 @@ router.get("/costs/unified/breakdown", async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+
+// Cost Center (superadmin only) — nested Org → (training labs / sandboxes / shared infra) tree.
+// Pure spend, no revenue. Pulls real bills from Azure Cost Management + AWS Cost Explorer + GCP Billing.
+// Range params: ?from=ISO&to=ISO  (preferred). Legacy ?days=N still accepted. Default = last 365 days.
+router.get("/costs/center", async (req, res) => {
+  if (req.user?.userType !== 'superadmin') return res.status(403).json({ message: 'Superadmin only' });
+  try {
+    const { getCostCenter } = require('../services/costCenterService');
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+    const days = req.query.days ? parseInt(req.query.days) : null;
+    res.json(await getCostCenter({ from, to, days, force }));
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.get("/costs/aws", async (req, res) => {
   if (req.user?.userType !== 'superadmin') return res.status(403).json({ message: 'Superadmin only' });
   try {
@@ -220,7 +238,7 @@ router.post("/build-image", async (req, res) => {
     if (!software.length) return res.status(400).json({ message: 'software array required' });
 
     const key = imageKey || `custom-${courseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}-${Date.now().toString(36)}`;
-    const imageName = `hexalabs/${key}`;
+    const imageName = `getlabs/${key}`;
     const jobId = `build-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     const job = {
@@ -298,6 +316,23 @@ router.post("/shadow/:vmName", async (req, res) => {
     return res.status(403).json({ message: 'Admin access required' });
   }
   try {
+    // Tenant scoping: org-admin can only shadow VMs/containers in own org.
+    const scopeOrg = req.user.userType === 'superadmin' ? null : (req.user.organization || null);
+    if (scopeOrg) {
+      const VM = require('../models/vm');
+      const Container = require('../models/container');
+      const Training = require('../models/training');
+      const vmDoc = await VM.findOne({ name: req.params.vmName }, 'trainingName').lean();
+      let allowed = false;
+      if (vmDoc) {
+        const t = await Training.findOne({ name: vmDoc.trainingName }, 'organization').lean();
+        allowed = !!t && t.organization === scopeOrg;
+      } else {
+        const cDoc = await Container.findOne({ name: req.params.vmName }, 'organization').lean();
+        allowed = !!cDoc && cDoc.organization === scopeOrg;
+      }
+      if (!allowed) return res.status(403).json({ message: 'Cannot shadow a VM outside your organization' });
+    }
     const { createShadowSession } = require('../services/guacamoleService');
     const readOnly = req.body?.readOnly === true;
     const result = await createShadowSession(req.params.vmName, readOnly);
@@ -309,7 +344,7 @@ router.post("/shadow/:vmName", async (req, res) => {
 
 // B2B Usage Report (PDF — detailed cost/utilization report for customers)
 router.get("/usage-report", async (req, res) => {
-  if (req.user?.userType !== 'superadmin' && req.user?.userType !== 'admin') {
+  if (req.user?.userType !== 'superadmin') {
     return res.status(403).json({ message: 'Admin access required' });
   }
   try {
@@ -333,8 +368,19 @@ router.get("/report/:trainingName", async (req, res) => {
     return res.status(403).json({ message: 'Admin access required' });
   }
   try {
+    // Tenant scoping: org-admin can only read reports for own org's training.
+    // Org param is derived from req.user (ignore body) for org-admin; superadmin can pass any.
+    const scopeOrg = req.user.userType === 'superadmin' ? null : (req.user.organization || null);
+    if (scopeOrg) {
+      const Training = require('../models/training');
+      const t = await Training.findOne({ name: req.params.trainingName }, 'organization').lean();
+      if (!t || t.organization !== scopeOrg) {
+        return res.status(403).json({ message: 'Cannot read report for a training outside your organization' });
+      }
+    }
+    const orgArg = scopeOrg || req.query.organization;
     const { generateReportPDF } = require('../services/labReportService');
-    const pdf = await generateReportPDF(req.params.trainingName, req.query.organization);
+    const pdf = await generateReportPDF(req.params.trainingName, orgArg);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="lab-report-${req.params.trainingName}.pdf"`);
     res.send(pdf);
@@ -349,16 +395,34 @@ router.get("/report/:trainingName/data", async (req, res) => {
     return res.status(403).json({ message: 'Admin access required' });
   }
   try {
+    const scopeOrg = req.user.userType === 'superadmin' ? null : (req.user.organization || null);
+    if (scopeOrg) {
+      const Training = require('../models/training');
+      const t = await Training.findOne({ name: req.params.trainingName }, 'organization').lean();
+      if (!t || t.organization !== scopeOrg) {
+        return res.status(403).json({ message: 'Cannot read report for a training outside your organization' });
+      }
+    }
+    const orgArg = scopeOrg || req.query.organization;
     const { getTrainingActivity } = require('../services/labReportService');
-    const data = await getTrainingActivity(req.params.trainingName, req.query.organization);
+    const data = await getTrainingActivity(req.params.trainingName, orgArg);
     res.json(data);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Docker Host Pool Management
+// Docker Host Pool Management — superadmin only (shared infra, no per-org binding).
+function requireSuperadmin(req, res) {
+  if (req.user?.userType !== 'superadmin') {
+    res.status(403).json({ message: 'Superadmin access required' });
+    return false;
+  }
+  return true;
+}
+
 router.get('/docker-hosts', async (req, res) => {
+  if (!requireSuperadmin(req, res)) return;
   try {
     const DockerHost = require('../models/dockerHost');
     const hosts = await DockerHost.find({ status: { $ne: 'terminated' } }).sort({ createdAt: -1 }).lean();
@@ -367,6 +431,7 @@ router.get('/docker-hosts', async (req, res) => {
 });
 
 router.post('/docker-hosts/provision', async (req, res) => {
+  if (!requireSuperadmin(req, res)) return;
   try {
     const { provisionNewHost } = require('../services/dockerHostManager');
     res.json({ message: 'Provisioning started' });
@@ -375,6 +440,7 @@ router.post('/docker-hosts/provision', async (req, res) => {
 });
 
 router.delete('/docker-hosts/:id', async (req, res) => {
+  if (!requireSuperadmin(req, res)) return;
   try {
     const { terminateHost } = require('../services/dockerHostManager');
     await terminateHost(req.params.id);
@@ -385,9 +451,21 @@ router.delete('/docker-hosts/:id', async (req, res) => {
 // ─── Login rate-limiter admin endpoints ─────────────────────────────────
 // Superadmin AND admin can both unlock users (admins run training batches
 // and often need to unblock a stuck trainee without escalating).
+// Helper for login-rate-limit org scoping — returns true if email is in caller's scope.
+async function emailInScope(email, req) {
+  const scopeOrg = req.user.userType === 'superadmin' ? null : (req.user.organization || null);
+  if (!scopeOrg) return true;
+  const User = require('../models/user');
+  const u = await User.findOne({ email: String(email).toLowerCase() }, 'organization').lean();
+  return !!u && u.organization === scopeOrg;
+}
+
 router.get('/login-rate-limit/:email', async (req, res) => {
   if (!['superadmin', 'admin'].includes(req.user?.userType)) {
     return res.status(403).json({ message: 'Admin access required' });
+  }
+  if (!(await emailInScope(req.params.email, req))) {
+    return res.status(403).json({ message: 'Cannot inspect a user outside your organization' });
   }
   const { getEmailStatus } = require('../middlewares/loginRateLimit');
   const status = await getEmailStatus(req.params.email);
@@ -400,6 +478,9 @@ router.post('/login-rate-limit/unlock', async (req, res) => {
   }
   const email = req.body?.email;
   if (!email) return res.status(400).json({ message: 'email required in body' });
+  if (!(await emailInScope(email, req))) {
+    return res.status(403).json({ message: 'Cannot unlock a user outside your organization' });
+  }
   const { unlockEmail } = require('../middlewares/loginRateLimit');
   const result = await unlockEmail(email);
   require('../plugins/logger').logger.info(`[login-rate] ${req.user.email} unlocked ${email}`);

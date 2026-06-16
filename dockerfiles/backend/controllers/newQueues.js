@@ -22,6 +22,10 @@ const queueOpts = {
 // Queue Names
 const queueNames = [
   'azure-create-vm',
+  'aws-create-vm',
+  'aws-start-vm',
+  'aws-stop-vm',
+  'aws-delete-vm',
   'azure-delete-vm',
   'azure-add-port',
   'azure-remove-port',
@@ -33,6 +37,7 @@ const queueNames = [
   'gcp-create-project',
   'gcp-delete-project',
   'gcp-clean-project',
+  'gcp-reset-sandbox',
   'email-queue',
   'azure-restart-vm',
   'gcp-create-budget',
@@ -47,7 +52,6 @@ const queueNames = [
   'azure-vm-capture',
   'aws-create-user',
   'aws-delete-user',
-  'meshcentral-setup',
 ];
 
 // Dynamically Create Queues

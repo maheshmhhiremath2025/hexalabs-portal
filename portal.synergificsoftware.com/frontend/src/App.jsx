@@ -11,9 +11,11 @@ import { BrandingProvider, useBranding } from './contexts/BrandingContext'
 
 // Eagerly-loaded auth-flow pages (small, on the critical path)
 import Login from './pages/Login'
+import Logout from './pages/Logout'
 import Home from './pages/Home'
 import PermissionError from './pages/PermissionError'
 import NotFound from './pages/NotFound'
+import LabConsole from './pages/LabConsole'
 
 // All other pages are lazy-loaded so the initial JS bundle stays small.
 // Each page becomes its own JS chunk fetched on first navigation.
@@ -36,6 +38,8 @@ const SupportPage          = lazy(() => import('./pages/Support'))
 const CostAnalytics        = lazy(() => import('./pages/CostAnalytics'))
 const DeployContainer      = lazy(() => import('./pages/DeployContainer'))
 const TemplateManager      = lazy(() => import('./pages/TemplateManager'))
+const TemplateRouting      = lazy(() => import('./pages/TemplateRouting'))
+const Workshop             = lazy(() => import('./pages/Workshop'))
 const Analytics            = lazy(() => import('./pages/Analytics'))
 const CostOptimization     = lazy(() => import('./pages/CostOptimization'))
 const DeployRDS            = lazy(() => import('./pages/DeployRDS'))
@@ -43,20 +47,23 @@ const GcpSandbox           = lazy(() => import('./pages/sandbox/GcpSandbox'))
 const GcpUsers             = lazy(() => import('./pages/sandbox/GcpUsers'))
 const OciSandbox           = lazy(() => import('./pages/sandbox/OciSandbox'))
 const Signup               = lazy(() => import('./pages/Signup'))
+const ForgotPassword       = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword        = lazy(() => import('./pages/ResetPassword'))
 const OrgLanding           = lazy(() => import('./pages/OrgLanding'))
 const SelfServiceDashboard = lazy(() => import('./pages/SelfServiceDashboard'))
 const CourseCatalog        = lazy(() => import('./pages/CourseCatalog'))
 const CourseDetail         = lazy(() => import('./pages/CourseDetail'))
-const B2BCourseAnalyses    = lazy(() => import('./pages/b2b/B2BCourseAnalyses'))
-const B2BCourseDetail      = lazy(() => import('./pages/b2b/B2BCourseDetail'))
 const MySandboxes          = lazy(() => import('./pages/MySandboxes'))
-const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
-const AroCluster           = lazy(() => import('./pages/AroCluster'))
 const AccessControl        = lazy(() => import('./pages/AccessControl'))
 const GuidedLabs           = lazy(() => import('./pages/GuidedLabs'))
 const GuidedLabEditor      = lazy(() => import('./pages/GuidedLabEditor'))
 const GuidedLabAnalytics   = lazy(() => import('./pages/GuidedLabAnalytics'))
-const LabView              = lazy(() => import('./pages/LabView'))
+const TocLabSuiteEditor    = lazy(() => import('./pages/TocLabSuiteEditor'))
+const SandboxTemplateBuilder = lazy(() => import('./pages/SandboxTemplateBuilder'))
+const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
+const AroCluster           = lazy(() => import('./pages/AroCluster'))
+const B2BCourseDetail      = lazy(() => import('./pages/b2b/B2BCourseDetail'))
+const B2BCourseAnalyses    = lazy(() => import('./pages/b2b/B2BCourseAnalyses'))
 
 // Tiny fallback shown while a lazy route's chunk is fetching.
 // Plain centered spinner — keeps perceived latency low without a layout shift.
@@ -69,6 +76,8 @@ function RouteFallback() {
 }
 
 function AppInner() {
+  // JWT tenant-host check removed — was causing unwanted auto-logouts for superadmin users.
+
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("uid"));
   const [userDetails, setUserDetails] = useState({ organization: "", email: "", userType: "" });
   const [selectedTraining, setSelectedTraining] = useState(null);
@@ -90,8 +99,8 @@ function AppInner() {
   //      the already-scheduled logout.
   //   3. The `if (idleTimer.current)` guard inside the inner timer was
   //      always truthy (clearTimeout doesn't null the ref). Dead code.
-  const IDLE_TIMEOUT = 5 * 60 * 1000;         // total inactivity → logout (5 min)
-  const IDLE_WARN_AT = 3 * 60 * 1000;         // show warning here (3 min) — 2-min grace
+  const IDLE_TIMEOUT = 15 * 60 * 1000;        // total inactivity → logout (15 min)
+  const IDLE_WARN_AT = 13 * 60 * 1000;        // show warning here (13 min) — 2-min grace
   const warnTimer = useRef(null);
   const logoutTimer = useRef(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
@@ -105,8 +114,6 @@ function AppInner() {
     setShowIdleWarning(false);
     clearIdleTimers();
     if (!isLoggedIn) return;
-    // Superadmins are exempt from idle timeout
-    if (localStorage.getItem("AH1apq12slurt5") === "hpQ3s5dK247") return;
 
     warnTimer.current = setTimeout(() => {
       setShowIdleWarning(true);
@@ -184,8 +191,7 @@ function AppInner() {
   const sidebarWidth = sidebarCollapsed ? 72 : 260;
   const { pathname } = useLocation();
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname.startsWith('/welcome/');
-  const isFullscreenPage = pathname === '/lab-view';
-  const showChrome = isLoggedIn && !isAuthPage && !isFullscreenPage;
+  const showChrome = isLoggedIn && !isAuthPage;
 
   return (
     <div className="min-h-screen bg-surface-50">
@@ -208,8 +214,12 @@ function AppInner() {
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/login" element={<Login onLogin={handleLogin} apiRoutes={apiRoutes} />} />
+            <Route path="/logout" element={<Logout setIsLoggedIn={setIsLoggedIn} setUserDetails={setUserDetails} />} />
             <Route path="/signup" element={<Signup onLogin={handleLogin} />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/welcome/:orgSlug" element={<OrgLanding />} />
+            <Route path="/lab/:vmName" element={<PrivateRoute isLoggedIn={isLoggedIn}><LabConsole /></PrivateRoute>} />
 
             <Route path="/" element={<PrivateRoute isLoggedIn={isLoggedIn}><Home userDetails={userDetails} /></PrivateRoute>} />
             <Route path="/dashboard" element={<PrivateRoute isLoggedIn={isLoggedIn}><Dashboard apiOpenRoutes={apiOpenRoutes} userDetails={userDetails} /></PrivateRoute>} />
@@ -225,17 +235,17 @@ function AppInner() {
             </Route>
 
             <Route path='/sandbox/azure' element={<RoleBasedRoute allowedRoles={['sandboxuser']} element={<Azure userDetails={userDetails} apiRoutes={apiRoutes} />} />} />
-            <Route path='/sandbox/azure/users' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<AzureUsers userDetails={userDetails} apiRoutes={apiRoutes} superadminApiRoutes={superadminApiRoutes} />} />} />
-            <Route path='/sandbox/aws/users' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<AwsSandbox superadminApiRoutes={superadminApiRoutes} />} />} />
+            <Route path='/sandbox/azure/users' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AzureUsers userDetails={userDetails} apiRoutes={apiRoutes} superadminApiRoutes={superadminApiRoutes} />} />} />
+            <Route path='/sandbox/aws/users' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AwsSandbox userDetails={userDetails} superadminApiRoutes={superadminApiRoutes} />} />} />
             <Route path='/sandbox/gcp' element={<RoleBasedRoute allowedRoles={['sandboxuser']} element={<GcpSandbox userDetails={userDetails} />} />} />
-            <Route path='/sandbox/gcp/users' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<GcpUsers />} />} />
-            <Route path='/sandbox/oci-sandbox' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<OciSandbox />} />} />
-            <Route path='/rosa' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<RosaCluster />} />} />
-            <Route path='/aro' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AroCluster />} />} />
+            <Route path='/sandbox/gcp/users' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GcpUsers userDetails={userDetails} />} />} />
+            <Route path='/sandbox/oci-sandbox' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<OciSandbox userDetails={userDetails} />} />} />
 
             <Route path='/createvm' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<CreateVM userDetails={userDetails} apiRoutes={apiRoutes} />} />} />
             <Route path='/containers' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployContainer userDetails={userDetails} />} />} />
             <Route path='/templates' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TemplateManager />} />} />
+            <Route path='/template-routing' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<TemplateRouting />} />} />
+            <Route path='/workshop' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<Workshop />} />} />
             <Route path='/rds' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployRDS userDetails={userDetails} />} />} />
             <Route path='/overview' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<Controller superadminApiRoutes={superadminApiRoutes} />} />} />
             <Route path='/admin/access-control' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AccessControl />} />} />
@@ -256,20 +266,26 @@ function AppInner() {
             <Route path="/courses" element={<PrivateRoute isLoggedIn={isLoggedIn}><CourseCatalog /></PrivateRoute>} />
             <Route path="/courses/:slug" element={<PrivateRoute isLoggedIn={isLoggedIn}><CourseDetail /></PrivateRoute>} />
 
-            {/* B2B course analyses (admin/superadmin) — upload PDF → feasibility, cost, template */}
-            <Route path="/b2b/courses" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<B2BCourseAnalyses />} />} />
-            <Route path="/b2b/courses/:id" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<B2BCourseDetail />} />} />
 
             <Route path="/support" element={<PrivateRoute isLoggedIn={isLoggedIn}><SupportPage /></PrivateRoute>} />
 
-            {/* Guided labs — step-by-step labs with progress tracking */}
-            <Route path="/guided-labs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabs />} />} />
-            <Route path="/guided-labs/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabAnalytics />} />} />
-            <Route path="/guided-labs/editor" element={<RoleBasedRoute allowedRoles={['superadmin']} element={<GuidedLabEditor />} />} />
-            <Route path="/guided-labs/editor/:id" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabEditor />} />} />
+            {/* Guided Labs */}
+            <Route path='/guided-labs' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabs />} />} />
+            <Route path='/guided-labs/editor' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabEditor />} />} />
+            <Route path='/guided-labs/editor/:id' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabEditor />} />} />
+            <Route path='/guided-labs/analytics/:id' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<GuidedLabAnalytics />} />} />
+            <Route path='/guided-labs/toc-suite' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TocLabSuiteEditor />} />} />
 
-            {/* Lab View — full-screen split view: desktop iframe + Lab Guide (no sidebar/navbar) */}
-            <Route path="/lab-view" element={<PrivateRoute isLoggedIn={isLoggedIn}><LabView /></PrivateRoute>} />
+            {/* ROSA & ARO */}
+            <Route path='/rosa' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<RosaCluster />} />} />
+            <Route path='/aro' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<AroCluster />} />} />
+
+            {/* B2B Courses */}
+            <Route path='/b2b/courses' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<B2BCourseAnalyses />} />} />
+            <Route path='/b2b/courses/:id' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<B2BCourseDetail />} />} />
+
+            {/* Sandbox Template Builder */}
+            <Route path='/sandbox-builder' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<SandboxTemplateBuilder />} />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

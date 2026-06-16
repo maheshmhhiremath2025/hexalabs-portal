@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import apiCaller from '../services/apiCaller';
-import { FaAws, FaCloud, FaGoogle, FaBook, FaLayerGroup, FaShieldAlt, FaClock, FaRupeeSign, FaGraduationCap, FaSearch } from 'react-icons/fa';
+import { FaAws, FaCloud, FaGoogle, FaBook, FaLayerGroup, FaShieldAlt, FaClock, FaGraduationCap, FaSearch } from 'react-icons/fa';
 
 const CLOUD_META = {
-  aws:   { label: 'AWS',   Icon: FaAws,    color: 'text-amber-600', pill: 'bg-amber-50 text-amber-700 border-amber-200' },
-  azure: { label: 'Azure', Icon: FaCloud,  color: 'text-blue-600',  pill: 'bg-blue-50 text-blue-700 border-blue-200' },
-  gcp:   { label: 'GCP',   Icon: FaGoogle, color: 'text-red-600',   pill: 'bg-red-50 text-red-700 border-red-200' },
+  aws:   { label: 'AWS',   Icon: FaAws,    color: 'text-amber-600',  pill: 'bg-amber-50 text-amber-700 border-amber-200' },
+  azure: { label: 'Azure', Icon: FaCloud,  color: 'text-blue-600',   pill: 'bg-blue-50 text-blue-700 border-blue-200' },
+  gcp:   { label: 'GCP',   Icon: FaGoogle, color: 'text-red-600',    pill: 'bg-red-50 text-red-700 border-red-200' },
+  oci:   { label: 'OCI',   Icon: FaCloud,  color: 'text-red-700',    pill: 'bg-red-50 text-red-800 border-red-200' },
 };
 
 const LEVEL_META = {
@@ -22,6 +23,9 @@ export default function CourseCatalog() {
   const [error, setError] = useState(null);
   const [cloudFilter, setCloudFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState('all');
+  // Patched 2026-05-21: hours filter + sort + popularity-derived state
+  const [hoursFilter, setHoursFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('popular');
   const [search, setSearch] = useState('');
 
   const fetchTemplates = () => {
@@ -48,19 +52,41 @@ export default function CourseCatalog() {
   const isAdmin = userType === 'z829Sgry6AkYJ' || userType === 'hpQ3s5dK247';
 
   const filtered = useMemo(() => {
-    return templates.filter(t => {
+    let arr = templates.filter(t => {
       if (cloudFilter !== 'all' && t.cloud !== cloudFilter) return false;
       if (levelFilter !== 'all' && t.certificationLevel !== levelFilter) return false;
+      if (hoursFilter !== 'all') {
+        const h = t.sandboxConfig?.ttlHours || 0;
+        if (hoursFilter === 'short' && h > 2) return false;
+        if (hoursFilter === 'medium' && (h <= 2 || h > 4)) return false;
+        if (hoursFilter === 'long' && (h <= 4 || h > 8)) return false;
+        if (hoursFilter === 'extended' && h <= 8) return false;
+      }
       if (search && !(`${t.name} ${t.certificationCode} ${t.description}`).toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [templates, cloudFilter, levelFilter, search]);
+    const sorter = {
+      'popular': (a, b) => (b.deployCount30d || 0) - (a.deployCount30d || 0) || a.name.localeCompare(b.name),
+      'newest':  (a, b) => (b.sortOrder || 0) - (a.sortOrder || 0),
+      'az':      (a, b) => a.name.localeCompare(b.name),
+    }[sortBy] || ((a, b) => 0);
+    return [...arr].sort(sorter);
+  }, [templates, cloudFilter, levelFilter, hoursFilter, search, sortBy]);
+
+  // Patched 2026-05-21: popular tiles (top 3 by deployCount30d)
+  const popular = useMemo(() => {
+    return [...templates]
+      .filter(t => (t.deployCount30d || 0) > 0)
+      .sort((a, b) => (b.deployCount30d || 0) - (a.deployCount30d || 0))
+      .slice(0, 3);
+  }, [templates]);
 
   const stats = useMemo(() => ({
     total: templates.length,
     aws: templates.filter(t => t.cloud === 'aws').length,
     azure: templates.filter(t => t.cloud === 'azure').length,
     gcp: templates.filter(t => t.cloud === 'gcp').length,
+    oci: templates.filter(t => t.cloud === 'oci').length,
   }), [templates]);
 
   return (
@@ -71,16 +97,43 @@ export default function CourseCatalog() {
           <FaGraduationCap className="w-3 h-3" /> <span>Training</span>
         </div>
         <h1 className="text-xl font-bold text-gray-900">Course Catalog</h1>
-        <p className="text-sm text-gray-600 mt-1">Certification-aligned sandbox templates. Deploy a pre-configured cloud environment with the exact services, IAM policies, and budget needed for each course.</p>
+        <p className="text-sm text-gray-600 mt-1">Certification-aligned sandbox templates. Deploy a pre-configured cloud environment with the exact services and IAM policies needed for each course.</p>
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Total courses" value={stats.total} icon={FaBook} color="text-gray-700" />
         <StatCard label="AWS" value={stats.aws} icon={FaAws} color="text-amber-600" />
         <StatCard label="Azure" value={stats.azure} icon={FaCloud} color="text-blue-600" />
         <StatCard label="GCP" value={stats.gcp} icon={FaGoogle} color="text-red-600" />
+        <StatCard label="OCI" value={stats.oci} icon={FaCloud} color="text-red-700" />
       </div>
+
+      {/* Patched 2026-05-21: Popular this month tiles */}
+      {popular.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2 mt-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">🔥 Popular this month</span>
+            <span className="text-xs text-gray-400">— top deployed templates in last 30 days</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            {popular.map(t => (
+              <Link
+                key={t.slug}
+                to={`/courses/${t.slug}`}
+                className="block bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 hover:border-amber-400 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded">{t.cloud}</span>
+                  <span className="text-xs font-bold text-amber-700">{t.deployCount30d} deploys</span>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-900 line-clamp-1">{t.name}</h4>
+                <p className="text-[11px] text-gray-600 mt-1 line-clamp-2">{t.description || '—'}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
@@ -99,6 +152,7 @@ export default function CourseCatalog() {
           { value: 'aws', label: 'AWS' },
           { value: 'azure', label: 'Azure' },
           { value: 'gcp', label: 'GCP' },
+          { value: 'oci', label: 'OCI' },
         ]} />
         <FilterGroup label="Level" value={levelFilter} onChange={setLevelFilter} options={[
           { value: 'all', label: 'All' },
@@ -107,6 +161,18 @@ export default function CourseCatalog() {
           { value: 'professional', label: 'Professional' },
           { value: 'specialty', label: 'Specialty' },
         ]} />
+        <FilterGroup label="Hours" value={hoursFilter} onChange={setHoursFilter} options={[
+          { value: 'all', label: 'All' },
+          { value: 'short', label: '≤2h' },
+          { value: 'medium', label: '2-4h' },
+          { value: 'long', label: '4-8h' },
+          { value: 'extended', label: '8h+' },
+        ]} />
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white ml-auto">
+          <option value="popular">Sort: Most popular</option>
+          <option value="newest">Sort: Newest</option>
+          <option value="az">Sort: A→Z</option>
+        </select>
       </div>
 
       {/* Content */}
@@ -233,8 +299,8 @@ function CourseCard({ template, onDelete }) {
         {template.sandboxConfig?.ttlHours && (
           <span className="flex items-center gap-1"><FaClock className="w-2.5 h-2.5" /> {template.sandboxConfig.ttlHours}h</span>
         )}
-        {template.sandboxConfig?.budgetInr && (
-          <span className="flex items-center gap-1"><FaRupeeSign className="w-2.5 h-2.5" /> {template.sandboxConfig.budgetInr}</span>
+        {template.deployCount30d > 0 && (
+          <span className="flex items-center gap-1 ml-auto text-amber-700 font-semibold">🔥 {template.deployCount30d}</span>
         )}
       </div>
     </Link>

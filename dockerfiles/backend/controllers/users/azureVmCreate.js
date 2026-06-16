@@ -4,7 +4,7 @@ const VM = require("./../../models/vm");
 const { logger } = require('./../../plugins/logger');
 
 async function handleCreateMachines(req, res) {
-    const { templateName, email, trainingName, allocatedHours, createVmCount, guacamole, meshCentral, autoShutdown = false, idleMinutes = 15, hybridBenefit = false, expiresAt, guidedLabId } = req.body;
+    const { templateName, email, trainingName, allocatedHours, createVmCount, guacamole, autoShutdown = false, idleMinutes = 15, hybridBenefit = false, expiresAt } = req.body;
     // Validate required fields
     if (!templateName || !email || !trainingName || !createVmCount)
         return res.status(400).json({ message: "Required data not received" });
@@ -15,11 +15,11 @@ async function handleCreateMachines(req, res) {
 
     try {
         // Find the template
-        const templateData = await Templates.findOne({ name: templateName }, 'name creation rate kasmVnc hasXrdp -_id');
+        const templateData = await Templates.findOne({ name: templateName }, 'name creation rate kasmVnc hasXrdp cloud dcv -_id');
         if (!templateData)
             return res.status(404).json({ message: "Template not found" });
 
-        const { name, rate, creation: template, kasmVnc: templateKasmVnc, hasXrdp: templateHasXrdp } = templateData;
+        const { name, rate, creation: template, kasmVnc: templateKasmVnc, hasXrdp: templateHasXrdp, cloud: templateCloud, dcv: templateDcv } = templateData;
         const currentVmCount = await VM.countDocuments({ trainingName: trainingName });
 
         // Loop through VM creation requests
@@ -36,18 +36,17 @@ async function handleCreateMachines(req, res) {
                 kasmVnc: !!templateKasmVnc,
                 hasXrdp: !!templateHasXrdp,
                 guacamole: guacamole,
-                meshCentral: !!meshCentral,
                 autoShutdown: autoShutdown,
                 idleMinutes: idleMinutes,
                 hybridBenefit: hybridBenefit,
                 expiresAt: expiresAt || null,
-                guidedLabId: guidedLabId || null,
                 user: req.user,
                 total: createVmCount + currentVmCount
             };
 
-            // Add VM creation request to the queue
-            await queues['azure-create-vm'].add(vmData);
+            // Add VM creation request to the queue — route by cloud
+            const queueName = (templateCloud === 'aws' || template?.cloud === 'aws') ? 'aws-create-vm' : 'azure-create-vm';
+            await queues[queueName].add(vmData);
         }
 
         // Return success response

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import apiCaller from '../services/apiCaller';
 import {
   FaArrowLeft, FaAws, FaCloud, FaGoogle, FaRocket, FaShieldAlt, FaBan, FaLayerGroup,
-  FaClock, FaRupeeSign, FaCheckCircle, FaCopy, FaCheck, FaExternalLinkAlt, FaKey,
+  FaClock, FaCheckCircle, FaCopy, FaCheck, FaExternalLinkAlt, FaKey,
   FaBook, FaChartPie, FaMicrochip, FaTerminal, FaSpinner, FaUsers, FaTimes, FaDownload,
 } from 'react-icons/fa';
 
@@ -11,6 +11,7 @@ const CLOUD_META = {
   aws:   { label: 'AWS',   Icon: FaAws,    color: 'text-amber-600', bg: 'bg-amber-50',  border: 'border-amber-200' },
   azure: { label: 'Azure', Icon: FaCloud,  color: 'text-blue-600',  bg: 'bg-blue-50',   border: 'border-blue-200' },
   gcp:   { label: 'GCP',   Icon: FaGoogle, color: 'text-red-600',   bg: 'bg-red-50',    border: 'border-red-200' },
+  oci:   { label: 'OCI',   Icon: FaCloud,  color: 'text-red-700',   bg: 'bg-red-50',    border: 'border-red-200' },
 };
 
 const LEVEL_PILL = {
@@ -268,9 +269,6 @@ export default function CourseDetail() {
                 {template.sandboxConfig?.ttlHours && (
                   <span className="flex items-center gap-1.5"><FaClock className="w-3 h-3" /> {template.sandboxConfig.ttlHours}h TTL</span>
                 )}
-                {template.sandboxConfig?.budgetInr && (
-                  <span className="flex items-center gap-1.5"><FaRupeeSign className="w-3 h-3" /> ₹{template.sandboxConfig.budgetInr} budget</span>
-                )}
                 {template.sandboxConfig?.region && (
                   <span className="flex items-center gap-1.5"><FaMicrochip className="w-3 h-3" /> {template.sandboxConfig.region}</span>
                 )}
@@ -428,7 +426,6 @@ export default function CourseDetail() {
                         <div className="text-[11px] text-gray-600 flex flex-wrap gap-3 pt-1">
                           {d.region && <span><span className="font-medium">Region:</span> {d.region}</span>}
                           {d.ttlHours && <span><span className="font-medium">TTL:</span> {d.ttlHours}h</span>}
-                          {d.budgetInr && <span><span className="font-medium">Budget:</span> ₹{d.budgetInr}</span>}
                           {d.aws?.iamUsername && <span><span className="font-medium">IAM user:</span> <code>{d.aws.iamUsername}</code></span>}
                           {d.azure?.resourceGroupName && <span><span className="font-medium">RG:</span> <code>{d.azure.resourceGroupName}</code></span>}
                           {d.gcp?.projectId && <span><span className="font-medium">Project:</span> <code>{d.gcp.projectId}</code></span>}
@@ -650,7 +647,7 @@ function OverviewTab({ template, slug }) {
       <Section title="Raw IAM policy">
         <p className="text-xs text-gray-500 mb-2">The generated {template.cloud.toUpperCase()} policy is fetched live from the API.</p>
         <a
-          href={`${import.meta.env.VITE_API_URL || 'https://api.hexalabs.online'}/sandbox-templates/${slug}/policy`}
+          href={`${(typeof window !== 'undefined' && !['hexalabs.online','www.hexalabs.online','hsdf.hexalabs.online','localhost'].includes(window.location.hostname.toLowerCase())) ? '/api' : (import.meta.env.VITE_API_URL || 'https://api.hexalabs.online')}/sandbox-templates/${slug}/policy`}
           target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-mono bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5"
         >

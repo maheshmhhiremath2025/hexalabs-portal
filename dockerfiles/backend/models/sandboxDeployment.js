@@ -29,7 +29,7 @@ const sandboxDeploymentSchema = new mongoose.Schema({
   templateName: { type: String },
 
   // Which cloud
-  cloud: { type: String, enum: ['aws', 'azure', 'gcp'], required: true },
+  cloud: { type: String, enum: ['aws', 'azure', 'gcp', 'oci'], required: true },
 
   // Who deployed (ops email from req.user)
   deployedBy: { type: String, required: true, index: true },
@@ -59,17 +59,25 @@ const sandboxDeploymentSchema = new mongoose.Schema({
   gcp: {
     projectId: { type: String },
   },
+  oci: {
+    compartmentId: { type: String },
+    userId:        { type: String },
+    policyId:      { type: String },
+  },
 
   // Lifecycle
   state: {
     type: String,
-    enum: ['active', 'expired', 'deleted', 'failed'],
+    enum: ['active', 'expired', 'deleted', 'failed', 'cleanup_failed'],
     default: 'active',
     index: true,
   },
   deletedAt: { type: Date },
   statusMessage: { type: String },
   warningEmailSent: { type: Boolean, default: false }, // 30-min-before-expiry email sent
+  cleanupError:    { type: String },
+  cleanupAttempts: { type: Number, default: 0 },
+  cleanupFailedAt: { type: Date },
 }, { timestamps: true });
 
 sandboxDeploymentSchema.index({ templateSlug: 1, deployedBy: 1, state: 1, createdAt: -1 });

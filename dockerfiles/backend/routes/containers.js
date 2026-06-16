@@ -48,6 +48,18 @@ router.post('/capture', async (req, res) => {
     if (!containerId || !templateName) {
       return res.status(400).json({ message: 'containerId and templateName are required' });
     }
+
+    // Tenant scoping: source container must belong to caller's org.
+    const scopeOrg = userType === 'superadmin' ? null : (req.user.organization || null);
+    if (scopeOrg) {
+      const Container = require('../models/container');
+      const src = await Container.findOne({ containerId }, 'organization').lean();
+      if (!src) return res.status(404).json({ message: 'Source container not found' });
+      if (src.organization !== scopeOrg) {
+        return res.status(403).json({ message: 'Cannot capture a container outside your organization' });
+      }
+    }
+
     const result = await captureContainerAsTemplate({ containerId, templateName, templateLabel });
 
     // Save to custom images collection for the portal dropdown

@@ -128,7 +128,7 @@ export default function GcpSandbox({ userDetails }) {
               Create
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Project will be auto-deleted after {data.sandboxTtlHours || 4} hours. Budget limit: ₹{data.budgetLimit || 500}.</p>
+          <p className="text-xs text-gray-400 mt-2">Project will be auto-deleted after {data.sandboxTtlHours || 4} hours. Cost guardrails are applied automatically.</p>
 
           {/* Live create progress */}
           {creating && (() => {

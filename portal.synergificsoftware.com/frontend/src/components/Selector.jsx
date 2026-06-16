@@ -14,7 +14,7 @@ const Selector = ({ setSelectedTraining, setSelectedUser, userDetails, apiRoutes
             try {
                 if (userDetails.userType === "superadmin") {
                     await getUserTags();
-                } else if (userDetails.userType === "admin" || userDetails.userType === "user") {
+                } else if (userDetails.userType === "admin" || userDetails.userType === "user" || userDetails.userType === "sandboxuser" || userDetails.userType === "awssandboxuser" || userDetails.userType === "selfservice") {
                     await getTrainingNames();
                 }
             } catch (error) {

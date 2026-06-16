@@ -1,7 +1,7 @@
 // Unified email template engine — used by ALL customer-facing emails.
 //
 // Goal: every customer email looks like it came from the same product.
-// Brand is fixed (HexaLabs Cloud Portal) — we intentionally do NOT pull
+// Brand is fixed (Hexalabs Cloud Portal) — we intentionally do NOT pull
 // per-org branding here. Reason: emails go through Gmail and end up in
 // reply chains, forwards, and screenshots; consistent brand identity
 // across organizations protects ours.
@@ -17,7 +17,7 @@
 // got to 848 lines in the first place.
 
 const BRAND = {
-  name: 'HexaLabs Cloud Portal',
+  name: 'Hexalabs Cloud Portal',
   tagline: 'Enterprise Cloud Training Labs',
   primary: '#2563eb',
   accent: '#1e40af',
@@ -70,7 +70,7 @@ function renderEmail({ title, badge, intro, sections = [], expiry, footerNote })
     '— ',
     `${BRAND.name} · ${BRAND.tagline}`,
     `${BRAND.portalUrl}`,
-    footerNote ? stripHtml(footerNote) : `Need help? Reply to this email or contact ${BRAND.supportEmail}.`,
+    footerNote ? stripHtml(footerNote) : `Slow session? See https://labs.hexalabs.online/help/slow-session.html | Need help? Reply to this email or contact ${BRAND.supportEmail}.`,
   ].filter(Boolean).join('\n');
 
   return { html, text };
@@ -112,7 +112,7 @@ function rawHtml(html, textFallback = '') {
 
 function headerHtml(title, badge) {
   return `
-    <div style="background:${BRAND.headerGradient};padding:32px 24px;text-align:center;">
+    <div style="background:${BRAND.primary};background:${BRAND.headerGradient};padding:32px 24px;text-align:center;">
       ${badge ? `<div style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;margin-bottom:12px;">
         <span style="font-size:11px;font-weight:700;color:#ffffff;letter-spacing:1.5px;">${escapeHtml(badge)}</span>
       </div>` : ''}
@@ -136,6 +136,7 @@ function footerHtml(extra) {
     <div style="border-top:1px solid #e5e7eb;padding-top:16px;margin-top:8px;text-align:center;">
       <div style="font-size:12px;color:#9ca3af;line-height:1.6;">
         ${extra ? `${escapeHtml(extra)}<br>` : ''}
+        Experiencing slowness during your session? See our <a href="https://labs.hexalabs.online/help/slow-session.html" style="color:#2563eb;">60-second diagnostic guide</a>.<br>
         Need help? Reply to this email or contact <a href="mailto:${BRAND.supportEmail}" style="color:#2563eb;">${BRAND.supportEmail}</a>.<br>
         <strong style="color:#374151;">${BRAND.name}</strong> · ${BRAND.tagline}
       </div>

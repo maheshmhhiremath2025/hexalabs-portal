@@ -10,7 +10,7 @@ const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const tenantId = process.env.TENANT_ID;
 
-const subnetName = 'default2';
+const subnetName = 'default';
 const adminUsername = 'labuser';
 const adminPassword = 'Welcome1234!';
 
@@ -21,10 +21,11 @@ const networkClient = new NetworkManagementClient(credentials, subscriptionId);
 
 // Original function: Create VM from image (for initial creation using template/imageId)
 async function createVirtualMachine(vmName, vmTemplate) {
-    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version, securityType} = vmTemplate;
+    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version, securityType, zone} = vmTemplate;
     const nicName = vmName + "-nic";
     const publicIpName = vmName + "-public-IP";
     const publicIpParameters = {
+        sku: { name: "Standard" },
         location: location,
         publicIPAllocationMethod: "Static"
     };
@@ -89,7 +90,8 @@ async function createVirtualMachine(vmName, vmTemplate) {
             evictionPolicy: 'Deallocate',
             billingProfile: {
                 maxPrice: -1
-            }
+            },
+            ...(zone ? { zones: [zone] } : {}),
         };
 
         if (official) {
@@ -208,6 +210,31 @@ async function createNSGAndAssociate (vmName, resourceGroup, location, nicName, 
                 sourceAddressPrefix: '*',
                 destinationPortRange: '6901',
                 destinationAddressPrefix: '*'
+            },
+            // HTTP 80 + 81 — open for guided-lab templates that bake in an
+            // nginx side-panel guide (port 80) and code-server browser IDE
+            // (port 81). Same closed-TCP-is-fine reasoning as KasmVNC above.
+            {
+                name: 'allow-80-guide',
+                priority: 1003,
+                direction: 'Inbound',
+                access: 'Allow',
+                protocol: 'Tcp',
+                sourcePortRange: '*',
+                sourceAddressPrefix: '*',
+                destinationPortRange: '80',
+                destinationAddressPrefix: '*'
+            },
+            {
+                name: 'allow-81-codeserver',
+                priority: 1004,
+                direction: 'Inbound',
+                access: 'Allow',
+                protocol: 'Tcp',
+                sourcePortRange: '*',
+                sourceAddressPrefix: '*',
+                destinationPortRange: '81',
+                destinationAddressPrefix: '*'
             }
         ]
     };
@@ -260,13 +287,14 @@ async function getLatestSeatSnapshot(resourceGroup, vmName) {
   return snaps[0];
 }
 
-async function createOsDiskFromSnapshot(resourceGroup, diskName, snapshotId, location, osType = 'Windows', tags = {}) {
+async function createOsDiskFromSnapshot(resourceGroup, diskName, snapshotId, location, osType = 'Windows', tags = {}, zone) {
   const poll = await computeClient.disks.beginCreateOrUpdate(resourceGroup, diskName, {
     location,
     osType,
-    sku: { name: 'StandardSSD_LRS' }, // Changed to StandardSSD_LRS as requested
+    sku: { name: 'StandardSSD_LRS' },
     creationData: { createOption: 'Copy', sourceResourceId: snapshotId },
-    tags
+    tags,
+    ...(zone ? { zones: [zone] } : {}),
   });
   return poll.pollUntilDone();
 }
@@ -284,7 +312,8 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
     vmSize,
     osType = 'Windows',
     tags = {},
-    nicName = `${vmName}-nic`
+    nicName = `${vmName}-nic`,
+    zone
   } = vmTemplate;
   // 1) Get the NIC we keep for this seat
   const nic = await getExistingNic(resourceGroup, nicName);
@@ -292,8 +321,39 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
   const latestSnap = await getLatestSeatSnapshot(resourceGroup, vmName);
   // 3) Create OS disk from that snapshot
   const osDiskName = `${vmName}-os`; // transient; will be deleted on next Stop
-  const osDisk = await createOsDiskFromSnapshot(resourceGroup, osDiskName, latestSnap.id, location, osType, tags);
+
+  // -------- orphan disk cleanup (2026-06-10) --------
+  // Spot eviction with Delete policy detaches but does NOT delete the OS disk.
+  // The next Start would hit "Changing property 'sourceResourceId' is not allowed
+  // for existing disk" because Azure forbids changing the source on an existing
+  // disk. We pre-check and delete the orphan; snapshot has identical state.
+  try {
+    const existing = await computeClient.disks.get(resourceGroup, osDiskName);
+    if (existing.managedBy) {
+      // Disk still attached to another VM — refuse to interfere.
+      throw new Error(`Disk ${osDiskName} is attached to ${existing.managedBy}; cannot recover ${vmName}`);
+    }
+    logger.warn(`[startFromSnapshot] ${vmName}: orphan disk ${osDiskName} found (state=${existing.diskState}). Deleting before snapshot restore.`);
+    await computeClient.disks.beginDeleteAndWait(resourceGroup, osDiskName);
+    logger.info(`[startFromSnapshot] ${vmName}: orphan disk deleted, proceeding with snapshot restore`);
+  } catch (e) {
+    if (e.statusCode === 404) {
+      // No orphan — normal happy path, proceed.
+    } else if (String(e.message || '').includes('is attached to')) {
+      // Hard fail — surface to the caller.
+      throw e;
+    } else {
+      logger.warn(`[startFromSnapshot] ${vmName}: orphan-disk pre-check soft-fail (${e.statusCode || ''}): ${e.message}`);
+      // Continue — the createOsDiskFromSnapshot call below will surface any real issue.
+    }
+  }
+  // --------------------------------------------------
+
+  const osDisk = await createOsDiskFromSnapshot(resourceGroup, osDiskName, latestSnap.id, location, osType, tags, zone);
   // 4) Create VM (Spot is fine; eviction policy deallocate)
+  // Snapshot carries the source VM's security type — the new VM shell must match,
+  // otherwise Azure rejects with "Security type ... not compatible with attached OS Disk".
+  const isTL = latestSnap.securityProfile?.securityType === 'TrustedLaunch';
   const vmParams = {
     location,
     tags,
@@ -307,14 +367,18 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
       }
     },
     networkProfile: { networkInterfaces: [{ id: nic.id, primary: true }] },
-    securityProfile: { secureBootEnabled: true, virtualTpmEnabled: true, integrityMonitoringEnabled: true },
+    securityProfile: isTL
+      ? { securityType: 'TrustedLaunch', uefiSettings: { secureBootEnabled: true, vTpmEnabled: true } }
+      : { secureBootEnabled: true, virtualTpmEnabled: true, integrityMonitoringEnabled: true },
     priority: 'Spot',
-    evictionPolicy: 'Deallocate'
+    evictionPolicy: 'Deallocate',
+    ...(zone ? { zones: [zone] } : {}),
   };
   const poll = await computeClient.virtualMachines.beginCreateOrUpdate(resourceGroup, vmName, vmParams);
   await poll.pollUntilDone();
-  // 5) Return IP for UI (taken from the kept Public IP object)
-  const pipName = `${vmName}-public-IP`;
+  // 5) Return IP for UI (derived from NIC ipConfiguration to support non-standard PIP names)
+  const pipIdFromNic = nic.ipConfigurations && nic.ipConfigurations[0] && nic.ipConfigurations[0].publicIPAddress && nic.ipConfigurations[0].publicIPAddress.id;
+  const pipName = pipIdFromNic ? pipIdFromNic.split("/").pop() : `${vmName}-public-IP`;
   const pip = await networkClient.publicIPAddresses.get(resourceGroup, pipName);
   return {
     vmName,

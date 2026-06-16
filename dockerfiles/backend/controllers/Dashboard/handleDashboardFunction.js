@@ -18,16 +18,27 @@ async function handleDashboardFunction(req, res) {
     const templates = await Templates.countDocuments();
     const vms = await VM.countDocuments();
     
-    // Count VMs where quota exceeded (Azure)
-    const azureQuotaExceeded = await VM.countDocuments({
-      isAlive: true,  // Check if isAlive is true
-      $expr: { $gte: ["$quota.consumed", "$quota.total"] }  // Check if consumed >= total
-    });
+    // Count VMs where quota exceeded (Azure) + return who, for the home-page alert
+    const azureQuotaExceededDocs = await VM.find(
+      { isAlive: true, $expr: { $gte: ["$quota.consumed", "$quota.total"] } },
+      { vmName: 1, email: 1, organization: 1, trainingName: 1, quota: 1, _id: 0 }
+    ).limit(20).lean();
+    const azureQuotaExceeded = azureQuotaExceededDocs.length;
+    const azureQuotaExceededList = azureQuotaExceededDocs.map(d => ({
+      vmName: d.vmName,
+      email: d.email,
+      organization: d.organization,
+      trainingName: d.trainingName,
+      consumed: d?.quota?.consumed || 0,
+      total: d?.quota?.total || 0,
+    }));
     
-    // Count Projects where budget exceeded (GCP)
-    const gcpQuotaExceeded = await Project.countDocuments({
-      $expr: { $gte: ["$consumed", "$budget"] }  // Check if consumed >= budget
-    });
+    // Count Projects where budget exceeded (GCP) + return who
+    const gcpQuotaExceededDocs = await Project.find(
+      { $expr: { $gte: ["$consumed", "$budget"] } },
+      { projectName: 1, projectId: 1, email: 1, organization: 1, trainingName: 1, consumed: 1, budget: 1, _id: 0 }
+    ).limit(20).lean();
+    const gcpQuotaExceeded = gcpQuotaExceededDocs.length;
     
     // Count unique GCP training names
     const gcpTraining = await Project.aggregate([
@@ -69,8 +80,10 @@ async function handleDashboardFunction(req, res) {
       virtualMachines: vms,
       invoicePending: invoicePending,
       azureQuotaExceeded: azureQuotaExceeded,
+      azureQuotaExceededList: azureQuotaExceededList,
       projects: projects,
       gcpQuotaExceeded: gcpQuotaExceeded,
+      gcpQuotaExceededList: gcpQuotaExceededDocs,
       storage: {
         estimateGB: storageEstimateGB,
         windowsVms,

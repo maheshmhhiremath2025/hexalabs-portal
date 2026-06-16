@@ -21,16 +21,12 @@
  *   idleMinutes: 30             (default: 30 min of < 3% CPU = idle)
  */
 
-const Docker = require('dockerode');
 const Container = require('../models/container');
 const { logger } = require('../plugins/logger');
+const { getDockerForContainer } = require('../services/containerService');
 
 let sendEmail;
 try { sendEmail = require('../services/emailNotifications').sendEmail; } catch {}
-
-const docker = new Docker({
-  socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
-});
 
 const DEFAULT_IDLE_MINUTES = 30;
 // KasmVNC + window-manager + compositor daemons idle around 4-8% CPU
@@ -43,10 +39,20 @@ const CPU_IDLE_THRESHOLD = Number(process.env.CONTAINER_CPU_IDLE_THRESHOLD) || 1
  * Get current CPU usage % for a container via Docker stats (one-shot).
  * Returns null if the container isn't running or stats unavailable.
  */
-async function getContainerCpuPercent(containerId) {
+async function getContainerCpuPercent(doc) {
   try {
-    const container = docker.getContainer(containerId);
+    const container = getDockerForContainer(doc).getContainer(doc.containerId);
     const stats = await container.stats({ stream: false });
+
+    // Docker stats returns a zero-timestamp + empty cpu_stats for STOPPED
+    // containers (no throw). We must return null so the drift-fix branch
+    // in the caller reconciles Mongo isRunning=false. Without this guard,
+    // the deltas below are 0, cpuPercent returns 0, and we never escape.
+    if (!stats || !stats.read || stats.read.startsWith('0001-01-01')
+        || !stats.cpu_stats || !stats.cpu_stats.cpu_usage
+        || stats.cpu_stats.cpu_usage.total_usage === undefined) {
+      return null;
+    }
 
     // Docker stats CPU calculation (same formula as `docker stats` CLI)
     const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
@@ -83,8 +89,42 @@ async function containerIdleShutdown() {
       const idleMinutes = c.idleMinutes || DEFAULT_IDLE_MINUTES;
 
       // Get current CPU
-      const cpuPercent = await getContainerCpuPercent(c.containerId);
-      if (cpuPercent === null) { summary.unreachable++; continue; }
+      const cpuPercent = await getContainerCpuPercent(c);
+      if (cpuPercent === null) {
+        // CPU stats unavailable. Two causes:
+        //   (a) container is actually stopped on docker — Mongo isRunning=true is stale (drift)
+        //   (b) docker daemon unreachable — defer
+        // Distinguish with a lightweight inspect; if docker says not running, fix Mongo.
+        try {
+          const insp = await getDockerForContainer(c).getContainer(c.containerId).inspect();
+          const dockerStatus = insp && insp.State && insp.State.Status;
+          if (dockerStatus && dockerStatus !== 'running') {
+            // Drift detected — close the open log entry against actual FinishedAt so usage
+            // report reflects reality, then mark Mongo isRunning=false.
+            const stopAt = (insp.State && insp.State.FinishedAt && insp.State.FinishedAt !== '0001-01-01T00:00:00Z')
+              ? new Date(insp.State.FinishedAt)
+              : new Date();
+            const lastLog = c.logs[c.logs.length - 1];
+            if (lastLog && !lastLog.stop) {
+              lastLog.stop = stopAt;
+              lastLog.duration = Math.max(0, Math.floor((stopAt - new Date(lastLog.start)) / 60000));
+              c.duration = (c.duration || 0) + lastLog.duration;
+              if (c.quota) c.quota.consumed = Math.round((c.duration / 60) * 100) / 100;
+            }
+            c.isRunning = false;
+            c.idleSince = null;
+            c.remarks = (c.remarks || '') + ` | Drift-corrected (docker=${dockerStatus})`;
+            await c.save();
+            summary.driftFixed = (summary.driftFixed || 0) + 1;
+            logger.warn(`[container-idle] Drift fix ${c.name}: docker=${dockerStatus} but Mongo isRunning=true → set false`);
+            continue;
+          }
+        } catch (err) {
+          // Inspect failed — host or container truly unreachable. Don't touch Mongo.
+        }
+        summary.unreachable++;
+        continue;
+      }
 
       if (cpuPercent < CPU_IDLE_THRESHOLD) {
         // CPU is below threshold. Check if it's BEEN idle long enough.
@@ -106,7 +146,7 @@ async function containerIdleShutdown() {
           logger.info(`[container-idle] Stopping idle container ${c.name} (idle ${Math.round(idleDurationMins)}m, threshold ${idleMinutes}m, CPU ${cpuPercent.toFixed(1)}%)`);
 
           try {
-            const container = docker.getContainer(c.containerId);
+            const container = getDockerForContainer(c).getContainer(c.containerId);
             await container.stop();
           } catch (err) {
             logger.error(`[container-idle] Docker stop failed for ${c.name}: ${err.message}`);
@@ -119,9 +159,9 @@ async function containerIdleShutdown() {
           const lastLog = c.logs[c.logs.length - 1];
           if (lastLog && !lastLog.stop) {
             lastLog.stop = now;
-            lastLog.duration = Math.floor((now - new Date(lastLog.start)) / 1000);
+            lastLog.duration = Math.floor((now - new Date(lastLog.start)) / 60000);
             c.duration = (c.duration || 0) + lastLog.duration;
-            c.quota.consumed = Math.round((c.duration / 3600) * 100) / 100;
+            c.quota.consumed = Math.round((c.duration / 60) * 100) / 100;
           }
           c.remarks = (c.remarks || '') + ` | Auto-stopped (idle ${Math.round(idleDurationMins)}m)`;
           await c.save();
@@ -129,7 +169,7 @@ async function containerIdleShutdown() {
           // Email the student
           if (sendEmail && c.email) {
             sendEmail(c.email,
-              `[HexaLabs] Lab paused — ${c.name} (idle for ${Math.round(idleDurationMins)} min)`,
+              `[GetLabs] Lab paused — ${c.name} (idle for ${Math.round(idleDurationMins)} min)`,
               `<div style="font-family:-apple-system,sans-serif;max-width:500px;">
                 <div style="background:#6b7280;padding:16px 20px;border-radius:8px 8px 0 0;">
                   <h2 style="color:white;margin:0;font-size:16px;">Lab Paused — Idle Timeout</h2>
@@ -155,7 +195,7 @@ async function containerIdleShutdown() {
         }
       }
     }
-    logger.info(`[container-idle] cycle: checked=${summary.checked} active=${summary.active} idleMarked=${summary.idleMarked} stopped=${summary.stopped} unreachable=${summary.unreachable} threshold=${CPU_IDLE_THRESHOLD}%`);
+    logger.info(`[container-idle] cycle: checked=${summary.checked} active=${summary.active} idleMarked=${summary.idleMarked} stopped=${summary.stopped} driftFixed=${summary.driftFixed||0} unreachable=${summary.unreachable} threshold=${CPU_IDLE_THRESHOLD}%`);
   } catch (err) {
     logger.error(`[container-idle] Fatal: ${err.message}`);
   }

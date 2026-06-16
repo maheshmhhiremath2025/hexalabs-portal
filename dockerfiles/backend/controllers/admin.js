@@ -2,6 +2,20 @@ require('dotenv').config()
 const User = require('./../models/user')
 const { logger } = require('./../plugins/logger')
 const Organization = require('./../models/organization')
+
+// Tenant-scoping helpers — see feedback_admin_endpoints_tenant_scoping.
+// Returns null for superadmin (no scope), org name for org-admin.
+function orgScope(req) {
+  return req.user?.userType === 'superadmin' ? null : (req.user?.organization || null);
+}
+function isAdmin(req) {
+  const t = req.user?.userType;
+  return t === 'admin' || t === 'superadmin';
+}
+function isSuperadmin(req) {
+  return req.user?.userType === 'superadmin';
+}
+
 const Templates = require('./../models/templates')
 const Training = require('./../models/training')
 const VM = require('./../models/vm')
@@ -13,7 +27,6 @@ const fs = require('fs');
 const { createObjectCsvWriter } = require('csv-writer');
 const queues = require('./newQueues')
 const PDFDocument = require('pdfkit'); // ✅ ADD PDFKIT
-const { cleanupTrainingSandboxes } = require('../services/sandboxCleanup');
 const https = require('https');
 
 
@@ -60,9 +73,9 @@ const generateInvoicePDF = (invoiceData, organization) => {
         paintHeaderBar();
 
         // logo
-        const logoBuf = await fetchBufferFromUrl('https://hexalabs.online/assets/images/logo.png');
+        const logoBuf = await fetchBufferFromUrl('https://hexalabs.online/logo/logo.png');
         if (logoBuf) doc.image(logoBuf, 50, 20, { height: 60 });
-        else { setFont(true, 22, '#333333'); doc.text('HEXALABS SOFTWARE', 50, 30); }
+        else { setFont(true, 22, '#333333'); doc.text('HEXALABS', 50, 30); }
 
         // ===== Company + Invoice strip (FULL grey background) =====
         const stripY = 115;
@@ -72,12 +85,12 @@ const generateInvoicePDF = (invoiceData, organization) => {
         doc.restore();
 
         // Company text
-        setFont(true, 14, '#333333'); doc.text('HEXALABS SOFTWARE PRIVATE LIMITED', 50, 120);
+        setFont(true, 14, '#333333'); doc.text('HEXALABS PRIVATE LIMITED', 50, 120);
         setFont(false, 9, '#666666');
         doc.text('46/4, Novel Tech Park, GB Palya, Kudlu Gate', 50, 140)
             .text('Bengaluru - 560029', 50, 152)
             .text('KARNATAKA, INDIA', 50, 164)
-            .text('Email: muneeb@hexalabs.online', 50, 176)
+            .text('Email: labs@hexalabs.online', 50, 176)
             .text('Mobile: +91 9541551557', 50, 188)
             .text('GSTIN: 29ABDC56932Q1ZH', 50, 200);
 
@@ -201,7 +214,7 @@ const generateInvoicePDF = (invoiceData, organization) => {
         setFont(true, 10, '#333333'); doc.text('Bank Details', bankBoxX + 10, summaryY + 10);
         setFont(false, 9, '#666666');
         doc.text('Bank Name: ICICI BANK LIMITED', bankBoxX + 10, summaryY + 28)
-           .text('Account Name: HEXALABS SOFTWARE PRIVATE LIMITED', bankBoxX + 10, summaryY + 40)
+           .text('Account Name: HEXALABS PRIVATE LIMITED', bankBoxX + 10, summaryY + 40)
            .text('Account Number: 029705006065', bankBoxX + 10, summaryY + 52)
            .text('IFSC Code: ICIC0000297', bankBoxX + 10, summaryY + 64);
 
@@ -257,7 +270,7 @@ const generateInvoicePDF = (invoiceData, organization) => {
           footerY = bottomLimit - footerHeight;
         }
         setFont(true, 9, '#6c757d');
-        doc.text('For HEXALABS SOFTWARE PRIVATE LIMITED', 0, footerY, { align: 'center' });
+        doc.text('For HEXALABS PRIVATE LIMITED', 0, footerY, { align: 'center' });
         setFont(false, 9, '#6c757d');
         doc.text('Authorised Signatory', 0, footerY + 12, { align: 'center' });
         setFont(false, 7, '#999999');
@@ -291,11 +304,13 @@ async function handleFetchOrganization(req, res) {
 }
 
 async function handleDeleteOrganization(req, res) {
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to delete an organization' });
     const { organization } = req.body;
-    console.log(organization)
+    if (!organization) return res.status(400).json({ message: 'organization is required' });
 
     try {
         await Organization.findOneAndDelete({ organization: organization })
+        logger.info(`[admin] ${req.user.email} deleted organization ${organization}`);
         return res.status(200).json({ message: `Organization : ${organization} deleted` })
     } catch (error) {
         logger.error(`Error Deleting Organization ${organization}`)
@@ -323,16 +338,22 @@ async function handleCreateOrganization(req, res) {
 }
 
 async function handleFetchUsers(req, res) {
-    const users = await User.find({}, 'email userType userTag organization -_id');
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
+    // Tenant scoping: org-admin sees only own org's users; superadmin sees all.
+    const scopeOrg = orgScope(req);
+    const filter = scopeOrg ? { organization: scopeOrg } : {};
+    const users = await User.find(filter, 'email userType userTag organization -_id');
     res.status(200).json(users);
 }
 
 async function handleAssignTemplate(req, res) {
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to assign templates' });
     const { organization, template } = req.body;
     if (!organization || !template)
         return res.status(400).json({ message: "Organization and template required to assign" })
     try {
         await Organization.findOneAndUpdate({ organization: organization }, { $push: { templates: template } })
+        logger.info(`[admin] ${req.user.email} assigned template ${template} to ${organization}`);
         res.status(200).json({ message: `Template ${template} assigned to ${organization}` })
     } catch (error) {
         logger.error('Error assigning Template:', error.message);
@@ -341,11 +362,13 @@ async function handleAssignTemplate(req, res) {
 }
 
 async function handleDeleteAssignTemplate(req, res) {
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to remove templates' });
     const { organization, template } = req.body;
     if (!organization || !template)
         return res.status(400).json({ message: "Organization and template required to remove assigned" })
     try {
         await Organization.findOneAndUpdate({ organization: organization }, { $pull: { templates: template } })
+        logger.info(`[admin] ${req.user.email} removed template ${template} from ${organization}`);
         res.status(200).json({ message: `Template ${template} removed from ${organization}` })
     } catch (error) {
         logger.error('Error removing Template:', error.message);
@@ -355,7 +378,11 @@ async function handleDeleteAssignTemplate(req, res) {
 
 async function handleGetAssignTemplate(req, res) {
     try {
-        const organizations = await Organization.find({}, "organization templates");
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+        // Tenant scoping: org-admin sees only own org's assignments.
+        const scopeOrg = orgScope(req);
+        const filter = scopeOrg ? { organization: scopeOrg } : {};
+        const organizations = await Organization.find(filter, "organization templates");
 
         const formattedTemplates = organizations.flatMap(org =>
             org.templates.map(template => ({
@@ -373,7 +400,7 @@ async function handleGetAssignTemplate(req, res) {
 
 async function handleGetTemplate(req, res) {
     try {
-        const templates = await Templates.find({}, "name creation.vmSize creation.os creation.licence")
+        const templates = await Templates.find({}, "name rate creation.vmSize creation.os creation.licence cloud dcv kasmVnc hasXrdp requiredBackend accessProtocol nestedVirt")
         res.status(200).json(templates)
     } catch (error) {
         logger.error('Error fetching Template:', error.message);
@@ -382,10 +409,12 @@ async function handleGetTemplate(req, res) {
 }
 
 async function handleDeleteTemplate(req, res) {
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to delete templates' });
     const { template } = req.body;
-    console.log(template)
+    if (!template) return res.status(400).json({ message: 'template is required' });
     try {
         await Templates.findOneAndDelete({ name: template })
+        logger.info(`[admin] ${req.user.email} deleted template ${template}`);
         res.status(200).json({ message: "Template Deleted" })
     } catch (error) {
         logger.error('Error fetching Template:', error.message);
@@ -394,6 +423,7 @@ async function handleDeleteTemplate(req, res) {
 }
 
 async function handleCreateTemplate(req, res) {
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to create templates' });
     const { name, rate, resourceGroup, vmSize, imageId, location, os, vnet, licence, cpu, memory, storage, disk, planPublisher, product, version, isOfficial } = req.body;
     try {
         await Templates.create({
@@ -450,12 +480,30 @@ async function handleCreateUser(req, res) {
 }
 
 async function handleDeleteUser(req, res) {
-    const { email, organization } = req.body;
-    if (!email || !organization)
-        return res.status(400).json({ message: "Data insufficient" })
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
+    const { email } = req.body;
+    let { organization } = req.body;
+    if (!email)
+        return res.status(400).json({ message: "email is required" })
+
+    // Tenant scoping: org-admin can only delete users in own org.
+    const scopeOrg = orgScope(req);
+    if (scopeOrg) {
+        if (organization && organization !== scopeOrg) {
+            return res.status(403).json({ message: 'You can only delete users in your own organization' });
+        }
+        organization = scopeOrg;
+    }
+    if (!organization) return res.status(400).json({ message: "organization is required" });
 
     try {
-        await User.findOneAndDelete({ email: email, organization: organization })
+        const target = await User.findOne({ email, organization });
+        if (!target) return res.status(404).json({ message: 'User not found' });
+        if (target.userType === 'superadmin' && !isSuperadmin(req)) {
+            return res.status(403).json({ message: 'Only superadmin can delete a superadmin' });
+        }
+        await User.findOneAndDelete({ email, organization })
+        logger.info(`[admin] ${req.user.email} deleted user ${email} in ${organization}`);
         res.status(200).json({ message: "User Deleted" })
 
     } catch (error) {
@@ -468,18 +516,26 @@ async function handleDeleteUser(req, res) {
 // Accepts { email (target), newOrganization?, userType?, newEmail?, resetPassword? }
 // resetPassword:true sets password to Welcome1234! (bcrypt-hashed via pre-save hook).
 async function handleUpdateUser(req, res) {
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
     const { email, newEmail, newOrganization, userType, resetPassword } = req.body;
     if (!email) return res.status(400).json({ message: 'email (target) is required' });
     try {
-        const user = await User.findOne({ email });
+        // Tenant scoping: org-admin can only update users in their own org.
+        const scopeOrg = orgScope(req);
+        const lookup = scopeOrg ? { email, organization: scopeOrg } : { email };
+        const user = await User.findOne(lookup);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         // Superadmin-only safety: don't let non-superadmins edit superadmins.
-        if (user.userType === 'superadmin' && req.user?.userType !== 'superadmin') {
+        if (user.userType === 'superadmin' && !isSuperadmin(req)) {
             return res.status(403).json({ message: 'Only superadmin can edit a superadmin' });
         }
-        if (userType === 'superadmin' && req.user?.userType !== 'superadmin') {
+        if (userType === 'superadmin' && !isSuperadmin(req)) {
             return res.status(403).json({ message: 'Only superadmin can assign superadmin' });
+        }
+        // Org-admin cannot move a user out of their own org.
+        if (scopeOrg && newOrganization && newOrganization !== scopeOrg) {
+            return res.status(403).json({ message: 'Cannot move a user to another organization' });
         }
 
         if (newEmail && newEmail !== email) user.email = String(newEmail).trim().toLowerCase();
@@ -501,7 +557,8 @@ async function handleUpdateUser(req, res) {
 // rate, kasmVnc, hasXrdp (not name/imageId — those would orphan VMs that
 // reference the template).
 async function handleUpdateTemplate(req, res) {
-    const { name, rate, kasmVnc, hasXrdp } = req.body;
+    if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to update templates' });
+    const { name, rate, kasmVnc, hasXrdp, requiredBackend, accessProtocol, nestedVirt } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required' });
     try {
         const Templates = require('../models/templates');
@@ -509,6 +566,17 @@ async function handleUpdateTemplate(req, res) {
         if (rate !== undefined) set.rate = Number(rate);
         if (kasmVnc !== undefined) set.kasmVnc = !!kasmVnc;
         if (hasXrdp !== undefined) set.hasXrdp = !!hasXrdp;
+        if (requiredBackend !== undefined) {
+          const valid = ['azure','aws','forge','auto'];
+          if (!valid.includes(requiredBackend)) return res.status(400).json({ message: `requiredBackend must be one of ${valid.join(', ')}` });
+          set.requiredBackend = requiredBackend;
+        }
+        if (accessProtocol !== undefined) {
+          const valid = ['dcv','guacamole','rdp','kasm','kasmvnc','ssh','auto'];
+          if (!valid.includes(accessProtocol)) return res.status(400).json({ message: `accessProtocol must be one of ${valid.join(', ')}` });
+          set.accessProtocol = accessProtocol;
+        }
+        if (nestedVirt !== undefined) set.nestedVirt = !!nestedVirt;
         if (Object.keys(set).length === 0) return res.status(400).json({ message: 'Nothing to update' });
         const r = await Templates.updateOne({ name }, { $set: set });
         if (r.matchedCount === 0) return res.status(404).json({ message: 'Template not found' });
@@ -521,6 +589,7 @@ async function handleUpdateTemplate(req, res) {
 }
 
 async function handleDeleteLogs(req, res) {
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
     const { trainingName } = req.body;
 
     if (!trainingName) {
@@ -542,6 +611,12 @@ async function handleDeleteLogs(req, res) {
 
         if (!organization) {
             return res.status(400).json({ message: "Organization not found for this training" });
+        }
+
+        // Tenant scoping: org-admin can only delete logs for trainings in own org.
+        const scopeOrg = orgScope(req);
+        if (scopeOrg && organization !== scopeOrg) {
+            return res.status(403).json({ message: 'Cannot delete logs for a training outside your organization' });
         }
 
         const adminData = await User.findOne({ organization: organization, userType: "admin" }, 'email -_id').lean();
@@ -646,14 +721,14 @@ async function handleDeleteLogs(req, res) {
                     We will be sending you a tax invoice shortly.
                 </p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">
-                    Thank you for choosing HexaLabs. We appreciate your trust in us and look forward to assisting you with any further requirements you may have.
+                    Thank you for choosing Hexalabs. We appreciate your trust in us and look forward to assisting you with any further requirements you may have.
                 </p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">Best regards,</p>
                 <p style="font-size: 16px; color: #333; margin: 10px 0;">
                     Krishan Agarwal <br/>
                     Delivery Team <br/>
-                    HexaLabs Pvt. Ltd. <br/>
-                    <a href="mailto:mahesh.hiremath@hexalabs.online" style="color: #1a73e8; text-decoration: none;">mahesh.hiremath@hexalabs.online</a>
+                    Hexalabs <br/>
+                    <a href="mailto:labs@hexalabs.online" style="color: #1a73e8; text-decoration: none;">labs@hexalabs.online</a>
                 </p>
             `,
                 attachment: {
@@ -669,10 +744,45 @@ async function handleDeleteLogs(req, res) {
 
         const userEmails = data.vmUserMapping.map(({ userEmail }) => userEmail);
 
-        // Clean up cloud sandboxes provisioned via guided lab
-        await cleanupTrainingSandboxes(trainingName).catch(err =>
-            console.error(`Sandbox cleanup failed for ${trainingName}: ${err.message}`)
-        );
+        // ─── Azure cleanup BEFORE Mongo cleanup ──────────────────────────
+        // Previously this handler only deleted Mongo records, leaving Azure
+        // VMs running as silent orphans (no portal automation could find them
+        // afterwards because Mongo had no record to compare against).
+        // Now: cancel pending schedules, then deep-delete all Azure resources
+        // for each VM (VM + NIC + disk + public IP + NSG + snapshot), THEN
+        // delete the Mongo records.
+
+        // Cancel pending schedules so they can't fire and re-create VMs from
+        // snapshot while we are mid-cleanup.
+        try {
+          await Training.updateOne(
+            { name: trainingName },
+            { $set: { 'schedules.$[s].status': 'cancelled' } },
+            { arrayFilters: [{ 's.status': 'pending' }] }
+          );
+        } catch (e) {
+          console.error('[killTraining] schedule cancellation warning:', e.message);
+        }
+
+        // Resolve VM resource group and name list. All cohort VMs live in the
+        // 'VMsubnet' resource group by convention; fall back to per-VM lookup.
+        const vmDocs = await VM.find({ trainingName }, 'name resourceGroup -_id').lean();
+        const vmNames = vmDocs.map(v => v.name);
+        const resourceGroup = vmDocs[0]?.resourceGroup || 'VMsubnet';
+
+        if (vmNames.length > 0) {
+          try {
+            const { azureDeepDeleteVMs } = require('../services/azureFullCleanup');
+            console.log('[killTraining] Azure deep-delete starting for', vmNames.length, 'VMs in RG', resourceGroup);
+            const cleanupResults = await azureDeepDeleteVMs(vmNames, resourceGroup);
+            const fullyOk = cleanupResults.filter(r => r.results.every(x => x.ok)).length;
+            console.log('[killTraining] Azure deep-delete done:', fullyOk + '/' + vmNames.length, 'VMs fully cleaned');
+          } catch (e) {
+            console.error('[killTraining] Azure deep-delete failed:', e.message);
+            // Continue with Mongo cleanup — orphan sweeper will catch any leftover
+          }
+        }
+        // ─────────────────────────────────────────────────────────────────
 
         await VM.deleteMany({ trainingName });
         await User.deleteMany({
@@ -724,7 +834,11 @@ const handleGetAccounts = async (req, res) => {
 
 const handleGetLedger = async (req, res) => {
     try {
-        const organizations = await Organization.find({}, 'organization legal').lean();
+        if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
+        // Tenant scoping: org-admin sees only own org's ledger; superadmin sees all.
+        const scopeOrg = orgScope(req);
+        const filter = scopeOrg ? { organization: scopeOrg } : {};
+        const organizations = await Organization.find(filter, 'organization legal').lean();
 
         if (!organizations || organizations.length === 0) {
             return res.status(404).json({ message: "No organizations found" });
@@ -944,7 +1058,7 @@ const handleAddTransaction = async (req, res) => {
                     <div style="display: flex; align-items: center;">
                         <div style="background: white; padding: 10px; border-radius: 8px; margin-right: 20px; display: flex; align-items: center; justify-content: center;">
                         <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
-                            <img src="https://hexalabs.online/assets/images/logo.png"
+                            <img src="https://hexalabs.online/logo/logo.png"
                                 style="width: 100%; height: 100%; object-fit: contain;"
                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                         </div>
@@ -959,12 +1073,12 @@ const handleAddTransaction = async (req, res) => {
                     <div style="padding: 25px; background: #f8f9fa; border-bottom: 2px solid #e9ecef;">
                     <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
                         <div style="flex: 1; min-width: 300px;">
-                        <h3 style="color: #333; margin-bottom: 10px;">HEXALABS SOFTWARE PRIVATE LIMITED</h3>
+                        <h3 style="color: #333; margin-bottom: 10px;">HEXALABS PRIVATE LIMITED</h3>
                         <p style="margin: 5px 0; color: #666;">
                             46/4, Novel Tech Park, GB Palya, Kudlu Gate<br>
                             Bengaluru - 560029<br>
                             KARNATAKA, INDIA<br>
-                            Email: muneeb@hexalabs.online<br>
+                            Email: labs@hexalabs.online<br>
                             Mobile: +91 9541551557<br>
                             GSTIN: 29ABDC56932Q1ZH
                         </p>
@@ -1094,7 +1208,7 @@ const handleAddTransaction = async (req, res) => {
                             <h4 style="color: #333; margin-bottom: 10px;">Bank Details</h4>
                             <p style="margin: 5px 0; color: #666; font-size: 14px;">
                             <strong>Bank Name:</strong> ICICI BANK LIMITED<br>
-                            <strong>Account Name:</strong> HEXALABS SOFTWARE PRIVATE LIMITED<br>
+                            <strong>Account Name:</strong> HEXALABS PRIVATE LIMITED<br>
                             <strong>Account Number:</strong> 029705006065<br>
                             <strong>IFSC Code:</strong> ICIC0000297
                             </p>
@@ -1147,7 +1261,7 @@ const handleAddTransaction = async (req, res) => {
                     <!-- Footer -->
                     <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e9ecef; text-align: center;">
                         <p style="margin: 0; color: #6c757d;">
-                        <strong>For HEXALABS SOFTWARE PRIVATE LIMITED</strong><br>
+                        <strong>For HEXALABS PRIVATE LIMITED</strong><br>
                         Authorised Signatory
                         </p>
                         <p style="margin: 10px 0 0 0; color: #999; font-size: 12px;">
@@ -1498,9 +1612,15 @@ const handleCreateOrder = async (req, res) => {
 }
 
 const handlePaymentVerify = async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Admin access required' });
     const { payment_id, order_id, signature, amount, invoice_ids, invoice_details } = req.body;
-    const { organization: orgFromUser } = req.user || {};
-    const organization = (req.body.organization || orgFromUser || "").toLowerCase().trim();
+    // SECURITY: always derive organization from req.user, never from req.body.
+    // Razorpay HMAC is over (order_id|payment_id) only — body.organization was
+    // previously trusted, allowing org-admin to credit any org's ledger.
+    const orgFromUser = (req.user?.organization || "").toLowerCase().trim();
+    const organization = isSuperadmin(req)
+        ? ((req.body.organization || orgFromUser).toLowerCase().trim())
+        : orgFromUser;
 
     try {
         if (!organization) {
@@ -1613,17 +1733,27 @@ const handlePaymentVerify = async (req, res) => {
 
 const handleCaptureVm = async (req, res) => {
     try {
+        if (!isAdmin(req)) return res.status(403).json({ message: 'Admin access required' });
         const { vm } = req.body;
-        const vmData = {
-            vm: vm
-        }
 
         if (!vm) {
             return res.status(400).json({ message: "VM name is required to capture" });
         }
 
-        await queues["azure-vm-capture"].add(vmData);
-        logger.info(`VM Capture started for: ${vm}`);
+        // Tenant scoping: org-admin can only capture VMs in own org.
+        // VM has no organization field directly — resolve via trainingName → Training.
+        const scopeOrg = orgScope(req);
+        if (scopeOrg) {
+            const vmDoc = await VM.findOne({ name: vm }, 'trainingName').lean();
+            if (!vmDoc) return res.status(404).json({ message: 'VM not found' });
+            const trainingDoc = await Training.findOne({ name: vmDoc.trainingName }, 'organization').lean();
+            if (!trainingDoc || trainingDoc.organization !== scopeOrg) {
+                return res.status(403).json({ message: 'Cannot capture a VM outside your organization' });
+            }
+        }
+
+        await queues["azure-vm-capture"].add({ vm });
+        logger.info(`[admin] ${req.user.email} initiated VM Capture for: ${vm}`);
 
         return res.status(200).json({ message: "Capture process initiated" });
     } catch (error) {

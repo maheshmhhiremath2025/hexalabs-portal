@@ -13,6 +13,16 @@
 
 const { logger } = require('../plugins/logger');
 
+// P2-16: detect optional cloud-cleanup SDKs once at module load, log clearly
+// if missing, and disable the corresponding cleanup function rather than
+// silently swallowing the error inside each call's try/catch.
+let HAS_M2 = true;
+let HAS_APPSTREAM = true;
+try { require('@aws-sdk/client-m2'); }
+catch { HAS_M2 = false; logger.error('[CRITICAL] @aws-sdk/client-m2 missing — M2 cleanup disabled'); }
+try { require('@aws-sdk/client-appstream'); }
+catch { HAS_APPSTREAM = false; logger.error('[CRITICAL] @aws-sdk/client-appstream missing — AppStream cleanup disabled'); }
+
 let ec2, s3, elbv2;
 try {
   const { EC2Client, DescribeInstancesCommand, TerminateInstancesCommand, DescribeVolumesCommand, DeleteVolumeCommand, DescribeSecurityGroupsCommand, DeleteSecurityGroupCommand, DescribeKeyPairsCommand, DeleteKeyPairCommand, ReleaseAddressCommand, DescribeAddressesCommand } = require('@aws-sdk/client-ec2');
@@ -318,6 +328,7 @@ async function cleanupDynamoDbTables(username) {
  * their underlying environments. Gracefully no-ops if the SDK isn't installed.
  */
 async function cleanupM2Resources(username) {
+  if (!HAS_M2) return 0;
   try {
     const { M2Client, ListEnvironmentsCommand, ListApplicationsCommand, ListTagsForResourceCommand, DeleteEnvironmentCommand, DeleteApplicationCommand, StopApplicationCommand } = require('@aws-sdk/client-m2');
     const m2 = new M2Client({ region: process.env.AWS_REGION || 'ap-south-1', credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET } });
@@ -363,6 +374,7 @@ async function cleanupM2Resources(username) {
  * Gracefully no-ops if the SDK isn't installed.
  */
 async function cleanupAppStreamResources(username) {
+  if (!HAS_APPSTREAM) return 0;
   try {
     const { AppStreamClient, DescribeFleetsCommand, DescribeImageBuildersCommand, ListTagsForResourceCommand, StopFleetCommand, DeleteFleetCommand, StopImageBuilderCommand, DeleteImageBuilderCommand } = require('@aws-sdk/client-appstream');
     const as = new AppStreamClient({ region: process.env.AWS_REGION || 'ap-south-1', credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_ACCESS_SECRET } });

@@ -98,6 +98,28 @@ export default function BulkEmailInput({
           onChange={(e) => handleFile(e.target.files?.[0])}
         />
 
+        <button
+          type="button"
+          onClick={() => {
+            // Trigger an inline CSV download — admins can use this as a
+            // template for their own student roster files.
+            const csv = 'email\nstudent1@example.com\nstudent2@example.com\nstudent3@example.com\n';
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sandbox-users-sample.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+          title="Download a sample CSV file showing the expected format"
+        >
+          Download sample
+        </button>
+
         {emailCount > 0 && (
           <button
             type="button"

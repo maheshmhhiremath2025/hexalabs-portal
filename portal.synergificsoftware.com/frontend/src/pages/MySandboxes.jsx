@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import apiCaller from '../services/apiCaller';
 import {
   FaAws, FaCloud, FaGoogle,
@@ -64,7 +64,7 @@ function ExpiryTimer({ expiresAt }) {
   }, [expiresAt, calcRemaining]);
 
   if (!remaining || !expiresAt) return <span className="text-surface-400 text-sm">No expiry set</span>;
-  if (remaining.total <= 0) return <span className="text-red-600 font-medium text-sm">Expired</span>;
+  if (remaining.total <= 0) return <span className="text-red-600 font-medium text-sm">Access ended</span>;
 
   const isUrgent = remaining.total < 30 * 60 * 1000; // under 30 min
   const colorClass = isUrgent ? 'text-red-600' : 'text-surface-700';
@@ -86,9 +86,14 @@ function StatusBadge({ status, expiresAt }) {
   const isExpired = expMs && expMs <= now;
   const isExpiringSoon = expMs && !isExpired && (expMs - now) < 60 * 60 * 1000; // under 1 hour
 
+  // Two distinct lifecycles:
+  //   - Session: a single sandbox launch (4h TTL). After it ends → "Session ended"
+  //     (user can relaunch within the access window).
+  //   - Access: the engagement window itself (endDate). When that passes the IAM
+  //     user/sandbox doc is fully torn down — different state, different label.
   let label, classes;
   if (isExpired || status === 'expired') {
-    label = 'Expired';
+    label = 'Session ended';
     classes = 'bg-red-100 text-red-700';
   } else if (isExpiringSoon) {
     label = 'Expiring Soon';
@@ -176,13 +181,15 @@ function UsageIndicator({ hoursUsedToday = 0, dailyCapHours = 12 }) {
 /* ------------------------------------------------------------------ */
 /*  Sandbox card                                                       */
 /* ------------------------------------------------------------------ */
-function SandboxCard({ sandbox, onRelaunch, relaunchingId }) {
+function SandboxCard({ sandbox, onRelaunch, relaunchingId, resetProgress }) {
   const meta = CLOUD_META[sandbox.cloud] || CLOUD_META.aws;
   const { Icon, label, color, bg, border } = meta;
 
   const expMs = sandbox.expiresAt ? new Date(sandbox.expiresAt).getTime() : null;
   const isExpired = sandbox.status === 'expired' || (expMs && expMs <= Date.now());
   const isRelaunching = relaunchingId === `${sandbox.cloud}-${sandbox.templateSlug}`;
+  const rp = resetProgress && resetProgress[sandbox.projectId];
+  const isResetting = !!rp && (rp.status === 'resetting' || rp.status === 'queued');
 
   return (
     <div className={`rounded-xl border ${border} bg-white shadow-sm`}>
@@ -220,6 +227,38 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId }) {
         </div>
       </div>
 
+      {isResetting && (
+        <div className="px-5 py-4 border-b border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full" />
+              <span className="text-sm font-semibold text-blue-900">Resetting sandbox</span>
+            </div>
+            <span className="text-sm font-bold text-blue-700 tabular-nums">{rp.percent || 0}%</span>
+          </div>
+          <div className="w-full h-2 bg-blue-100 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                 style={{ width: (rp.percent || 0) + "%" }} />
+          </div>
+          <div className="mt-2 text-xs text-blue-800">
+            <div className="font-medium">{rp.currentPhase || 'Preparing…'}</div>
+            {rp.currentStep && <div className="text-blue-700/80">→ {rp.currentStep}</div>}
+            <div className="mt-1 text-blue-700/60">{rp.completed || 0} / {rp.total || 0} steps</div>
+          </div>
+          {Array.isArray(rp.log) && rp.log.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-[11px] text-blue-700 cursor-pointer select-none">recent activity</summary>
+              <div className="mt-1 max-h-24 overflow-y-auto text-[11px] font-mono text-blue-900/80 space-y-0.5">
+                {rp.log.slice(-8).reverse().map((e, i) => (
+                  <div key={i} className={e.ok ? '' : 'text-red-700'}>
+                    {e.ok ? '✓' : '✗'} {e.phase} / {e.step}{e.message ? ' — ' + e.message : ''}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
       <div className="px-5 py-4 space-y-4">
         {/* Credentials */}
         <div className="space-y-2.5">
@@ -256,6 +295,24 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId }) {
               <CopyButton text={sandbox.password} />
             </div>
           )}
+          {sandbox.accessKeyId && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-surface-500 w-20 flex-shrink-0">Access Key</span>
+              <code className="bg-surface-50 px-2 py-0.5 rounded text-surface-800 text-xs break-all">
+                {sandbox.accessKeyId}
+              </code>
+              <CopyButton text={sandbox.accessKeyId} />
+            </div>
+          )}
+          {sandbox.secretAccessKey && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-surface-500 w-20 flex-shrink-0">Secret Key</span>
+              <code className="bg-surface-50 px-2 py-0.5 rounded text-surface-800 text-xs break-all">
+                {sandbox.secretAccessKey}
+              </code>
+              <CopyButton text={sandbox.secretAccessKey} />
+            </div>
+          )}
         </div>
 
         {/* Region + Expiry */}
@@ -267,7 +324,7 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId }) {
             </div>
           )}
           <div className="text-sm">
-            <span className="text-surface-500">Expires: </span>
+            <span className="text-surface-500">Access ends: </span>
             <ExpiryTimer expiresAt={sandbox.expiresAt} />
           </div>
         </div>
@@ -293,10 +350,15 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId }) {
 /* ------------------------------------------------------------------ */
 export default function MySandboxes() {
   const [sandboxes, setSandboxes] = useState([]);
+  const [availableTemplates, setAvailableTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [relaunchingId, setRelaunchingId] = useState(null);
   const [relaunchMsg, setRelaunchMsg] = useState(null);
+  const [relaunchStartedAt, setRelaunchStartedAt] = useState(null);
+  const relaunchInFlightRef = useRef(false);
+  const [, setProgressTick] = useState(0);
+  const [resetProgress, setResetProgress] = useState({});
 
   const fetchSandboxes = useCallback(async () => {
     try {
@@ -311,16 +373,67 @@ export default function MySandboxes() {
     }
   }, []);
 
-  useEffect(() => { fetchSandboxes(); }, [fetchSandboxes]);
+  const fetchAvailableTemplates = useCallback(async () => {
+    try {
+      const res = await apiCaller.get('/user/available-sandbox-templates');
+      setAvailableTemplates(res.data.templates || []);
+    } catch {
+      // Non-critical — empty list just means no first-deploy buttons
+    }
+  }, []);
+
+  useEffect(() => { fetchSandboxes(); fetchAvailableTemplates(); }, [fetchSandboxes, fetchAvailableTemplates]);
+
+  // Path 3 — poll reset progress every 2s for any GCP sandbox that is resetting
+  useEffect(() => {
+    const gcpResetting = (sandboxes || []).filter(
+      s => s.cloud === 'gcp' && s.projectId && (s.reset?.status === 'resetting' || s.reset?.status === 'queued')
+    );
+    if (gcpResetting.length === 0) return;
+    let cancelled = false;
+    const tick = async () => {
+      const updates = {};
+      await Promise.all(gcpResetting.map(async (s) => {
+        try {
+          const r = await apiCaller.get('/user/sandbox-reset-progress', { params: { cloud: 'gcp', projectId: s.projectId } });
+          updates[s.projectId] = r.data;
+        } catch { /* ignore transient */ }
+      }));
+      if (!cancelled) {
+        setResetProgress(prev => ({ ...prev, ...updates }));
+        // If all done, refresh sandbox list
+        const allDone = Object.values(updates).every(u => u.status === 'ready' || u.status === 'failed');
+        if (allDone && Object.keys(updates).length > 0) await fetchSandboxes();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [sandboxes, fetchSandboxes]);
+
+
+  // Tick every 1s while a relaunch is in flight so the progress label updates
+  useEffect(() => {
+    if (!relaunchingId) return;
+    const t = setInterval(() => setProgressTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [relaunchingId]);
 
   const handleRelaunch = async (sandbox) => {
+    // Synchronous guard against rapid double-clicks. The disabled-prop on the
+    // button only takes effect on the next render (~16ms gap), and a fast
+    // clicker can fire two events before that. A ref reads instantly.
+    if (relaunchInFlightRef.current) return;
+    relaunchInFlightRef.current = true;
+
     const id = `${sandbox.cloud}-${sandbox.templateSlug}`;
     setRelaunchingId(id);
+    setRelaunchStartedAt(Date.now());
     setRelaunchMsg(null);
 
     try {
       const body = { cloud: sandbox.cloud, templateSlug: sandbox.templateSlug };
-      if (sandbox.cloud === 'gcp') body.email = sandbox.username;
+      if (sandbox.cloud === 'gcp') body.email = sandbox.username || sandbox.googleEmail;
 
       const res = await apiCaller.post('/user/relaunch-sandbox', body);
       setRelaunchMsg({
@@ -348,7 +461,40 @@ export default function MySandboxes() {
       }
     } finally {
       setRelaunchingId(null);
+      setRelaunchStartedAt(null);
+      relaunchInFlightRef.current = false;
     }
+  };
+
+  // Estimated provisioning progress label — shown under the relaunch spinner
+  const provisioningProgress = (cloud) => {
+    if (!relaunchStartedAt) return null;
+    const sec = (Date.now() - relaunchStartedAt) / 1000;
+    const ESTIMATED = cloud === 'gcp' ? 180 : 90;   // GCP projects take ~3 min, others ~90s
+    let label = 'Submitting request...';
+    if (cloud === 'gcp') {
+      if (sec > 120) label = 'Finalizing IAM bindings...';
+      else if (sec > 60) label = 'Applying org policies...';
+      else if (sec > 20) label = 'Creating GCP project...';
+    } else if (cloud === 'azure') {
+      if (sec > 60) label = 'Assigning IAM role...';
+      else if (sec > 30) label = 'Creating resource group...';
+      else if (sec > 10) label = 'Creating Azure AD user...';
+    } else if (cloud === 'aws') {
+      if (sec > 30) label = 'Attaching IAM policies...';
+      else if (sec > 10) label = 'Creating IAM user...';
+    } else if (cloud === 'oci') {
+      if (sec > 60) label = 'Provisioning compartment policies...';
+      else if (sec > 20) label = 'Creating OCI compartment...';
+    }
+    return { sec, pct: Math.min(95, Math.round((sec / ESTIMATED) * 100)), label };
+  };
+
+  // First-sandbox deploy — same code path as relaunch but synthesized from a template
+  const handleDeployFirst = async (template) => {
+    const cloud = template.cloud;
+    const fakeSandbox = { cloud, templateSlug: template.slug };
+    return handleRelaunch(fakeSandbox);
   };
 
   if (loading) {
@@ -394,11 +540,53 @@ export default function MySandboxes() {
         </div>
       )}
 
+      {/* Provisioning progress indicator — shown above cards while a relaunch/first-deploy is in flight */}
+      {relaunchingId && relaunchStartedAt && (() => {
+        const cloudPart = relaunchingId.split('-')[0];
+        const p = provisioningProgress(cloudPart);
+        if (!p) return null;
+        return (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-sm font-semibold text-blue-800">{p.label}</span>
+              <span className="text-xs text-blue-600 tabular-nums">{p.pct}% · {Math.floor(p.sec)}s elapsed</span>
+            </div>
+            <div className="w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+              <div className="h-1.5 rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${p.pct}%` }} />
+            </div>
+            <p className="text-[11px] text-blue-700 mt-1.5">Provisioning a fresh cloud sandbox for you. Don't refresh — this typically takes 1-3 minutes.</p>
+          </div>
+        );
+      })()}
+
       {sandboxes.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-surface-200">
           <FaCubes className="mx-auto text-3xl text-surface-300 mb-3" />
-          <p className="text-surface-500 text-sm">No active sandboxes found.</p>
-          <p className="text-surface-400 text-xs mt-1">Your instructor will provision sandboxes when your lab session begins.</p>
+          <p className="text-surface-500 text-sm">No active sandboxes yet.</p>
+          {availableTemplates.length > 0 ? (
+            <>
+              <p className="text-surface-400 text-xs mt-1 mb-4">Click below to deploy your first sandbox. It auto-cleans after its TTL.</p>
+              <div className="flex flex-col items-center gap-2">
+                {availableTemplates.map(tpl => {
+                  const id = `${tpl.cloud}-${tpl.slug}`;
+                  const isInFlight = relaunchingId === id;
+                  return (
+                    <button
+                      key={tpl.slug}
+                      onClick={() => handleDeployFirst(tpl)}
+                      disabled={!!relaunchingId}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {isInFlight ? <FaRedo className="animate-spin w-3 h-3" /> : <FaCubes className="w-3 h-3" />}
+                      Deploy {tpl.name} ({tpl.cloud.toUpperCase()})
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="text-surface-400 text-xs mt-1">Your instructor will provision sandboxes when your lab session begins.</p>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -408,6 +596,7 @@ export default function MySandboxes() {
               sandbox={sb}
               onRelaunch={handleRelaunch}
               relaunchingId={relaunchingId}
+              resetProgress={resetProgress}
             />
           ))}
         </div>

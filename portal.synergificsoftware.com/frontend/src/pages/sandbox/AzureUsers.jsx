@@ -1,17 +1,15 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import apiCaller from '../../services/apiCaller';
-import { FaMicrosoft, FaTrash, FaSpinner, FaRocket, FaDownload, FaUsers, FaUserPlus, FaExclamationTriangle } from 'react-icons/fa';
+import { FaMicrosoft, FaTrash, FaKey, FaSpinner, FaRocket, FaDownload, FaUsers, FaUserPlus, FaExclamationTriangle } from 'react-icons/fa';
 import { CreateUserModal, BulkUserCreateModal } from '../../components/modal/SandboxAZ';
 import BulkEmailInput from '../../components/BulkEmailInput';
 
 const TTL_OPTIONS = [
     { label: '2 hours', value: 2 },
+    { label: '3 hours', value: 3 },
     { label: '4 hours', value: 4 },
     { label: '8 hours', value: 8 },
-    { label: '12 hours', value: 12 },
-    { label: '24 hours', value: 24 },
-    { label: '48 hours', value: 48 },
-    { label: '72 hours', value: 72 },
+    { label: 'No cleanup (until expiry)', value: 0 },
 ];
 
 const REGION_OPTIONS = [
@@ -20,7 +18,7 @@ const REGION_OPTIONS = [
     { label: 'West US', value: 'westus' },
 ];
 
-const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
+const AzureUsers = ({ userDetails, apiRoutes, superadminApiRoutes }) => {
     const [users, setUsers] = useState([]);
     const [bulkUsers, setBulkUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -37,33 +35,109 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
     const [templates, setTemplates] = useState([]);
     const [selectedTemplateSlug, setSelectedTemplateSlug] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState(null);
-    const [ttlHours, setTtlHours] = useState(4);
+    const [ttlHours, setTtlHours] = useState(3);
     const [dailyCapHours, setDailyCapHours] = useState(12);
     const [totalCapHours, setTotalCapHours] = useState(0);
+    const [batchExpiresAt, setBatchExpiresAt] = useState('');
+    const [orgs, setOrgs] = useState([]);
+    const [selectedOrg, setSelectedOrg] = useState('');
+    const [filterOrg, setFilterOrg] = useState('');         // org filter for the user list (superadmin)
+    const [selectedEmails, setSelectedEmails] = useState(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+    const isSuper = userDetails?.userType === 'superadmin';
     const [deployRegion, setDeployRegion] = useState('southindia');
     const [deployEmails, setDeployEmails] = useState('');
     const [deploying, setDeploying] = useState(false);
     const [deployResults, setDeployResults] = useState(null);
-    const [filterTemplate, setFilterTemplate] = useState('all');
 
     const pollRef = useRef(null);
 
     const fetchUsers = useCallback(async (silent = false) => {
+        // Superadmin must pick an org first — never show the "all orgs" mega-list by default.
+        if (isSuper && !filterOrg) {
+            setUsers([]);
+            setSelectedEmails(new Set());
+            if (!silent) setLoading(false);
+            return;
+        }
         if (!silent) setLoading(true);
         try {
-            const res = await apiCaller.get(superadminApiRoutes.sandboxUserApi);
+            const url = isSuper && filterOrg
+                ? `${superadminApiRoutes.sandboxUserApi}?organization=${encodeURIComponent(filterOrg)}`
+                : superadminApiRoutes.sandboxUserApi;
+            const res = await apiCaller.get(url);
             setUsers(res.data);
+            setSelectedEmails(new Set());
         } catch {
             if (!silent) setError('Error fetching Azure sandbox users.');
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [superadminApiRoutes]);
+    }, [superadminApiRoutes, isSuper, filterOrg]);
 
     useEffect(() => {
         fetchUsers();
         fetchTemplates();
+        if (userDetails?.userType === 'superadmin') {
+            apiCaller.get('/admin/organization')
+                .then(r => setOrgs(r.data?.organization || []))
+                .catch(() => {});
+        }
     }, []);
+
+    // Re-fetch when superadmin changes the org filter
+    useEffect(() => {
+        if (isSuper) fetchUsers();
+    }, [filterOrg]);
+
+    const toggleSelected = (email) => {
+        setSelectedEmails(prev => {
+            const next = new Set(prev);
+            if (next.has(email)) next.delete(email); else next.add(email);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        setSelectedEmails(prev => {
+            if (prev.size === users.length) return new Set();
+            return new Set(users.map(u => u.email));
+        });
+    };
+
+    const handleBulkDelete = async () => {
+        const emails = [...selectedEmails];
+        if (emails.length === 0) return;
+        if (!window.confirm(`Delete ${emails.length} Azure sandbox user(s)?\n\nThis will tear down their Azure resource groups + Azure AD users + Mongo records. Cannot be undone.`)) return;
+        setBulkDeleting(true);
+        setError(null); setSuccess(null);
+        try {
+            const res = await apiCaller.post('/sandbox/bulk-delete-users', { cloud: 'azure', emails });
+            const jobId = res.data?.jobId;
+            if (!jobId) throw new Error('No jobId returned');
+            let attempts = 0;
+            const poll = setInterval(async () => {
+                attempts++;
+                if (attempts > 180) { clearInterval(poll); setBulkDeleting(false); setError('Bulk delete timed out'); return; }
+                try {
+                    const s = await apiCaller.get(`/sandbox/bulk-delete-status/${jobId}`);
+                    if (s.data?.status === 'done' || s.data?.status === 'failed') {
+                        clearInterval(poll);
+                        setBulkDeleting(false);
+                        const ok = s.data.completed || 0;
+                        const total = s.data.total || emails.length;
+                        const failedCount = s.data.failed || 0;
+                        setSuccess(`Bulk delete: ${ok}/${total} succeeded${failedCount ? `, ${failedCount} failed` : ''}`);
+                        setSelectedEmails(new Set());
+                        fetchUsers();
+                    }
+                } catch {}
+            }, 2000);
+        } catch (e) {
+            setBulkDeleting(false);
+            setError(`Bulk delete failed: ${e.response?.data?.error || e.message}`);
+        }
+    };
 
     // Auto-poll when any user has deletionStatus === 'deleting'
     useEffect(() => {
@@ -120,6 +194,10 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
         const emails = getEmailList();
         if (!selectedTemplateSlug || emails.length === 0) return;
 
+        if (isSuper && !selectedOrg) {
+            setError('Please select an Organization to deploy to.');
+            return;
+        }
         setDeploying(true);
         setError(null);
         setSuccess(null);
@@ -133,10 +211,12 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                 region: deployRegion,
                 dailyCapHours,
                 totalCapHours,
+                batchExpiresAt: batchExpiresAt || null,
+                organization: selectedOrg || undefined,
             });
             const data = res.data;
             setDeployResults(data);
-            setSuccess(`Deployed ${data.deployed ?? 0} of ${data.total} Azure sandboxes from "${data.templateName || selectedTemplateSlug}".`);
+            setSuccess(`Deployed ${data.deployed || data.succeeded} of ${data.total} Azure sandboxes from "${data.templateName || selectedTemplateSlug}".`);
             if (data.failed > 0) {
                 setError(`${data.failed} deployment(s) failed.`);
             }
@@ -167,6 +247,23 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
             setError('Error deleting sandbox.');
         } finally {
             setDeleting(null);
+        }
+    };
+
+    
+    const [resettingUser, setResettingUser] = useState(null);
+    const handleResetPassword = async (email) => {
+        if (!window.confirm(`Reset password for ${email}?\n\nNew password will be: Welcome1234!\nShare it with the learner via your usual channel.`)) return;
+        setResettingUser(email);
+        setError(null);
+        try {
+            await apiCaller.patch(superadminApiRoutes.usersApi, { email, resetPassword: true });
+            setSuccess(`Password reset for ${email}. New password: Welcome1234!`);
+            setTimeout(() => setSuccess(null), 6000);
+        } catch (e) {
+            setError(`Could not reset ${email}. ${e.response?.data?.message || ''}`);
+        } finally {
+            setResettingUser(null);
         }
     };
 
@@ -279,22 +376,6 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                     </h1>
                     <p className="text-sm text-gray-500 mt-0.5">Manage Azure sandbox users and resource groups</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        className="p-2 bg-gray-900 text-white rounded-full hover:bg-gray-700"
-                        onClick={() => setShowForm(true)}
-                        title="Add New User"
-                    >
-                        <FaUserPlus />
-                    </button>
-                    <button
-                        className="p-2 bg-gray-900 text-white rounded-full hover:bg-gray-700"
-                        onClick={() => setShowBulkForm(true)}
-                        title="Bulk Add Users"
-                    >
-                        <FaUsers />
-                    </button>
-                </div>
             </div>
 
             {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
@@ -308,6 +389,24 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Org picker — superadmin only; admin role is server-pinned to their own org */}
+                        {isSuper && (
+                            <div>
+                                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                    Deploy to Organization
+                                </label>
+                                <select
+                                    value={selectedOrg}
+                                    onChange={(e) => setSelectedOrg(e.target.value)}
+                                    className="w-full appearance-none px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                                >
+                                    <option value="">Select an organization...</option>
+                                    {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Required. Sandboxes will be visible to this org's admin.</p>
+                            </div>
+                        )}
+
                         {/* Template dropdown */}
                         <div>
                             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
@@ -357,6 +456,20 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
+                        </div>
+
+                        {/* Batch end date — hard cutoff, IAM + DB record permanently deleted after */}
+                        <div>
+                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Batch ends on
+                            </label>
+                            <input
+                                type="datetime-local"
+                                value={batchExpiresAt}
+                                onChange={(e) => setBatchExpiresAt(e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Optional. After this date, the user is permanently deleted.</p>
                         </div>
 
                         {/* Daily cap */}
@@ -462,7 +575,7 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                         <div className="border border-gray-200 rounded-lg overflow-hidden">
                             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-gray-600">
-                                    Deploy Results: {deployResults.deployed ?? 0} succeeded, {deployResults.failed} failed
+                                    Deploy Results: {deployResults.deployed || deployResults.succeeded} succeeded, {deployResults.failed} failed
                                 </span>
                                 <button onClick={() => {
                                     const rows = [['Email','Login URL','Username','Password','Resource Group','Expires At'].join(',')];
@@ -521,69 +634,77 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
 
             {/* Users table */}
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
+                <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
                     <h3 className="text-sm font-semibold text-gray-800">Users ({users.length})</h3>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                        Microsoft Azure
-                    </span>
-                </div>
-
-                {/* Template filter tabs */}
-                {users.length > 0 && (
-                    <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-1 overflow-x-auto">
-                        {[
-                            { key: 'all', label: 'All' },
-                            { key: 'azure-sandbox', label: 'Sandbox' },
-                            { key: 'azure-databricks', label: 'Databricks' },
-                            { key: 'azure-openai', label: 'OpenAI' },
-                            { key: 'self-service', label: 'Self-Service' },
-                        ].map(tab => {
-                            const count = tab.key === 'all' ? users.length
-                                : tab.key === 'self-service'
-                                    ? users.filter(u => !u.usageSessions?.length || u.usageSessions.every(s => !s.templateSlug)).length
-                                    : users.filter(u => u.usageSessions?.some(s => s.templateSlug === tab.key)).length;
-                            return (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => setFilterTemplate(tab.key)}
-                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                                        filterTemplate === tab.key
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-600 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    {tab.label} ({count})
-                                </button>
-                            );
-                        })}
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {isSuper && (
+                            <select
+                                value={filterOrg}
+                                onChange={e => setFilterOrg(e.target.value)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                title="Filter by organization"
+                            >
+                                <option value="">— Select organization —</option>
+                                {orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        )}
+                        {selectedEmails.size > 0 && (
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={bulkDeleting}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 transition-colors"
+                            >
+                                {bulkDeleting ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
+                                Delete {selectedEmails.size} selected
+                            </button>
+                        )}
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200">
+                            Microsoft Azure
+                        </span>
                     </div>
-                )}
-
+                </div>
                 {loading ? (
                     <div className="px-5 py-10 text-center"><FaSpinner className="animate-spin inline text-gray-400" /></div>
+                ) : isSuper && !filterOrg ? (
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">Select an organization above to view its sandbox users.</div>
                 ) : users.length === 0 ? (
-                    <div className="px-5 py-10 text-center text-sm text-gray-400">No Azure sandbox users yet</div>
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">No Azure sandbox users in this organization.</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-[13px]">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200">
-                                    {['Email', 'User ID', 'Template', 'Credits', 'Start', 'End', ''].map(h => (
+                                    <th className="px-3 py-2.5 text-left">
+                                        <input
+                                            type="checkbox"
+                                            checked={users.length > 0 && selectedEmails.size === users.length}
+                                            onChange={toggleSelectAll}
+                                            className="rounded border-gray-300"
+                                            title="Select all"
+                                        />
+                                    </th>
+                                    {['Email', 'User ID', 'Session TTL', 'Batch Expires', 'Start', 'Latest Session End', ''].map(h => (
                                         <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {users.filter(u => {
-                                    if (filterTemplate === 'all') return true;
-                                    if (filterTemplate === 'self-service') return !u.usageSessions?.length || u.usageSessions.every(s => !s.templateSlug);
-                                    return u.usageSessions?.some(s => s.templateSlug === filterTemplate);
-                                }).map(u => {
+                                {users.map(u => {
                                     const expired = u.endDate && new Date(u.endDate) < new Date();
+                                    const batchExpired = u.batchExpiresAt && new Date(u.batchExpiresAt) < new Date();
                                     const isDeleting = u.deletionStatus === 'deleting';
                                     const deleteFailed = u.deletionStatus === 'failed';
                                     return (
                                         <tr key={u._id} className={`hover:bg-gray-50/50 ${isDeleting ? 'opacity-50' : ''}`}>
+                                            <td className="px-3 py-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedEmails.has(u.email)}
+                                                    onChange={() => toggleSelected(u.email)}
+                                                    disabled={isDeleting}
+                                                    className="rounded border-gray-300"
+                                                />
+                                            </td>
                                             <td className="px-4 py-2.5">
                                                 <div className="font-medium text-gray-800">{u.email}</div>
                                                 {isDeleting && (
@@ -598,14 +719,14 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-2.5 font-mono text-gray-700">{u.userId || '-'}</td>
-                                            <td className="px-4 py-2.5 text-gray-600">
-                                                {u.usageSessions?.length > 0 && u.usageSessions[u.usageSessions.length - 1].templateSlug
-                                                    ? <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 rounded">
-                                                        {({ 'azure-sandbox': 'Sandbox', 'azure-databricks': 'Databricks', 'azure-openai': 'OpenAI' })[u.usageSessions[u.usageSessions.length - 1].templateSlug] || u.usageSessions[u.usageSessions.length - 1].templateSlug}
-                                                      </span>
-                                                    : u.duration ? `${u.duration} days` : <span className="text-gray-400 text-[10px]">Self-Service</span>}
+                                            <td className="px-4 py-2.5 text-gray-600">{u.sandboxTtlHours ? `${u.sandboxTtlHours}h` : '-'}</td>
+                                            <td className="px-4 py-2.5">
+                                                <span className={batchExpired ? 'text-red-500 font-semibold' : 'text-gray-700'}>
+                                                    {u.batchExpiresAt
+                                                        ? new Date(u.batchExpiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                                                        : <span className="text-gray-400 italic">no expiry</span>}
+                                                </span>
                                             </td>
-                                            <td className="px-4 py-2.5 text-gray-600">{u.credits ? `${u.credits.consumed} / ${u.credits.total}` : '-'}</td>
                                             <td className="px-4 py-2.5 text-gray-500">
                                                 {u.startDate ? new Date(u.startDate).toLocaleString('en-IN') : '-'}
                                             </td>
@@ -617,7 +738,15 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                                             <td className="px-4 py-2.5 text-right">
                                                 {isDeleting ? (
                                                     <FaSpinner className="w-3 h-3 animate-spin text-gray-400 inline" />
-                                                ) : (
+                                                ) : (<>
+                                                                                                    <button
+                                                        onClick={() => handleResetPassword(u.email)}
+                                                        disabled={resettingUser === u.email}
+                                                        title="Reset password to Welcome1234!"
+                                                        className="p-1.5 mr-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {resettingUser === u.email ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaKey className="w-3 h-3" />}
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDeleteUser(u.email)}
                                                         disabled={deletingUser === u.email}
@@ -626,7 +755,7 @@ const AzureUsers = ({ apiRoutes, superadminApiRoutes }) => {
                                                     >
                                                         {deletingUser === u.email ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaTrash className="w-3 h-3" />}
                                                     </button>
-                                                )}
+                                                </>)}
                                             </td>
                                         </tr>
                                     );

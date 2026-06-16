@@ -19,6 +19,40 @@ const Container = require('../models/container');
 const Training = require('../models/training');
 const { logger } = require('../plugins/logger');
 
+// Minimum lab time (minutes) to count a learner as having COMPLETED the lab — gates
+// the participant-table pill, the engagement %, the top-tile count, AND the cert page.
+// Single source of truth: keep all four in sync.
+const MIN_CERT_MINUTES = 5;
+
+// Live-corrected duration helper — vm.duration only updates on stop, so for
+// currently-running VMs we add the time since the latest log entry opened to
+// keep certificate hours honest before the lab actually ends.
+function getEffectiveDuration(inst) {
+  let total = inst.duration || 0; // minutes
+  if (inst.isRunning && inst.logs && inst.logs.length) {
+    const lastLog = inst.logs[inst.logs.length - 1];
+    if (lastLog.start && !lastLog.stop) {
+      const liveMinutes = Math.floor((Date.now() - new Date(lastLog.start).getTime()) / 60000);
+      total += Math.max(0, liveMinutes);
+    }
+  }
+  return total;
+}
+
+// Returns true if getEffectiveDuration relied on a long-open log entry — i.e.
+// the duration includes >4h of live wall-clock time on top of the recorded
+// duration field. Almost always means a missed stop event (host crash, Spot
+// eviction, snapshot+delete without log closure). Reports should mark such
+// rows as estimated so consumers know the number is a lower bound estimate. /* estimated-flag-2026-05-27 */
+function isDurationEstimated(inst) {
+  if (!inst.isRunning || !inst.logs || !inst.logs.length) return false;
+  const last = inst.logs[inst.logs.length - 1];
+  if (!last.start || last.stop) return false;
+  const liveMinutes = Math.floor((Date.now() - new Date(last.start).getTime()) / 60000);
+  return liveMinutes > 240; // > 4h open
+}
+
+
 /**
  * Gather activity data for a training batch.
  */
@@ -38,7 +72,7 @@ async function getTrainingActivity(trainingName, organization) {
     if (!studentMap[email]) {
       studentMap[email] = {
         email,
-        totalSeconds: 0,
+        totalMinutes: 0,
         sessions: 0,
         firstLogin: null,
         lastActivity: null,
@@ -47,13 +81,13 @@ async function getTrainingActivity(trainingName, organization) {
       };
     }
     const s = studentMap[email];
-    s.totalSeconds += inst.duration || 0;
+    s.totalMinutes += getEffectiveDuration(inst);
     s.sessions += (inst.logs || []).length;
     s.instances.push({
       name: inst.name,
       type: inst.type === 'container' ? 'Container' : 'VM',
       os: inst.os || inst.image || '—',
-      duration: inst.duration || 0,
+      duration: getEffectiveDuration(inst), estimated: isDurationEstimated(inst), /* estimated-wire-2026-05-27 */
       isAlive: inst.isAlive,
     });
 
@@ -71,9 +105,9 @@ async function getTrainingActivity(trainingName, organization) {
     }
   }
 
-  const students = Object.values(studentMap).sort((a, b) => b.totalSeconds - a.totalSeconds);
-  const totalHours = students.reduce((s, st) => s + st.totalSeconds, 0) / 3600;
-  const activeStudents = students.filter(s => s.totalSeconds > 0).length;
+  const students = Object.values(studentMap).sort((a, b) => b.totalMinutes - a.totalMinutes);
+  const totalHours = students.reduce((s, st) => s + st.totalMinutes, 0) / 60;
+  const activeStudents = students.filter(s => s.totalMinutes >= MIN_CERT_MINUTES).length;
 
   return {
     trainingName,
@@ -91,171 +125,413 @@ async function getTrainingActivity(trainingName, organization) {
  */
 async function generateReportPDF(trainingName, organization) {
   const data = await getTrainingActivity(trainingName, organization);
+  const branding = await loadBranding(data.organization);
+  const directorName = await loadDirectorName(data.organization);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 0,
+      bufferPages: true,
+      info: {
+        Title: `Lab Activity Report — ${data.trainingName}`,
+        Author: branding.companyName,
+        Subject: `Lab usage report and certificates for ${data.trainingName}`,
+        Keywords: 'lab,training,report,certificate'
+      }
+    });
+    // Register handwritten signature font (Caveat — Google Fonts, OFL).
+    // Falls back to Times-Italic on disk-read error so render never fails.
+    let SIG_FONT = 'Times-Italic';
+    try {
+      const path = require('path');
+      const fontPath = path.join(__dirname, '..', 'assets', 'fonts', 'Caveat.ttf');
+      doc.registerFont('Signature', fontPath);
+      SIG_FONT = 'Signature';
+    } catch (e) {
+      logger.warn(`[labReport] Signature font load failed: ${e.message}`);
+    }
+    const INK_BLUE = '#1e3a8a';
+
     const chunks = [];
-    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('data', c => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const blue = '#2563eb';
-    const gray = '#6b7280';
-    const dark = '#111827';
+    const PRIMARY = branding.primaryColor;
+    const ACCENT = branding.accentColor || PRIMARY;
+    const COMPANY = branding.companyName;
+    const PAGE_W = doc.page.width;
+    const PAGE_H = doc.page.height;
+    const MARGIN_X = 50;
 
-    // Header
-    doc.fontSize(10).fillColor(gray).text('HexaLabs Cloud Portal', 50, 50);
-    doc.fontSize(10).fillColor(gray).text(`Generated: ${data.generatedAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`, 50, 50, { align: 'right' });
+    // Soft palette derived from PRIMARY
+    const INK = '#0f172a';        // slate-900
+    const MUTED = '#64748b';      // slate-500
+    const LINE = '#e2e8f0';       // slate-200
+    const ZEBRA = '#f8fafc';      // slate-50
+    const SUCCESS = '#10b981';
+    const DANGER = '#ef4444';
+    const TILE_BG = tintHex(PRIMARY, 0.12);
+    const HEADER_TEXT = '#ffffff';
 
-    doc.moveDown(2);
-    doc.fontSize(22).fillColor(dark).text('Lab Activity Report', { align: 'center' });
-    doc.moveDown(0.3);
-    doc.fontSize(12).fillColor(gray).text(`${data.trainingName} — ${data.organization}`, { align: 'center' });
+    // ====== PAGE 1: Activity Report ======
+    // Top color band
+    doc.rect(0, 0, PAGE_W, 90).fill(PRIMARY);
+    // Subtle accent stripe under band
+    doc.rect(0, 90, PAGE_W, 4).fill(ACCENT);
 
-    // Summary strip
-    doc.moveDown(1.5);
-    const summaryY = doc.y;
-    doc.fontSize(9).fillColor(gray);
+    // Company name on band, top-left
+    doc.fillColor(HEADER_TEXT).font('Helvetica-Bold').fontSize(11)
+      .text(COMPANY.toUpperCase(), MARGIN_X, 28, { width: PAGE_W - MARGIN_X * 2, characterSpacing: 1.2 });
+    // Date on band, top-right
+    doc.fillColor(HEADER_TEXT).font('Helvetica').fontSize(9)
+      .text(`Generated ${data.generatedAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'long', timeStyle: 'short' })} IST`,
+        MARGIN_X, 28, { width: PAGE_W - MARGIN_X * 2, align: 'right' });
 
-    const cols = [
-      { label: 'STUDENTS', value: String(data.totalStudents) },
-      { label: 'ACTIVE', value: String(data.activeStudents) },
-      { label: 'TOTAL HOURS', value: `${data.totalHours}h` },
-      { label: 'ENGAGEMENT', value: data.totalStudents > 0 ? `${Math.round(data.activeStudents / data.totalStudents * 100)}%` : '—' },
+    // Hero title on band
+    doc.fillColor(HEADER_TEXT).font('Helvetica-Bold').fontSize(22)
+      .text('Lab Activity Report', MARGIN_X, 50, { width: PAGE_W - MARGIN_X * 2 });
+
+    // Training subtitle below band
+    doc.fillColor(INK).font('Helvetica-Bold').fontSize(13)
+      .text(data.trainingName, MARGIN_X, 115);
+    doc.fillColor(MUTED).font('Helvetica').fontSize(10)
+      .text(`Training program · ${data.totalStudents} learners · Auto-generated from live usage data`,
+        MARGIN_X, 132);
+
+    // ===== Summary tiles row =====
+    const tilesY = 165;
+    const tilesH = 70;
+    const gap = 12;
+    const tileW = (PAGE_W - MARGIN_X * 2 - gap * 3) / 4;
+    const tiles = [
+      { label: 'LEARNERS', value: String(data.totalStudents) },
+      { label: 'COMPLETED', value: String(data.activeStudents) },
+      { label: 'HOURS LOGGED', value: `${data.totalHours}` },
+      {
+        label: 'ENGAGEMENT',
+        value: data.totalStudents > 0
+          ? `${Math.round(data.activeStudents / data.totalStudents * 100)}%`
+          : '—'
+      },
     ];
-
-    const colWidth = 120;
-    const startX = 50 + (doc.page.width - 100 - colWidth * cols.length) / 2;
-    cols.forEach((col, i) => {
-      const x = startX + i * colWidth;
-      doc.fontSize(8).fillColor(gray).text(col.label, x, summaryY, { width: colWidth });
-      doc.fontSize(16).fillColor(dark).text(col.value, x, summaryY + 12, { width: colWidth });
+    // Multi-color tile palette: customer brand → emerald → violet → amber
+    const tilePalette = [
+      { stripe: PRIMARY,   bg: tintHex(PRIMARY,   0.10), num: darkenHex(PRIMARY, 0.20) },
+      { stripe: '#10B981', bg: tintHex('#10B981', 0.12), num: '#047857' },
+      { stripe: '#7C3AED', bg: tintHex('#7C3AED', 0.10), num: '#5B21B6' },
+      { stripe: '#F59E0B', bg: tintHex('#F59E0B', 0.14), num: '#B45309' },
+    ];
+    tiles.forEach((t, i) => {
+      const x = MARGIN_X + i * (tileW + gap);
+      const c = tilePalette[i];
+      // Card background
+      doc.roundedRect(x, tilesY, tileW, tilesH, 8).fill(c.bg);
+      // Left accent stripe (4px wide, full height) — gives the multi-color rhythm
+      doc.rect(x, tilesY, 4, tilesH).fill(c.stripe);
+      // Big number in accent dark variant for readability
+      doc.fillColor(c.num).font('Helvetica-Bold').fontSize(26)
+        .text(t.value, x + 4, tilesY + 14, { width: tileW - 4, align: 'center' });
+      // Label below
+      doc.fillColor(MUTED).font('Helvetica-Bold').fontSize(7.5)
+        .text(t.label, x + 4, tilesY + 50, { width: tileW - 4, align: 'center', characterSpacing: 1.5 });
     });
 
-    doc.y = summaryY + 45;
+    // ===== Participants table =====
+    let y = tilesY + tilesH + 30;
+    doc.fillColor(INK).font('Helvetica-Bold').fontSize(14).text('Participants', MARGIN_X, y);
+    // Accent underline beneath the section heading
+    doc.rect(MARGIN_X, y + 19, 30, 2.5).fill(PRIMARY);
+    y += 28;
 
-    // Divider
-    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor('#e5e7eb').stroke();
-    doc.moveDown(1);
+    const col = {
+      learner: { x: MARGIN_X + 12, w: 180 },
+      hours:   { x: MARGIN_X + 200, w: 50, align: 'right' },
+      sessions:{ x: MARGIN_X + 260, w: 60, align: 'right' },
+      first:   { x: MARGIN_X + 335, w: 65 },
+      status:  { x: MARGIN_X + 410, w: 75, align: 'right' },
+    };
+    const rowH = 24;
 
-    // Student table header
-    const tableTop = doc.y;
-    doc.fontSize(8).fillColor(gray);
-    doc.text('STUDENT', 50, tableTop, { width: 180 });
-    doc.text('HOURS', 240, tableTop, { width: 60, align: 'right' });
-    doc.text('SESSIONS', 310, tableTop, { width: 60, align: 'right' });
-    doc.text('FIRST LOGIN', 380, tableTop, { width: 90 });
-    doc.text('STATUS', 480, tableTop, { width: 60, align: 'right' });
-
-    doc.moveTo(50, tableTop + 14).lineTo(doc.page.width - 50, tableTop + 14).strokeColor('#e5e7eb').stroke();
-
-    let rowY = tableTop + 20;
-    for (const student of data.students) {
-      if (rowY > doc.page.height - 100) {
-        doc.addPage();
-        rowY = 50;
-      }
-
-      const hours = Math.round(student.totalSeconds / 3600 * 10) / 10;
-      const status = hours > 0 ? 'Active' : 'No login';
-      const statusColor = hours > 0 ? '#059669' : '#ef4444';
-      const firstLogin = student.firstLogin
-        ? student.firstLogin.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-        : '—';
-
-      doc.fontSize(9).fillColor(dark).text(student.email, 50, rowY, { width: 180 });
-      doc.fontSize(9).fillColor(dark).text(`${hours}h`, 240, rowY, { width: 60, align: 'right' });
-      doc.fontSize(9).fillColor(dark).text(String(student.sessions), 310, rowY, { width: 60, align: 'right' });
-      doc.fontSize(9).fillColor(gray).text(firstLogin, 380, rowY, { width: 90 });
-      doc.fontSize(8).fillColor(statusColor).text(status, 480, rowY, { width: 60, align: 'right' });
-
-      rowY += 18;
-    }
+    // Table header bar
+    doc.rect(MARGIN_X, y, PAGE_W - MARGIN_X * 2, rowH).fill(PRIMARY);
+    doc.fillColor(HEADER_TEXT).font('Helvetica-Bold').fontSize(8.5);
+    const hY = y + 8;
+    doc.text('LEARNER',     col.learner.x, hY, { width: col.learner.w, characterSpacing: 1 });
+    doc.text('HOURS',       col.hours.x, hY,   { width: col.hours.w, align: col.hours.align, characterSpacing: 1 });
+    doc.text('SESSIONS',    col.sessions.x, hY,{ width: col.sessions.w, align: col.sessions.align, characterSpacing: 1 });
+    doc.text('FIRST LOGIN', col.first.x, hY,   { width: col.first.w, characterSpacing: 1 });
+    doc.text('STATUS',      col.status.x, hY,  { width: col.status.w, align: col.status.align, characterSpacing: 1 });
+    y += rowH;
 
     if (data.students.length === 0) {
-      doc.fontSize(10).fillColor(gray).text('No student data available for this training.', 50, rowY + 10);
+      doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(10)
+        .text('No learners recorded for this training yet.', MARGIN_X, y + 16, { width: PAGE_W - MARGIN_X * 2, align: 'center' });
     }
 
-    // Footer
-    doc.moveDown(3);
-    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor('#e5e7eb').stroke();
-    doc.moveDown(0.5);
-    doc.fontSize(8).fillColor(gray).text(
-      `This report was auto-generated from actual lab usage data recorded by HexaLabs Cloud Portal. No manual input or self-reporting.`,
-      50, doc.y, { width: doc.page.width - 100, align: 'center' }
-    );
+    data.students.forEach((s, i) => {
+      // Page break for long rosters
+      if (y > PAGE_H - 90) {
+        doc.addPage();
+        y = MARGIN_X + 10;
+      }
+      // Zebra
+      if (i % 2 === 0) {
+        doc.rect(MARGIN_X, y, PAGE_W - MARGIN_X * 2, rowH).fill(ZEBRA);
+      }
+      const hours = Math.round(s.totalMinutes / 60 * 10) / 10;
+      const isActive = s.totalMinutes >= MIN_CERT_MINUTES;
+      const firstLogin = s.firstLogin
+        ? s.firstLogin.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+        : '—';
 
-    // --- PAGE 2+: Individual certificates (one per active student) ---
-    const activeStudents = data.students.filter(s => s.totalSeconds > 0);
+      const cellY = y + 8;
+      doc.font('Helvetica').fontSize(9.5).fillColor(INK)
+        .text(s.email, col.learner.x, cellY, { width: col.learner.w, ellipsis: true });
+      doc.fillColor(INK).font('Helvetica-Bold')
+        .text(`${hours}h`, col.hours.x, cellY, { width: col.hours.w, align: col.hours.align });
+      doc.fillColor(INK).font('Helvetica')
+        .text(String(s.sessions), col.sessions.x, cellY, { width: col.sessions.w, align: col.sessions.align });
+      doc.fillColor(MUTED)
+        .text(firstLogin, col.first.x, cellY, { width: col.first.w });
 
-    for (const student of activeStudents) {
+      // Status pill
+      const pillW = 65;
+      const pillH = 14;
+      const pillX = col.status.x + col.status.w - pillW;
+      const pillY = cellY - 1;
+      doc.roundedRect(pillX, pillY, pillW, pillH, 7)
+        .fill(isActive ? tintHex(SUCCESS, 0.20) : tintHex(DANGER, 0.16));
+      doc.fillColor(isActive ? SUCCESS : DANGER).font('Helvetica-Bold').fontSize(7.5)
+        .text(isActive ? 'COMPLETED' : 'NO LOGIN', pillX, pillY + 4, { width: pillW, align: 'center', characterSpacing: 0.4 });
+      // Bottom border
+      doc.moveTo(MARGIN_X, y + rowH).lineTo(PAGE_W - MARGIN_X, y + rowH).strokeColor(LINE).lineWidth(0.5).stroke();
+      y += rowH;
+    });
+
+    // ===== Page 1 footnote =====
+    if (y < PAGE_H - 110) y = PAGE_H - 110;
+    doc.moveTo(MARGIN_X, y).lineTo(PAGE_W - MARGIN_X, y).strokeColor(LINE).lineWidth(0.5).stroke();
+    doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(8.5)
+      .text('This report is generated from actual lab usage telemetry — VM uptime, login events, and per-session durations recorded by the platform. No manual input or self-reporting.',
+        MARGIN_X, y + 8, { width: PAGE_W - MARGIN_X * 2, align: 'center' });
+
+    // ====== Certificates (one per active learner) ======
+    const activeLearners = data.students.filter(s => s.totalMinutes >= MIN_CERT_MINUTES);
+    activeLearners.forEach((s) => {
       doc.addPage();
-      const hours = Math.round(student.totalSeconds / 3600 * 10) / 10;
-      const certId = `CERT-${data.generatedAt.getFullYear()}-${data.trainingName.slice(0, 6).toUpperCase()}-${student.email.slice(0, 4).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const hours = Math.round(s.totalMinutes / 60 * 10) / 10;
+      const certId = `CERT-${data.generatedAt.getFullYear()}-${data.trainingName.slice(0, 6).toUpperCase().replace(/[^A-Z0-9]/g,'')}-${(s.email.split('@')[0] || 'X').slice(0, 4).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const learnerName = formatLearnerName(s.email);
 
-      // Border
-      doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60).strokeColor('#d1d5db').lineWidth(1).stroke();
-      doc.rect(35, 35, doc.page.width - 70, doc.page.height - 70).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
+      // Outer + inner ornate border
+      doc.lineWidth(2.5).strokeColor(PRIMARY).rect(28, 28, PAGE_W - 56, PAGE_H - 56).stroke();
+      doc.lineWidth(0.7).strokeColor(ACCENT).rect(36, 36, PAGE_W - 72, PAGE_H - 72).stroke();
+
+      // Decorative corner accents (small filled triangles)
+      const cornerSize = 18;
+      const corners = [
+        [28, 28], [PAGE_W - 28 - cornerSize, 28],
+        [28, PAGE_H - 28 - cornerSize], [PAGE_W - 28 - cornerSize, PAGE_H - 28 - cornerSize]
+      ];
+      corners.forEach(([cx, cy], idx) => {
+        doc.save();
+        doc.fillColor(PRIMARY).rect(cx, cy, cornerSize, cornerSize).fill();
+        doc.fillColor('#ffffff').rect(cx + 4, cy + 4, cornerSize - 8, cornerSize - 8).fill();
+        doc.restore();
+      });
+
+      // Watermark — diagonal companyName running corner-to-corner (very low opacity)
+      doc.save();
+      doc.opacity(0.05);
+      doc.rotate(-30, { origin: [PAGE_W / 2, PAGE_H / 2] });
+      doc.fillColor(PRIMARY).font('Helvetica-Bold').fontSize(95)
+        .text(COMPANY.split(' ')[0].toUpperCase(), 0, PAGE_H / 2 - 50, { width: PAGE_W, align: 'center', characterSpacing: 6 });
+      doc.opacity(1).restore();
+
+      // Top eyebrow: company + small accent line
+      doc.fillColor(PRIMARY).font('Helvetica-Bold').fontSize(10)
+        .text(COMPANY.toUpperCase(), 50, 90, { width: PAGE_W - 100, align: 'center', characterSpacing: 2 });
+      const eybY = 110;
+      doc.moveTo(PAGE_W / 2 - 30, eybY).lineTo(PAGE_W / 2 + 30, eybY).strokeColor(ACCENT).lineWidth(1.2).stroke();
 
       // Title
-      doc.moveDown(4);
-      doc.fontSize(10).fillColor(blue).text('HEXALABS CLOUD PORTAL', { align: 'center' });
-      doc.moveDown(2);
-      doc.fontSize(24).fillColor(dark).text('Certificate of Lab Completion', { align: 'center' });
+      doc.fillColor(INK).font('Helvetica-Bold').fontSize(28)
+        .text('Certificate of Lab Completion', 50, 135, { width: PAGE_W - 100, align: 'center' });
 
-      // Horizontal rule
-      doc.moveDown(1);
-      const ruleY = doc.y;
-      doc.moveTo(150, ruleY).lineTo(doc.page.width - 150, ruleY).strokeColor(blue).lineWidth(2).stroke();
+      // "This is to certify that"
+      doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(12)
+        .text('This is to certify that', 50, 200, { width: PAGE_W - 100, align: 'center' });
 
-      doc.moveDown(2);
-      doc.fontSize(11).fillColor(gray).text('This certifies that', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.fontSize(20).fillColor(dark).text(student.email, { align: 'center' });
+      // Learner name — display
+      doc.fillColor(INK).font('Helvetica-Bold').fontSize(32)
+        .text(learnerName, 50, 225, { width: PAGE_W - 100, align: 'center' });
 
-      doc.moveDown(1);
-      doc.fontSize(11).fillColor(gray).text(
-        `successfully completed ${hours} hours of hands-on lab work`,
-        { align: 'center' }
-      );
+      // Underline under name
+      const nameUnderlineY = 268;
+      doc.moveTo(PAGE_W / 2 - 110, nameUnderlineY).lineTo(PAGE_W / 2 + 110, nameUnderlineY)
+        .strokeColor(ACCENT).lineWidth(0.8).stroke();
 
-      // Details table
-      doc.moveDown(2);
-      const detailX = 170;
-      const labelX = detailX;
-      const valueX = detailX + 110;
-      let dY = doc.y;
+      // Body
+      doc.fillColor(INK).font('Helvetica').fontSize(12)
+        .text(`has successfully completed ${hours} hours of hands-on lab work`,
+          50, 290, { width: PAGE_W - 100, align: 'center' });
+      doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(11)
+        .text(`as part of the ${data.trainingName} program`,
+          50, 312, { width: PAGE_W - 100, align: 'center' });
 
+      // Details table — centered
+      const detailsY = 360;
+      const labelX = PAGE_W / 2 - 140;
+      const valueX = PAGE_W / 2 + 10;
       const details = [
-        ['Training:', data.trainingName],
-        ['Organization:', data.organization],
-        ['Lab hours:', `${hours} hours across ${student.sessions} sessions`],
-        ['Period:', student.firstLogin && student.lastActivity
-          ? `${student.firstLogin.toLocaleDateString('en-IN', { dateStyle: 'medium' })} — ${student.lastActivity.toLocaleDateString('en-IN', { dateStyle: 'medium' })}`
+        ['Program', data.trainingName],
+        ['Sessions', `${s.sessions} login session${s.sessions === 1 ? '' : 's'}`],
+        ['Period', s.firstLogin && s.lastActivity
+          ? `${s.firstLogin.toLocaleDateString('en-IN', { dateStyle: 'medium' })}  →  ${s.lastActivity.toLocaleDateString('en-IN', { dateStyle: 'medium' })}`
           : '—'],
-        ['Platform:', 'HexaLabs Cloud Portal'],
+        ['Total Hours', `${hours} hours`],
       ];
+      details.forEach(([k, v], idx) => {
+        const dY = detailsY + idx * 22;
+        doc.fillColor(MUTED).font('Helvetica').fontSize(10)
+          .text(k, labelX - 130, dY, { width: 140, align: 'right' });
+        doc.fillColor(INK).font('Helvetica-Bold').fontSize(11)
+          .text(v, valueX - 130, dY, { width: 280 });
+      });
 
-      for (const [label, value] of details) {
-        doc.fontSize(10).fillColor(gray).text(label, labelX, dY, { width: 100, align: 'right' });
-        doc.fontSize(10).fillColor(dark).text(value, valueX, dY, { width: 250 });
-        dY += 18;
+      // Signature row
+      const sigY = PAGE_H - 130;
+      const sigW = 180;
+      const sigLeft = PAGE_W / 2 - sigW - 20;
+      const sigRight = PAGE_W / 2 + 20;
+      // Lines
+      doc.moveTo(sigLeft, sigY).lineTo(sigLeft + sigW, sigY).strokeColor(MUTED).lineWidth(0.5).stroke();
+      doc.moveTo(sigRight, sigY).lineTo(sigRight + sigW, sigY).strokeColor(MUTED).lineWidth(0.5).stroke();
+      // Labels
+      // Cursive signature above the LAB DIRECTOR line — uses the org's admin name
+      if (directorName) {
+        doc.save();
+        doc.translate(sigLeft + sigW / 2, sigY - 8);
+        doc.rotate(-6);
+        doc.fillColor(INK_BLUE).font(SIG_FONT).fontSize(34)
+          .text(directorName, -sigW / 2, -28, { width: sigW, align: 'center' });
+        doc.restore();
       }
+      doc.fillColor(INK).font('Helvetica-Bold').fontSize(9)
+        .text('LAB DIRECTOR', sigLeft, sigY + 6, { width: sigW, align: 'center', characterSpacing: 1 });
+      doc.fillColor(MUTED).font('Helvetica').fontSize(8)
+        .text(directorName ? `${directorName} · ${COMPANY}` : COMPANY, sigLeft, sigY + 20, { width: sigW, align: 'center' });
+      // Hand-written-style date above the DATE ISSUED line
+      doc.save();
+      doc.translate(sigRight + sigW / 2, sigY - 8);
+      doc.rotate(-4);
+      doc.fillColor(INK_BLUE).font(SIG_FONT).fontSize(28)
+        .text(data.generatedAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }), -sigW / 2, -22, { width: sigW, align: 'center' });
+      doc.restore();
+      doc.fillColor(INK).font('Helvetica-Bold').fontSize(9)
+        .text('DATE ISSUED', sigRight, sigY + 6, { width: sigW, align: 'center', characterSpacing: 1 });
+      doc.fillColor(MUTED).font('Helvetica').fontSize(8)
+        .text(data.generatedAt.toLocaleDateString('en-IN', { dateStyle: 'long' }), sigRight, sigY + 20, { width: sigW, align: 'center' });
 
-      // Certificate ID + date
-      doc.moveDown(4);
-      doc.fontSize(8).fillColor(gray).text(`Certificate ID: ${certId}`, { align: 'center' });
-      doc.fontSize(8).fillColor(gray).text(`Issued: ${data.generatedAt.toLocaleDateString('en-IN', { dateStyle: 'long' })}`, { align: 'center' });
+      // Cert ID strip at bottom
+      doc.fillColor(MUTED).font('Helvetica').fontSize(7.5)
+        .text(`Certificate ID  ·  ${certId}`, 50, PAGE_H - 60, { width: PAGE_W - 100, align: 'center', characterSpacing: 1 });
+    });
 
-      // Signature line
-      doc.moveDown(3);
-      const sigY = doc.y;
-      doc.moveTo(doc.page.width / 2 - 80, sigY).lineTo(doc.page.width / 2 + 80, sigY).strokeColor('#9ca3af').lineWidth(0.5).stroke();
-      doc.fontSize(9).fillColor(gray).text('HexaLabs Cloud Portal', doc.page.width / 2 - 80, sigY + 5, { width: 160, align: 'center' });
+    // ====== Page numbers + global footer (after all pages exist) ======
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const pn = `Page ${i + 1} of ${range.count}`;
+      const conf = `Confidential  ·  ${COMPANY}`;
+      doc.fillColor(MUTED).font('Helvetica').fontSize(7.5)
+        .text(pn, MARGIN_X, PAGE_H - 25, { width: PAGE_W - MARGIN_X * 2, align: 'left' });
+      doc.fillColor(MUTED).font('Helvetica').fontSize(7.5)
+        .text(conf, MARGIN_X, PAGE_H - 25, { width: PAGE_W - MARGIN_X * 2, align: 'right' });
     }
 
     doc.end();
   });
+}
+
+// ===== branding & helpers =====
+async function loadBranding(orgName) {
+  // Neutral defaults — explicitly NOT Synergific-branded so non-whitelabeled
+  // customers don't get any vendor logo or color leaking in.
+  const defaults = {
+    primaryColor: '#0078D4',  // Microsoft Azure Blue
+    accentColor: '#50E6FF',   // Azure light
+    companyName: orgName || 'Cloud Lab Platform',
+  };
+  if (!orgName) return defaults;
+  try {
+    const Organization = require('../models/organization');
+    const org = await Organization.findOne({ organization: orgName }).lean();
+    const b = org?.branding || {};
+    return {
+      primaryColor: b.primaryColor || defaults.primaryColor,
+      accentColor: b.accentColor || defaults.accentColor,
+      companyName: b.companyName || orgName,
+    };
+  } catch (e) {
+    return defaults;
+  }
+}
+
+async function loadDirectorName(orgName) {
+  if (!orgName) return null;
+  try {
+    const User = require('../models/user');
+    const u = await User.findOne({
+      organization: orgName,
+      userType: { $in: ['admin', 'superadmin'] }
+    }).sort({ createdAt: 1 }).lean();
+    if (!u) return null;
+    if (u.name && u.name.trim()) return titleCase(u.name);
+    return titleCase((u.email || '').split('@')[0] || '');
+  } catch (e) {
+    return null;
+  }
+}
+
+function titleCase(s) {
+  return (s || '').replace(/[._-]+/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function darkenHex(hex, factor) {
+  // Mix the given hex color toward black. factor=0 returns the original color,
+  // factor=1 returns black. Used to derive a darker text tone for tile numbers
+  // so they read clearly against the light tint background.
+  const h = (hex || '').replace('#', '');
+  if (h.length !== 6) return '#0f172a';
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = c => Math.round(c * (1 - factor));
+  const hh = n => n.toString(16).padStart(2, '0');
+  return '#' + hh(mix(r)) + hh(mix(g)) + hh(mix(b));
+}
+
+function tintHex(hex, alpha) {
+  // Mix the given hex color with white. PDFKit doesn't honor rgba() strings,
+  // so we simulate a tint by interpolating toward #ffffff. alpha=opacity of the
+  // color (0=full white, 1=full color).
+  const h = (hex || '').replace('#', '');
+  if (h.length !== 6) return '#f1f5f9';
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = c => Math.round(c * alpha + 255 * (1 - alpha));
+  const hh = n => n.toString(16).padStart(2, '0');
+  return '#' + hh(mix(r)) + hh(mix(g)) + hh(mix(b));
+}
+
+function formatLearnerName(email) {
+  const local = (email || '').split('@')[0] || email || 'Learner';
+  // Replace separators with spaces and title-case each token
+  return local.replace(/[._-]+/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 /**
@@ -295,12 +571,12 @@ async function getUsageReportData(trainingName, organization) {
   for (const inst of allInstances) {
     const email = inst.email || 'unknown';
     if (!studentMap[email]) {
-      studentMap[email] = { email, resources: [], totalSeconds: 0, totalCost: 0 };
+      studentMap[email] = { email, resources: [], totalMinutes: 0, totalCost: 0 };
     }
     const s = studentMap[email];
-    const hours = (inst.duration || 0) / 3600;
+    const hours = getEffectiveDuration(inst) / 60;
     const cost = hours * (inst.rate || 0);
-    s.totalSeconds += inst.duration || 0;
+    s.totalMinutes += getEffectiveDuration(inst);
     s.totalCost += cost;
 
     const isContainer = inst.type === 'container';
@@ -321,19 +597,19 @@ async function getUsageReportData(trainingName, organization) {
   // Totals
   const totalVMs = vms.length;
   const totalContainers = containers.length;
-  const totalHoursConsumed = allInstances.reduce((sum, i) => sum + (i.duration || 0), 0) / 3600;
-  const totalSellingCost = allInstances.reduce((sum, i) => sum + ((i.duration || 0) / 3600) * (i.rate || 0), 0);
+  const totalHoursConsumed = allInstances.reduce((sum, i) => sum + getEffectiveDuration(i), 0) / 60;
+  const totalSellingCost = allInstances.reduce((sum, i) => sum + (getEffectiveDuration(i) / 60) * (i.rate || 0), 0);
 
   // Infrastructure cost estimate (containers have azureEquivalentRate)
   let totalInfraCost = 0;
   for (const c of containers) {
-    const hrs = (c.duration || 0) / 3600;
+    const hrs = getEffectiveDuration(c) / 60;
     // Container infra cost is roughly the rate itself (small margin containers)
     // If azureEquivalentRate is set, it shows what Azure would have cost
     totalInfraCost += hrs * (c.rate || 0) * 0.6; // approximate 60% cost-of-goods
   }
   for (const v of vms) {
-    const hrs = (v.duration || 0) / 3600;
+    const hrs = getEffectiveDuration(v) / 60;
     totalInfraCost += hrs * (v.rate || 0) * 0.7; // approximate 70% cost-of-goods for VMs
   }
 
@@ -415,7 +691,7 @@ async function generateUsageReport(trainingName, organization) {
     // ====== HEADER ======
     doc.rect(0, 0, pageWidth, 80).fill(darkBlue);
     doc.fontSize(18).fillColor('#ffffff')
-      .text('HexaLabs Cloud Portal', 50, 25, { width: contentWidth });
+      .text('Hexalabs Cloud Portal', 50, 25, { width: contentWidth });
     doc.fontSize(10).fillColor('#93c5fd')
       .text('Lab Usage Report', 50, 48, { width: contentWidth });
 
@@ -622,7 +898,7 @@ async function generateUsageReport(trainingName, organization) {
     doc.moveTo(50, rowY).lineTo(pageWidth - 50, rowY).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
     rowY += 8;
     doc.fontSize(8).fillColor(gray).text(
-      'Generated by HexaLabs Cloud Portal',
+      'Generated by Hexalabs Cloud Portal',
       50, rowY, { width: contentWidth, align: 'center' }
     );
 

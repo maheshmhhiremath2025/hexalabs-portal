@@ -55,7 +55,7 @@ const handler = async (job) => {
             }
         };
         const Login = {
-            organization: "hexalabssoftware",
+            organization: "hexalabs",
             email: userPrincipalName,
             password: password,
             userType: 'sandboxuser'

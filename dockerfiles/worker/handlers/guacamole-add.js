@@ -27,16 +27,35 @@ async function getToken() {
   return res.data.authToken;
 }
 
+// Retry wrapper for getToken — handles transient "Invalid login" flakes that
+// happen under concurrent batch deploy (Guacamole BAN_IP / Tomcat saturation /
+// MySQL deadlock on the auth path). Exponential backoff with jitter lets any
+// short-lived rate-limit window expire before the retry.
+async function getTokenWithRetry(maxAttempts = 3) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      return await getToken();
+    } catch (err) {
+      const lastAttempt = i === maxAttempts - 1;
+      const reason = err.response?.data?.message || err.message;
+      if (lastAttempt) throw err;
+      const wait = 500 * Math.pow(2, i) + Math.floor(Math.random() * 500);
+      logger.warn(`[guac] auth attempt ${i + 1}/${maxAttempts} failed (${reason}) — retrying in ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+}
+
 function rdpParams({ publicIp, adminUsername, adminPassword, security = 'nla' }) {
   return {
     hostname: publicIp, port: '3389',
     username: adminUsername, password: adminPassword,
     security, 'ignore-cert': 'true',
-    'color-depth': '32',
+    'color-depth': '16',
     'resize-method': 'display-update',
     'enable-wallpaper': 'false',
     'enable-theming': 'false',
-    'enable-font-smoothing': 'true',
+    'enable-font-smoothing': 'false',
     'enable-full-window-drag': 'false',
     'enable-desktop-composition': 'false',
     'enable-menu-animations': 'false',
@@ -90,7 +109,7 @@ const handler = async (job) => {
   const isWindows = (os || '').toLowerCase().includes('windows');
 
   try {
-    const token = await getToken();
+    const token = await getTokenWithRetry();
 
     if (isWindows) {
       await upsertConnection(token, vmName, 'rdp',

@@ -3,7 +3,7 @@ const router = express.Router();
 const SandboxTemplate = require('../models/sandboxTemplate');
 const SandboxDeployment = require('../models/sandboxDeployment');
 const { generateAwsIamPolicy, generateAzurePolicy, generateGcpOrgPolicy } = require('../services/iamPolicyGenerator');
-const { restrictToLoggedinUserOnly } = require('../middlewares/auth');
+const { restrictToLoggedinUserOnly, checkAuth } = require('../middlewares/auth');
 const { logger } = require('../plugins/logger');
 
 /**
@@ -43,6 +43,35 @@ router.get('/', async (req, res) => {
     .select('name slug cloud certificationCode certificationLevel description icon examDomains sandboxConfig labs.title labs.domain labs.domainWeight labs.duration labs.difficulty allowedServices.category')
     .sort({ sortOrder: 1 });
 
+  // Patched 2026-05-21: compute deployCount30d per template to drive
+  // "Popular this month" tiles in the Course Catalog frontend.
+  let popularityMap = {};
+  try {
+    const SandboxUser = require('../models/sandboxuser');
+    const AwsUser = require('../models/aws');
+    const cutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const [azureAgg, awsAgg] = await Promise.all([
+      SandboxUser.aggregate([
+        { $unwind: '$usageSessions' },
+        { $match: { 'usageSessions.startedAt': { $gte: cutoff } } },
+        { $group: { _id: '$usageSessions.templateSlug', count: { $sum: 1 } } },
+      ]),
+      AwsUser.aggregate([
+        { $unwind: { path: '$usageSessions', preserveNullAndEmptyArrays: false } },
+        { $match: { 'usageSessions.startedAt': { $gte: cutoff } } },
+        { $group: { _id: '$usageSessions.templateSlug', count: { $sum: 1 } } },
+      ]).catch(() => []),
+    ]);
+    [...azureAgg, ...awsAgg].forEach(p => {
+      if (p._id) popularityMap[p._id] = (popularityMap[p._id] || 0) + p.count;
+    });
+  } catch (e) {
+    // Non-fatal — popularity is a nice-to-have
+  }
+
+  // sanitize sandboxConfig: only ttlHours + region are user-relevant.
+  // budgetInr / cap fields stay server-side so cost basis isn't on the wire.
+  const isSuper = req.user?.userType === 'superadmin';
   res.json(templates.map(t => ({
     name: t.name,
     slug: t.slug,
@@ -52,10 +81,14 @@ router.get('/', async (req, res) => {
     description: t.description,
     icon: t.icon,
     examDomains: t.examDomains,
-    sandboxConfig: t.sandboxConfig,
+    sandboxConfig: isSuper ? t.sandboxConfig : {
+      ttlHours: t.sandboxConfig?.ttlHours,
+      region: t.sandboxConfig?.region,
+    },
     labCount: t.labs?.length || 0,
     serviceCount: t.allowedServices?.length || 0,
     categories: [...new Set((t.allowedServices || []).map(s => s.category).filter(Boolean))],
+    deployCount30d: popularityMap[t.slug] || 0,
   })));
 });
 
@@ -84,10 +117,28 @@ router.delete('/:slug', restrictToLoggedinUserOnly, async (req, res) => {
 /**
  * GET /sandbox-templates/:slug
  * Get full template details including labs and policy.
+ *
+ * Mounted publicly at index.js:117 so the SPA's first-render of the catalog
+ * detail page works without a login wall. We use checkAuth (best-effort
+ * identity, never 401s) so we can gate cost-basis fields on req.user without
+ * blocking unauthenticated catalog viewers.
+ *
+ * Visibility rules:
+ *   - superadmin: full template doc including sandboxConfig.budgetInr / totalCapHours
+ *   - everyone else (logged-in non-super, or unauthenticated SPA boot):
+ *     full doc with budgetInr + totalCapHours stripped from sandboxConfig
  */
-router.get('/:slug', async (req, res) => {
-  const template = await SandboxTemplate.findOne({ slug: req.params.slug, isActive: true });
+router.get('/:slug', checkAuth, async (req, res) => {
+  const template = await SandboxTemplate.findOne({ slug: req.params.slug, isActive: true }).lean();
   if (!template) return res.status(404).json({ message: 'Template not found' });
+
+  const isSuper = req.user?.userType === 'superadmin';
+  if (!isSuper) {
+    if (template.sandboxConfig) {
+      delete template.sandboxConfig.budgetInr;
+      delete template.sandboxConfig.totalCapHours;
+    }
+  }
   res.json(template);
 });
 
@@ -115,10 +166,49 @@ router.get('/:slug/policy', async (req, res) => {
  * used to be in the /deploy handler. This extraction does NOT change API
  * behavior — it just lets us reuse the logic for bulk deploys.
  */
-async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
+async function performDeploy(template, deployerEmail, { googleEmail, requesterUserType } = {}) {
   // For GCP: use the student's Google email for IAM binding (not the portal email).
   // Falls back to deployerEmail if no googleEmail provided.
   const gcpEmail = googleEmail || deployerEmail;
+  const includeBudget = requesterUserType === 'superadmin';
+
+  // Idempotency guard 2026-06-05: if deployer already has an active (non-expired,
+  // not-deleted) deployment for this template, return it instead of minting a new
+  // RG/project. Stops the click-storm pattern observed on thota.sri@ltm.com (3 RGs
+  // created within 8 min from a triple-click). Static-Entra fix shares the UPN but
+  // doesn't dedupe the underlying cloud resource group; this does.
+  try {
+    const SandboxDeployment = require('../models/sandboxDeployment');
+    const existing = await SandboxDeployment.findOne({
+      deployedBy: deployerEmail,
+      templateSlug: template.slug,
+      expiresAt: { $gt: new Date() },
+      state: { $ne: 'deleted' },
+    }).sort({ createdAt: -1 }).lean();
+    if (existing) {
+      logger.info(`[sandbox-templates] idempotency-hit: reusing deployment ${existing._id} for ${deployerEmail}/${template.slug}`);
+      return {
+        deploymentId: existing._id,
+        reused: true,
+        message: `${template.name} sandbox already active — reusing existing session`,
+        cloud: existing.cloud,
+        credentials: { username: existing.username, password: existing.password },
+        accessUrl: existing.accessUrl,
+        resourceGroup: existing.azure?.resourceGroupName,
+        region: existing.region,
+        ttlHours: existing.ttlHours,
+        ...(includeBudget && existing.budgetInr ? { budgetInr: existing.budgetInr } : {}),
+        expiresAt: existing.expiresAt,
+        template: { name: template.name, certificationCode: template.certificationCode },
+        allowedServices: (template.allowedServices || []).map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
+        blockedServices: (template.blockedServices || []).map(s => ({ service: s.service, reason: s.reason })),
+      };
+    }
+  } catch (e) {
+    // Idempotency lookup failure is non-fatal — fall through to fresh deploy.
+    logger.warn(`[sandbox-templates] idempotency lookup failed: ${e.message}`);
+  }
+
   if (template.cloud === 'aws') {
     // Create AWS sandbox with template's IAM policy
     const { createAwsSandbox } = require('../services/directSandbox');
@@ -135,6 +225,19 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
     const awsRegion = useConnectAccount ? (process.env.AWS_CONNECT_REGION || 'us-east-1') : (template.sandboxConfig?.region || 'ap-south-1');
 
     const awsResult = await createAwsSandbox(username, deployerEmail, useConnectAccount ? { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } : undefined);
+
+    // Attach CloudOpsSRE-CourseAllow managed policy for the 40h CloudOps + SRE + DevOps template.
+    // The default sandbox stack does not grant observability/devops services that this curriculum needs.
+    if (template.slug === 'aws-cloudops-sre-devops-lab' && !useConnectAccount) {
+      try {
+        const { IAMClient: _IAM, AttachUserPolicyCommand: _AUP } = require('@aws-sdk/client-iam');
+        const _c = new _IAM({ region: awsRegion, credentials: { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } });
+        await _c.send(new _AUP({ UserName: username, PolicyArn: 'arn:aws:iam::475184346033:policy/CloudOpsSRE-CourseAllow' }));
+        console.log(`Attached CloudOpsSRE-CourseAllow to ${username}`);
+      } catch (e) {
+        console.error(`Failed to attach CloudOpsSRE-CourseAllow: ${e.message}`);
+      }
+    }
 
     // Apply the template's specific IAM policy (after default sandbox policy)
     try {
@@ -178,18 +281,32 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
       accessUrl: awsResult.accessUrl,
       region: template.sandboxConfig?.region || 'ap-south-1',
       ttlHours: template.sandboxConfig?.ttlHours || 4,
-      budgetInr: template.sandboxConfig?.budgetInr || 200,
+      ...(includeBudget ? { budgetInr: template.sandboxConfig?.budgetInr || 200 } : {}),
       expiresAt: deployment?.expiresAt,
       template: { name: template.name, certificationCode: template.certificationCode },
-      allowedServices: template.allowedServices?.map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
-      blockedServices: template.blockedServices?.map(s => ({ service: s.service, reason: s.reason })),
+      allowedServices: (template.allowedServices || []).map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
+      blockedServices: (template.blockedServices || []).map(s => ({ service: s.service, reason: s.reason })),
       labCount: template.labs?.length || 0,
     };
   } else if (template.cloud === 'azure') {
     const { createAzureSandbox } = require('../services/directSandbox');
     const randSuffix = Math.random().toString(36).slice(2, 6);
     const rgName = `lab-${template.certificationCode || 'b2b'}-${deployerEmail.split('@')[0]}-${randSuffix}-sbx`.toLowerCase().slice(0, 60);
-    const azResult = await createAzureSandbox(rgName, template.sandboxConfig?.region || 'southindia', null, deployerEmail);
+    // Static Entra user: look up the deployer's most recent prior sandboxdeployment
+    // and reuse its UPN+password. Without this, every preview-deploy click mints a
+    // fresh Azure AD user; the Networklabs cohort accumulated 6-8 stale UPNs per
+    // learner per day this way until 2026-06-04.
+    let reuseUser;
+    try {
+      const Deployment = require('../models/sandboxDeployment');
+      const prior = await Deployment.findOne({
+        cloud: 'azure',
+        deployedBy: deployerEmail,
+        username: { $exists: true, $ne: null }
+      }).sort({ createdAt: -1 }).lean();
+      if (prior && prior.username) reuseUser = { upn: prior.username, password: prior.password };
+    } catch (e) { /* fall through — fresh user will be minted */ }
+    const azResult = await createAzureSandbox(rgName, template.sandboxConfig?.region || 'southindia', null, deployerEmail, { allowedVmSkus: template.allowedInstanceTypes?.azure, reuseUser });
 
     const deployment = await persistDeployment(template, 'azure', {
       username: azResult.username,
@@ -211,10 +328,11 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
       resourceGroup: rgName,
       region: template.sandboxConfig?.region || 'southindia',
       ttlHours: template.sandboxConfig?.ttlHours || 4,
-      budgetInr: template.sandboxConfig?.budgetInr || 200,
+      ...(includeBudget ? { budgetInr: template.sandboxConfig?.budgetInr || 200 } : {}),
       expiresAt: deployment?.expiresAt,
       template: { name: template.name, certificationCode: template.certificationCode },
-      allowedServices: template.allowedServices?.map(s => ({ service: s.service, category: s.category })),
+      allowedServices: (template.allowedServices || []).map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
+      blockedServices: (template.blockedServices || []).map(s => ({ service: s.service, reason: s.reason })),
     };
   } else if (template.cloud === 'gcp') {
     const { createGcpSandbox } = require('../services/directSandbox');
@@ -225,7 +343,7 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
       username: gcpEmail,
       password: 'Use your Google account password',
       accessUrl: gcpResult.accessUrl,
-      region: template.sandboxConfig?.region || 'asia-south1',
+      region: template.sandboxConfig?.region || 'us-central1',
       gcp: { projectId },
     }, deployerEmail);
 
@@ -239,11 +357,53 @@ async function performDeploy(template, deployerEmail, { googleEmail } = {}) {
       accessUrl: gcpResult.accessUrl,
       projectId,
       ttlHours: template.sandboxConfig?.ttlHours || 4,
-      budgetInr: template.sandboxConfig?.budgetInr || 200,
+      ...(includeBudget ? { budgetInr: template.sandboxConfig?.budgetInr || 200 } : {}),
       expiresAt: deployment?.expiresAt,
       iamBindingSuccess: gcpResult.iamBindingSuccess,
       note: gcpResult.note,
       template: { name: template.name, certificationCode: template.certificationCode },
+      allowedServices: (template.allowedServices || []).map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
+      blockedServices: (template.blockedServices || []).map(s => ({ service: s.service, reason: s.reason })),
+    };
+  } else if (template.cloud === 'oci') {
+    // OCI is the only cloud that lives in `services/ociSandbox.js` directly
+    // (not exposed through `services/directSandbox.js`). Imported inline so
+    // the require cost only hits the OCI deploy path.
+    const { createOciSandbox } = require('../services/ociSandbox');
+    const region = template.sandboxConfig?.region || process.env.OCI_REGION || 'ap-hyderabad-1';
+    // Compartment name must be globally unique under the parent compartment.
+    // Mirror the AWS/Azure suffix pattern so retries don't collide.
+    const randSuffix = Math.random().toString(36).slice(2, 6);
+    const compartmentName = `lab-${(template.certificationCode || 'b2b').toLowerCase()}-${deployerEmail.split('@')[0]}-${randSuffix}-sbx`
+      .replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 60);
+    const ociResult = await createOciSandbox(compartmentName, region, deployerEmail);
+
+    const deployment = await persistDeployment(template, 'oci', {
+      username: ociResult.username,
+      password: ociResult.password,
+      accessUrl: ociResult.accessUrl,
+      region,
+      oci: {
+        compartmentId: ociResult.compartmentId,
+        userId: ociResult.userId,
+        policyId: ociResult.policyId,
+      },
+    }, deployerEmail);
+
+    return {
+      deploymentId: deployment?._id,
+      message: `${template.name} OCI sandbox deployed`,
+      cloud: 'oci',
+      credentials: { username: ociResult.username, password: ociResult.password },
+      accessUrl: ociResult.accessUrl,
+      compartmentId: ociResult.compartmentId,
+      region,
+      ttlHours: template.sandboxConfig?.ttlHours || 4,
+      ...(includeBudget ? { budgetInr: template.sandboxConfig?.budgetInr || 200 } : {}),
+      expiresAt: deployment?.expiresAt,
+      template: { name: template.name, certificationCode: template.certificationCode },
+      allowedServices: (template.allowedServices || []).map(s => ({ service: s.service, category: s.category, restrictions: s.restrictions })),
+      blockedServices: (template.blockedServices || []).map(s => ({ service: s.service, reason: s.reason })),
     };
   }
 
@@ -273,7 +433,7 @@ router.post('/:slug/deploy', restrictToLoggedinUserOnly, async (req, res) => {
       });
     }
 
-    const result = await performDeploy(template, email, { googleEmail });
+    const result = await performDeploy(template, email, { googleEmail, requesterUserType: req.user?.userType });
     res.json(result);
   } catch (err) {
     logger.error(`Template deploy error: ${err.message}`);
@@ -338,7 +498,7 @@ router.post('/:slug/bulk-deploy', restrictToLoggedinUserOnly, async (req, res) =
         job.current = `Deploying sandbox ${i + 1}/${seats}`;
         try {
           const seatEmail = emails.length > 0 ? emails[i] : googleEmail;
-          const result = await performDeploy(template, email, { googleEmail: seatEmail });
+          const result = await performDeploy(template, email, { googleEmail: seatEmail, requesterUserType: userType });
           job.results.push({
             deploymentId: result.deploymentId,
             username: result.credentials?.username,
@@ -409,7 +569,7 @@ router.get('/bulk-jobs/:jobId', restrictToLoggedinUserOnly, (req, res) => {
  */
 router.get('/:slug/deployments', restrictToLoggedinUserOnly, async (req, res) => {
   try {
-    const { email, userType } = req.user || {};
+    const { email, userType, organization: callerOrg } = req.user || {};
     if (!email) return res.status(401).json({ message: 'Not authenticated' });
 
     const template = await SandboxTemplate.findOne({ slug: req.params.slug, isActive: true });
@@ -420,7 +580,15 @@ router.get('/:slug/deployments', restrictToLoggedinUserOnly, async (req, res) =>
       state: { $ne: 'deleted' },
     };
     const isAdmin = userType === 'admin' || userType === 'superadmin';
-    if (!isAdmin) filter.deployedBy = email;
+    if (!isAdmin) {
+      filter.deployedBy = email;
+    } else if (userType === 'admin') {
+      // Tenant scoping: org-admin sees only deployments by people in own org.
+      const User = require('../models/user');
+      const orgUsers = await User.find({ organization: callerOrg }, 'email').lean();
+      filter.deployedBy = { $in: orgUsers.map(u => u.email) };
+    }
+    // superadmin: no extra filter — sees all deployments for this template.
 
     const deployments = await SandboxDeployment
       .find(filter)
@@ -428,9 +596,17 @@ router.get('/:slug/deployments', restrictToLoggedinUserOnly, async (req, res) =>
       .limit(100)
       .lean();
 
+    // Strip cost basis from deployment docs unless caller is superadmin.
+    // SandboxDeployment.budgetInr is the per-deployment budget cap pulled
+    // from the template at deploy time — exposing it lets org-admins
+    // back-compute Synergific's margin.
+    const sanitized = userType === 'superadmin'
+      ? deployments
+      : deployments.map(d => { const o = { ...d }; delete o.budgetInr; return o; });
+
     res.json({
-      count: deployments.length,
-      deployments,
+      count: sanitized.length,
+      deployments: sanitized,
     });
   } catch (err) {
     logger.error(`[sandbox-templates] list deployments failed: ${err.message}`);
@@ -447,12 +623,21 @@ router.get('/:slug/deployments', restrictToLoggedinUserOnly, async (req, res) =>
  */
 router.delete('/deployments/:id', restrictToLoggedinUserOnly, async (req, res) => {
   try {
-    const { userType } = req.user || {};
+    const { userType, organization: callerOrg } = req.user || {};
     if (userType !== 'admin' && userType !== 'superadmin') {
       return res.status(403).json({ message: 'Admin access required' });
     }
     const doc = await SandboxDeployment.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    // Tenant scoping: org-admin can only tear down deployments made by users in own org.
+    if (userType === 'admin') {
+      const User = require('../models/user');
+      const deployer = await User.findOne({ email: doc.deployedBy }, 'organization').lean();
+      if (!deployer || deployer.organization !== callerOrg) {
+        return res.status(403).json({ message: 'Cannot delete a deployment outside your organization' });
+      }
+    }
 
     // Actually tear down the cloud resource
     let cleanupResult = 'skipped';
@@ -503,7 +688,27 @@ router.delete('/deployments/:id', restrictToLoggedinUserOnly, async (req, res) =
       cleanupResult = `Cleanup error: ${e.message}`;
     }
 
-    // Delete the DB record (hard delete, not soft)
+    // Fail loudly if the cloud cleanup didn't succeed — DON'T hard-delete the
+    // DB record (P1-9). Otherwise the orphaned cloud resource leaks invisibly.
+    const cleanupFailed = (cleanupResult && typeof cleanupResult === 'object' && cleanupResult.success === false)
+      || (typeof cleanupResult === 'string' && /failed|error/i.test(cleanupResult));
+    if (cleanupFailed) {
+      await SandboxDeployment.updateOne(
+        { _id: doc._id },
+        {
+          $set: {
+            state: 'cleanup_failed',
+            cleanupError: String(cleanupResult).slice(0, 500),
+            cleanupFailedAt: new Date(),
+          },
+          $inc: { cleanupAttempts: 1 },
+        }
+      );
+      logger.error(`[sandbox-templates] deployment ${doc._id} cleanup FAILED: ${cleanupResult}`);
+      return res.status(500).json({ message: 'cloud cleanup failed', detail: cleanupResult });
+    }
+
+    // Delete the DB record (hard delete, not soft) — only on confirmed success
     await SandboxDeployment.deleteOne({ _id: doc._id });
 
     logger.info(`[sandbox-templates] deployment ${doc._id} deleted + cloud cleanup: ${cleanupResult}`);

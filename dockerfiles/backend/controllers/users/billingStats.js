@@ -64,4 +64,71 @@ async function handleGetVMnames(req, res) {
 
 }
 
-module.exports = {handleGetBillingStats, handleGetLogs, handleGetVMnames}
+/* ────────────────────────────────────────────────────────────────────
+ * handleGetCohortLogs — flat activity timeline across all VMs in a
+ * training. Used by the redesigned Activity Log page so admins can see
+ * recent sessions without picking one VM at a time. Sorted by start desc.
+ *
+ * Query: trainingName (req), fromDate?, toDate? (ISO), limit? (default 500, max 2000),
+ *        status? (running|completed), minDurationMin?
+ * Response: { events: [...], summary: { vmCount, eventCount, totalHours, runningNow } }
+ * ──────────────────────────────────────────────────────────────────── */
+async function handleGetCohortLogs(req, res) {
+    const { trainingName } = req.query;
+    if (!trainingName) return res.status(400).json({ message: 'trainingName is required' });
+
+    const fromDate = req.query.fromDate ? new Date(req.query.fromDate) : null;
+    const toDate = req.query.toDate ? new Date(req.query.toDate) : null;
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit) || 500));
+    const statusFilter = req.query.status; // 'running' | 'completed' | undefined
+    const minDuration = parseInt(req.query.minDurationMin) || 0;
+
+    try {
+        const vms = await VM.find({ trainingName }, 'name email logs isRunning -_id').lean();
+        const events = [];
+        let runningNow = 0;
+        for (const vm of vms) {
+            if (vm.isRunning) runningNow++;
+            const logs = vm.logs || [];
+            for (const l of logs) {
+                if (!l.start) continue;
+                const startDate = new Date(l.start);
+                if (fromDate && startDate < fromDate) continue;
+                if (toDate && startDate > toDate) continue;
+                const isRunning = !l.stop;
+                if (statusFilter === 'running' && !isRunning) continue;
+                if (statusFilter === 'completed' && isRunning) continue;
+                const duration = Number(l.duration) || 0;
+                if (minDuration && duration < minDuration) continue;
+                events.push({
+                    vmName: vm.name,
+                    email: vm.email,
+                    start: l.start,
+                    stop: l.stop || null,
+                    duration,
+                    status: isRunning ? 'running' : 'completed',
+                });
+            }
+        }
+        events.sort((a, b) => new Date(b.start) - new Date(a.start));
+        const truncated = events.length > limit;
+        const sliced = events.slice(0, limit);
+        const totalHours = events.reduce((s, e) => s + (e.duration / 60), 0);
+
+        res.json({
+            events: sliced,
+            truncated,
+            summary: {
+                vmCount: vms.length,
+                eventCount: events.length,
+                totalHours: Math.round(totalHours * 100) / 100,
+                runningNow,
+            },
+        });
+    } catch (error) {
+        logger.error(`Error fetching cohort logs for ${trainingName}`, error);
+        res.status(500).json({ message: 'Internal Error' });
+    }
+}
+
+module.exports = {handleGetBillingStats, handleGetLogs, handleGetVMnames, handleGetCohortLogs}

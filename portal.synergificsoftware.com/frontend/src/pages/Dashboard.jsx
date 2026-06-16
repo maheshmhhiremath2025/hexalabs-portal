@@ -37,8 +37,8 @@ import {
 } from "recharts";
 
 /**
- * Light-themed HexaLabs Dashboard
- * Fetches real data from https://portal.hexalabs.online/overview
+ * Light-themed Hexalabs Dashboard
+ * Fetches real data from the overview API
  * Professional, clean design with real metrics
  */
 
@@ -89,7 +89,7 @@ const KpiCard = ({ icon: Icon, title, value, subtitle, accent = 'blue', loading:
 
 const Dashboard = ({ apiOpenRoutes, userDetails }) => {
   const [data, setData] = useState({
-    // Core metrics from HexaLabs portal
+    // Core metrics from Hexalabs portal
     totalUsers: 0,
     totalOrganizations: 0,
     totalTemplates: 0,

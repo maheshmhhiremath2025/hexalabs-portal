@@ -36,7 +36,8 @@ const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const gcpSandboxCleanup = async () => {
     try {
         logger.info("Running GCP sandbox cleanup...");
-        const users = await GcpSandboxUser.find({});
+        // P1-11: skip in-flight docs so overlapping ticks don't double-act.
+        const users = await GcpSandboxUser.find({ deletionStatus: { $ne: 'deleting' } });
         const now = new Date();
 
         for (const user of users) {
@@ -65,6 +66,20 @@ const gcpSandboxCleanup = async () => {
 
                     // Delete expired
                     if (deleteTime <= now) {
+                        // Path 3: if this project is the user's persistentProjectId,
+                        // DO NOT delete. Just mark the active session as ended so the
+                        // next relaunch knows to reset-in-place. The next-engagement-end
+                        // branch below (user.endDate) still deletes when the cohort is over.
+                        if (user.persistentProjectId && user.persistentProjectId === sb.projectId) {
+                            if (sb.status !== 'session-ended') {
+                                await GcpSandboxUser.updateOne(
+                                    { _id: user._id, 'sandbox.projectId': sb.projectId },
+                                    { $set: { 'sandbox.$.status': 'session-ended' } }
+                                );
+                                logger.info(`[gcp-cleanup] session ended (persistent project kept): ${sb.projectId}`);
+                            }
+                            continue;
+                        }
                         try {
                             // Stale safety net
                             const expiredMs = now - deleteTime;
@@ -90,6 +105,11 @@ const gcpSandboxCleanup = async () => {
                                 try {
                                     await deleteGcpProject(sb.projectId);
                                     logger.info(`GCP sandbox project ${sb.projectId} deleted directly`);
+                                    // Mark this sandbox entry as deleted so /user/my-sandboxes hides it
+                                    await GcpSandboxUser.updateOne(
+                                      { _id: user._id, 'sandbox.projectId': sb.projectId },
+                                      { $set: { 'sandbox.$.status': 'deleted' } }
+                                    );
                                 } catch (directErr) {
                                     logger.error(`GCP direct delete failed for ${sb.projectId}: ${directErr.message}`);
                                 }
@@ -117,10 +137,17 @@ const gcpSandboxCleanup = async () => {
                     }
 
                     try {
-                        // Check if student still has remaining quota
+                        // P1-11: mark in-flight before any cloud call.
+                        await GcpSandboxUser.updateOne({ _id: user._id }, { $set: { deletionStatus: 'deleting' } });
+
+                        // Check if student still has remaining quota.
+                        // endDatePassed is the absolute cohort cutoff; once it fires,
+                        // hasQuotaLeft must be false so the soft-cleanup branch doesn't
+                        // loop forever for unlimited-quota users (totalCap=0).
                         const totalCap = user.totalCapHours || 0;
                         const hoursUsed = (user.usageSessions || []).reduce((sum, s) => sum + (s.ttlHours || 0), 0);
-                        const hasQuotaLeft = totalCap === 0 || hoursUsed < totalCap;
+                        const endDatePassed = user.endDate && new Date(user.endDate) < now;
+                        const hasQuotaLeft = !endDatePassed && (totalCap === 0 || hoursUsed < totalCap);
 
                         // Always clean up GCP projects (resources)
                         for (const sb of user.sandbox) {
@@ -139,7 +166,7 @@ const gcpSandboxCleanup = async () => {
                             // Keep user for re-launch
                             logger.info(`GCP sandbox ${user.email}: session expired but quota remaining — keeping for re-launch`);
                             await GcpSandboxUser.updateOne({ _id: user._id }, {
-                                $set: { expiresAt: null, sandbox: [], cleanupAttempts: 0, cleanupError: null },
+                                $set: { expiresAt: null, sandbox: [], cleanupAttempts: 0, cleanupError: null, deletionStatus: 'none' },
                             });
                         } else {
                             await GcpSandboxUser.deleteOne({ _id: user._id });
@@ -150,7 +177,7 @@ const gcpSandboxCleanup = async () => {
                         try {
                             await GcpSandboxUser.updateOne({ _id: user._id }, {
                                 $inc: { cleanupAttempts: 1 },
-                                $set: { cleanupError: cleanupErr.message, cleanupFailedAt: now },
+                                $set: { cleanupError: cleanupErr.message, cleanupFailedAt: now, deletionStatus: 'none' },
                             });
                         } catch (dbErr) {
                             logger.error(`Failed to update cleanup status for GCP user ${user.email}: ${dbErr.message}`);

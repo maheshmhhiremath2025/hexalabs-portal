@@ -42,6 +42,15 @@ const userSchema = new mongoose.Schema({
     default: undefined,
   },
   // Optional hard expiry — the login handler rejects after this date
+  // List of specific calendar dates (YYYY-MM-DD, IST) on which the user
+  // is allowed to log in. Empty/undefined = no date restriction. When set,
+  // overrides the recurring allowedWeekdays for one-off training schedules
+  // that don't fit a weekly pattern (e.g. dates 29 Apr, 30 Apr, 4 May, ...).
+  allowedDates: {
+    type: [String],
+    default: undefined,
+  },
+
   // regardless of loginStart/loginStop. Used for time-bounded training
   // batches so access naturally lapses without manual cleanup.
   accessExpiresAt: {
@@ -50,7 +59,18 @@ const userSchema = new mongoose.Schema({
   },
   permissions: {
     type: [],
-  }
+  },
+  // accountSource: how this user was provisioned. Drives the password-reset path:
+  //   self-signup     — public signup form, real email, classic email-link reset
+  //   cohort-deploy   — created via bulk-deploy / admin (often dummy emails),
+  //                     reset goes through org admin, not learner mailbox
+  accountSource: {
+    type: String,
+    enum: ["self-signup","cohort-deploy"],
+    default: "cohort-deploy",
+  },
+  resetToken: { type: String },
+  resetTokenExpiresAt: { type: Date },
 
 },
   { timestamps: true })

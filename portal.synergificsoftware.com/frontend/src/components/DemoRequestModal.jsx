@@ -205,7 +205,6 @@ function Field({ icon: Icon, label, inputRef, ...inputProps }) {
         <input
           ref={inputRef}
           {...inputProps}
-          style={{ colorScheme: 'dark' }}
           className={`w-full h-11 bg-white/[0.03] border border-white/10 rounded-xl ${Icon ? 'pl-11' : 'pl-4'} pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-sm font-medium`}
         />
       </div>
