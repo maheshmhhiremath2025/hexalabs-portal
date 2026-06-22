@@ -329,6 +329,9 @@ function AppInner() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
+    // Superadmin sessions never expire — they manage the platform and need
+    // uninterrupted access regardless of inactivity period.
+    if (userDetails?.userType === 'superadmin') return;
     // Real-interaction events only. Explicitly NOT mousemove — it fires
     // constantly on a live cursor and defeats the timer.
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
@@ -339,7 +342,7 @@ function AppInner() {
       events.forEach(e => window.removeEventListener(e, handler));
       clearIdleTimers();
     };
-  }, [isLoggedIn, resetIdleTimer, clearIdleTimers]);
+  }, [isLoggedIn, userDetails?.userType, resetIdleTimer, clearIdleTimers]);
 
   useEffect(() => {
     if (isLoggedIn) {
