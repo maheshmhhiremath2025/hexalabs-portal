@@ -8,6 +8,7 @@ export function EditTemplateModal({ open, template, onClose, onSave }) {
   const [rate, setRate] = useState('');
   const [kasmVnc, setKasmVnc] = useState(false);
   const [hasXrdp, setHasXrdp] = useState(false);
+  const [vmSize, setVmSize] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -15,6 +16,7 @@ export function EditTemplateModal({ open, template, onClose, onSave }) {
       setRate(String(template.rate ?? ''));
       setKasmVnc(!!template.kasmVnc);
       setHasXrdp(!!template.hasXrdp);
+      setVmSize(template.creation?.vmSize ?? '');
     }
   }, [open, template]);
 
@@ -29,6 +31,7 @@ export function EditTemplateModal({ open, template, onClose, onSave }) {
         rate: rate === '' ? undefined : Number(rate),
         kasmVnc,
         hasXrdp,
+        vmSize: vmSize.trim() || undefined,
       });
     } finally {
       setSubmitting(false);
@@ -55,6 +58,18 @@ export function EditTemplateModal({ open, template, onClose, onSave }) {
           <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500">
             Name and underlying Azure image are immutable — renaming would break VMs
             that reference this template. Delete + recreate instead.
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">VM Size (Azure SKU)</label>
+            <input
+              type="text"
+              value={vmSize}
+              onChange={(e) => setVmSize(e.target.value)}
+              placeholder="e.g. Standard_D2ls_v5"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <p className="mt-1 text-xs text-slate-500">Azure VM SKU used when creating VMs from this template. Leave unchanged to keep current size.</p>
           </div>
 
           <div>

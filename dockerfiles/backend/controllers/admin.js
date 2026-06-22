@@ -554,11 +554,11 @@ async function handleUpdateUser(req, res) {
 }
 
 // PATCH /admin/template — edit a template's non-destructive fields:
-// rate, kasmVnc, hasXrdp (not name/imageId — those would orphan VMs that
-// reference the template).
+// rate, kasmVnc, hasXrdp, vmSize (not name/imageId — those would orphan VMs
+// that reference the template).
 async function handleUpdateTemplate(req, res) {
     if (!isSuperadmin(req)) return res.status(403).json({ message: 'Superadmin access required to update templates' });
-    const { name, rate, kasmVnc, hasXrdp, requiredBackend, accessProtocol, nestedVirt } = req.body;
+    const { name, rate, kasmVnc, hasXrdp, requiredBackend, accessProtocol, nestedVirt, vmSize } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required' });
     try {
         const Templates = require('../models/templates');
@@ -577,6 +577,7 @@ async function handleUpdateTemplate(req, res) {
           set.accessProtocol = accessProtocol;
         }
         if (nestedVirt !== undefined) set.nestedVirt = !!nestedVirt;
+        if (vmSize !== undefined && vmSize !== '') set['creation.vmSize'] = vmSize;
         if (Object.keys(set).length === 0) return res.status(400).json({ message: 'Nothing to update' });
         const r = await Templates.updateOne({ name }, { $set: set });
         if (r.matchedCount === 0) return res.status(404).json({ message: 'Template not found' });
