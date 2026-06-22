@@ -13,6 +13,7 @@ const { connectMongoDB } = require('./connection');
 const { logger } = require('./plugins/logger');
 const VM = require('./models/vm');
 const { startHeartbeat } = require('./services/heartbeat');
+const { startTrainingMonitor } = require('./services/trainingMonitor');
 
 const mongoUri = process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb';
 
@@ -89,8 +90,18 @@ const mongoUri = process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb';
     'aws-delete-user':     require('./handlers/aws-delete-user'),
   };
 
+  // Per-queue concurrency. RG/user/project deletions are I/O-bound (they just
+  // await Azure/AWS/GCP), so running many in parallel drains cohort-expiry
+  // backlogs in minutes instead of hours. Everything else stays serialized (1).
+  const QUEUE_CONCURRENCY = {
+    'azure-delete-sandbox': 10,
+    'azure-delete-user':     5,
+    'aws-delete-user':       5,
+    'gcp-delete-project':    5,
+    'gcp-clean-project':     5,
+  };
   for (const [name, handler] of Object.entries(handlerMap)) {
-    queues[name].process(handler);
+    queues[name].process(QUEUE_CONCURRENCY[name] || 1, handler);
   }
 
   // 4. Failure visibility — until the 2026-05 fix, a queue job throwing an
@@ -140,6 +151,7 @@ const mongoUri = process.env.MONGO_URI || 'mongodb://mongodb:27017/userdb';
   //    If this key ever disappears, the backend refuses to enqueue — the
   //    user sees a 503 instead of a silent "0% progress" limbo.
   startHeartbeat(queues, logger);
+  startTrainingMonitor(queues, logger);
 
   console.log('Worker started and listening for jobs...');
 })().catch((e) => {

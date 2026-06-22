@@ -917,7 +917,7 @@ function DeployGuidedLabModal({ lab, onClose }) {
             {isDone && (
               <button
                 onClick={() => navigate('/vm/vmdetails')}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
               >
                 <Monitor className="w-3.5 h-3.5" /> Open Lab Console
               </button>
@@ -1430,7 +1430,7 @@ export default function GuidedLabs() {
               </button>
               <button
                 onClick={() => navigate('/guided-labs/editor')}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
               >
                 <FaPlus className="w-3 h-3" /> Create Lab
               </button>

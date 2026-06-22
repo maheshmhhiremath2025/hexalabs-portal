@@ -72,7 +72,7 @@ router.get('/session/:vmName', async (req, res) => {
     if (vm.dcv && vm.publicIp) {
       // NICE DCV web client (AWS path) — direct HTTPS to instance on 8443
       if (vm.dcvPort) {
-        accessUrl = 'https://hexalabs.online:' + vm.dcvPort + '/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true';
+        accessUrl = 'https://portal.labsoncloud.online:' + vm.dcvPort + '/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true';
       } else {
         // Pre-Phase-4 fallback for any legacy DCV VM without dcvPort yet
         accessUrl = 'https://' + vm.publicIp + ':8443/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true';

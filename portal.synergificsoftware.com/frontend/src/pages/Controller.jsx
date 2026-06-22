@@ -137,7 +137,7 @@ function Pagination({ total, page, pageSize, onPage, onPageSize }) {
           return (
             <button key={pageNum} onClick={() => onPage(pageNum)}
               className={clsx('rounded px-2.5 py-1 min-w-[28px]',
-                safePage === pageNum ? 'bg-blue-600 text-white' : 'hover:bg-slate-200')}>
+                safePage === pageNum ? 'bg-indigo-600 text-white' : 'hover:bg-slate-200')}>
               {pageNum}
             </button>
           );
@@ -174,7 +174,7 @@ function TabPanel({ children, searchValue, onSearch, onAdd, addLabel, toolbarExt
         <div className="flex items-center gap-2">
           {toolbarExtra}
           {onAdd && (
-            <button onClick={onAdd} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+            <button onClick={onAdd} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors">
               <FaPlus className="text-xs" /> {addLabel}
             </button>
           )}
@@ -448,7 +448,7 @@ const Controller = ({ superadminApiRoutes }) => {
               <button onClick={() => setCreateTemplateOpen(true)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">+ Template</button>
               <button onClick={() => setAssignOpen(true)}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Assign template</button>
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">Assign template</button>
             </div>
           </div>
 

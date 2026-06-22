@@ -70,7 +70,7 @@ const { restrictToLoggedinUserOnly, checkAuth } = require('./middlewares/auth');
 const { azureSandbox } = require('./automations/azureSandbox');
 
 const corsOptions = {
-  origin: (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,https://hsdf.hexalabs.online,https://hexalabs.online,https://www.cloudportal.co.in,https://www.hexalabs.online,https://hexalabs.online').split(','),
+  origin: (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,https://hsdf.hexalabs.online,https://portal.labsoncloud.online,https://www.cloudportal.co.in,https://www.hexalabs.online,https://portal.labsoncloud.online').split(','),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],

@@ -469,7 +469,7 @@ export default function B2BCourseAnalyses() {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => { setUploadInitialType('cloud_sandbox'); setUploadOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"
           >
             <FaCloud className="text-xs" /> New cloud sandbox
           </button>

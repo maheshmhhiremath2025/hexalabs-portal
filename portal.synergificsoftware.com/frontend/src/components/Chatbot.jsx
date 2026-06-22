@@ -125,7 +125,7 @@ const SmartChatbot = () => {
       icon: FaCloud
     },
     'get help': {
-      answer: `Getting Help & Support:\n\nSupport Channels:\n\nImmediate Assistance:\nPhone: +91 88849 07660\nWhatsApp: +91 90354 06484\nEmail: labs@hexalabs.online\n\nSelf-Help:\n• This AI Assistant (me! 🤖)\n• Documentation and guides\n• Knowledge base articles\n• Video tutorials\n\n24/7 Support available for critical issues`,
+      answer: `Getting Help & Support:\n\nSupport Channels:\n\nImmediate Assistance:\nPhone: +91 88849 07660\nWhatsApp: +91 63632 87509\nEmail: labs@hexalabs.online\n\nSelf-Help:\n• This AI Assistant (me! 🤖)\n• Documentation and guides\n• Knowledge base articles\n• Video tutorials\n\n24/7 Support available for critical issues`,
       type: 'support',
       actions: ['Contact Support', 'Browse Docs', 'Video Tutorials'],
       icon: FaHeadset

@@ -12,7 +12,7 @@ export function ConfirmDialog({
   if (!open) return null;
   const btnBg = tone === 'red'
     ? 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500'
-    : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
+    : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-blue-500';
   const iconColor = tone === 'red' ? 'text-rose-600 bg-rose-100' : 'text-blue-600 bg-blue-100';
 
   return (

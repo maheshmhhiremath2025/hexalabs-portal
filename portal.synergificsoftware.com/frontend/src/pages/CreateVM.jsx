@@ -377,7 +377,7 @@ const StepIndicator = ({ currentStep, totalSteps }) => {
         <React.Fragment key={index}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
             index + 1 === currentStep
-              ? 'bg-blue-600 text-white'
+              ? 'bg-indigo-600 text-white'
               : index + 1 < currentStep
               ? 'bg-green-500 text-white'
               : 'bg-slate-200 text-slate-400'
@@ -806,7 +806,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
 
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={handleConfirmCancel} className="px-4 py-2 rounded-lg bg-white border">Cancel</button>
-              <button onClick={() => payload.onConfirm && payload.onConfirm()} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">
+              <button onClick={() => payload.onConfirm && payload.onConfirm()} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">
                 Confirm
               </button>
             </div>
@@ -1484,7 +1484,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                       className={`px-6 py-3 rounded-xl font-medium transition-colors ${
                         !trainingName || emailTokens.filter(t => t.isValid).length === 0
                           ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                     >
                       Continue
@@ -1493,7 +1493,7 @@ export default function CreateVMDashboard({ userDetails = {}, apiRoutes = {} }) 
                     <button
                       onClick={handleSubmitCreate}
                       disabled={submitting}
-                      className="px-8 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                      className="px-8 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors"
                     >
                       {submitting ? (
                         <div className="flex items-center gap-2">

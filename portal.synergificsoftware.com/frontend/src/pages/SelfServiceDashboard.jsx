@@ -191,7 +191,7 @@ export default function SelfServiceDashboard() {
               <div className="text-sm font-semibold text-blue-800">Running low on credits?</div>
               <p className="text-xs text-blue-600 mt-0.5">Upgrade your plan for more workspace hours, sandbox credits, and premium features.</p>
             </div>
-            <a href="/signup" className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+            <a href="/signup" className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
               Upgrade Plan
             </a>
           </div>
@@ -233,7 +233,7 @@ export default function SelfServiceDashboard() {
                 </select>
               </div>
               <button onClick={handleDeploy} disabled={deploying || sub.activeContainers >= sub.maxContainers}
-                className="px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
+                className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
                 <FaRocket className="w-3 h-3" /> {deploying ? 'Deploying...' : 'Deploy'}
               </button>
             </div>
@@ -316,7 +316,7 @@ export default function SelfServiceDashboard() {
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
               </div>
               <button onClick={handleSandbox} disabled={creatingSandbox || !sandboxName || (sandboxCloud === 'gcp' && !sandboxGoogleEmail)}
-                className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
+                className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
                 <FaCloud className="w-3 h-3" /> {creatingSandbox ? 'Creating...' : 'Create'}
               </button>
             </div>
@@ -579,7 +579,7 @@ function FeedbackModal({ trainingName, email, organization, onClose, onSuccess }
         <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting || !rating}
-            className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
             {submitting ? 'Submitting...' : 'Submit Feedback'}
           </button>
         </div>
@@ -735,7 +735,7 @@ function InstanceRow({ inst, onAction, onFeedback, feedbackSubmitted }) {
         {inst.isRunning && (
           <>
             <a href={inst.accessUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-semibold rounded-md hover:bg-blue-700 transition-colors">
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-semibold rounded-md hover:bg-indigo-700 transition-colors">
               <FaExternalLinkAlt className="w-2.5 h-2.5" /> Open
             </a>
             <button onClick={copy} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100" title="Copy password">

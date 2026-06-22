@@ -377,7 +377,7 @@ export default function RosaCluster() {
           <button
             onClick={handleCreate}
             disabled={creating || !clusterName.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {creating ? <FaSpinner className="animate-spin" /> : <FaRedhat className="w-3.5 h-3.5" />}
             {creating ? 'Creating...' : 'Create Cluster'}
@@ -495,7 +495,7 @@ export default function RosaCluster() {
                       <button
                         onClick={() => handleAddStudents(cluster._id)}
                         disabled={addingStudents || emailList.length === 0}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                       >
                         {addingStudents ? <FaSpinner className="animate-spin" /> : <FaUsers className="w-3 h-3" />}
                         {addingStudents ? 'Adding...' : `Add ${emailList.length} Student${emailList.length !== 1 ? 's' : ''}`}

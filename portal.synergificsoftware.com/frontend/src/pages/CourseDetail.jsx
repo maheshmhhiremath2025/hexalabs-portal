@@ -302,7 +302,7 @@ export default function CourseDetail() {
                 <button
                   onClick={handleDeploy}
                   disabled={deploying || (template?.cloud === 'gcp' && !googleEmail)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {deploying ? (
                     <><FaSpinner className="w-3.5 h-3.5 animate-spin" /> Deploying sandbox…</>
@@ -570,7 +570,7 @@ export default function CourseDetail() {
                   </button>
                   <button
                     onClick={handleBulkDeploy}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
                   >
                     <FaRocket /> Deploy {bulkSeats} seat{bulkSeats === 1 ? '' : 's'}
                   </button>

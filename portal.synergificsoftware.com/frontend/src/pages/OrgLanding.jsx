@@ -47,7 +47,7 @@ export default function OrgLanding() {
           <div className="text-6xl mb-3">😕</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Organization not found</h1>
           <p className="text-gray-600 mb-6">We couldn't find a workspace called <span className="font-mono px-2 py-0.5 rounded bg-gray-100">{orgSlug}</span>.</p>
-          <Link to="/login" className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+          <Link to="/login" className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
             Go to login <FaArrowRight />
           </Link>
         </div>

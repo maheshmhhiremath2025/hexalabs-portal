@@ -192,7 +192,7 @@ export default function Signup({ onLogin }) {
                       : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
                   }`}>
                   {plan.badge && (
-                    <span className="absolute -top-2.5 left-4 px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">{plan.badge}</span>
+                    <span className="absolute -top-2.5 left-4 px-2.5 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">{plan.badge}</span>
                   )}
                   <div className="text-sm font-semibold text-gray-800">{plan.name}</div>
                   <div className="mt-2">
@@ -258,7 +258,7 @@ export default function Signup({ onLogin }) {
                   {/* Select indicator */}
                   <div className={`mt-4 py-2 text-center rounded-lg text-xs font-semibold transition-colors ${
                     selectedPlan?._id === plan._id
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-indigo-600 text-white'
                       : 'bg-gray-100 text-gray-500'
                   }`}>
                     {selectedPlan?._id === plan._id ? 'Selected' : 'Select Plan'}
@@ -269,7 +269,7 @@ export default function Signup({ onLogin }) {
 
             <div className="text-center">
               <button onClick={() => setStep('form')} disabled={!selectedPlan}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm shadow-lg shadow-blue-600/20">
+                className="inline-flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm shadow-lg shadow-blue-600/20">
                 {selectedPlan?.priceMonthly === 0 ? 'Start Free Trial' : `Continue with ${selectedPlan?.name}`}
                 <FaChevronRight className="w-3 h-3" />
               </button>
@@ -363,7 +363,7 @@ export default function Signup({ onLogin }) {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-sm font-semibold text-gray-800">{selectedPlan?.name}</span>
-                  {selectedPlan?.badge && <span className="ml-2 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full">{selectedPlan.badge}</span>}
+                  {selectedPlan?.badge && <span className="ml-2 text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">{selectedPlan.badge}</span>}
                 </div>
                 <span className="text-sm font-bold text-gray-900">{formatINR(selectedPlan?.priceMonthly)}{selectedPlan?.priceMonthly > 0 ? '/mo' : ''}</span>
               </div>
@@ -395,7 +395,7 @@ export default function Signup({ onLogin }) {
               </div>
 
               <button onClick={handleSignup} disabled={loading}
-                className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm shadow-lg shadow-blue-600/20">
+                className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm shadow-lg shadow-blue-600/20">
                 {loading ? 'Processing...' : selectedPlan?.priceMonthly === 0 ? 'Start Free Trial' : `Pay ${formatINR(selectedPlan?.priceMonthly)} & Start`}
               </button>
             </div>

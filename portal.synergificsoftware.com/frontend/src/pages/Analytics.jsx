@@ -238,7 +238,7 @@ export default function Analytics() {
               </div>
             </div>
             <button onClick={fetchStudents} disabled={studentsLoading}
-              className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              className="px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
               {studentsLoading ? 'Loading...' : 'Apply'}
             </button>
             <button onClick={downloadStudentsCsv} disabled={!filteredStudents.length}

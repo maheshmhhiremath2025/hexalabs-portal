@@ -72,7 +72,7 @@ const Selector = ({ setSelectedTraining, setSelectedUser, userDetails, apiRoutes
                             <select
                                 value={selectedCustomer}
                                 onChange={(e) => handleUserTag(e.target.value)}
-                                className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 pr-9 text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all cursor-pointer hover:border-gray-300"
+                                className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 pr-9 text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all cursor-pointer hover:border-gray-300"
                             >
                                 <option value="">Select customer...</option>
                                 {userTag.length > 0 ? (
@@ -97,7 +97,7 @@ const Selector = ({ setSelectedTraining, setSelectedUser, userDetails, apiRoutes
                         <select
                             value={selectedLab}
                             onChange={(e) => handleTrainingName(e.target.value)}
-                            className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 pr-9 text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all cursor-pointer hover:border-gray-300"
+                            className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 pr-9 text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all cursor-pointer hover:border-gray-300"
                         >
                             <option value="">Select lab module...</option>
                             {trainingName.length > 0 ? (
@@ -115,7 +115,7 @@ const Selector = ({ setSelectedTraining, setSelectedUser, userDetails, apiRoutes
                 {/* Selection indicator */}
                 {selectedLab && (
                     <div className="flex items-center gap-2 self-end pb-1">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
+                        <div className="h-2 w-2 rounded-full bg-indigo-500" />
                         <span className="text-xs text-gray-500">
                             Viewing <span className="font-medium text-gray-700">{selectedLab}</span>
                             {selectedCustomer && <> for <span className="font-medium text-gray-700">{selectedCustomer}</span></>}

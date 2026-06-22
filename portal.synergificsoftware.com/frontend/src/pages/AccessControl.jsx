@@ -318,7 +318,7 @@ function PowerScheduleTab({ pushToast }) {
 
             <div className="flex items-center gap-3 pt-2">
               <button onClick={addSchedule} disabled={submitting}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                 {submitting ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaPlus className="w-3 h-3" />}
                 Add schedule
               </button>
@@ -551,7 +551,7 @@ export default function AccessControl() {
             <t.icon className="w-3.5 h-3.5" />
             {t.label}
             <span className="text-[11px] text-gray-400 font-normal hidden md:inline">· {t.hint}</span>
-            {activeTab === t.v && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
+            {activeTab === t.v && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
           </button>
         ))}
       </div>
@@ -648,7 +648,7 @@ export default function AccessControl() {
                 <button key={d.v} type="button" onClick={() => toggleDay(d.v)}
                   className={`w-10 h-9 text-[11px] font-semibold rounded-md border transition-colors ${
                     weekdays.includes(d.v)
-                      ? 'bg-blue-600 border-blue-600 text-white'
+                      ? 'bg-indigo-600 border-blue-600 text-white'
                       : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300'
                   }`}>
                   {d.label}
@@ -661,7 +661,7 @@ export default function AccessControl() {
 
         <div className="flex items-center gap-3 pt-2">
           <button onClick={() => submit(false)} disabled={submitting}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
             {submitting ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaCheck className="w-3 h-3" />}
             Apply restrictions
           </button>
@@ -969,7 +969,7 @@ function BulkCleanupTab({ pushToast }) {
             <button
               onClick={loadSchedules}
               disabled={loading}
-              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
             >
               {loading ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaServer className="w-3 h-3" />}
               Load schedules
@@ -1005,7 +1005,7 @@ function BulkCleanupTab({ pushToast }) {
             <button
               disabled={rows.length === 0}
               onClick={() => openEdit('all')}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FaPlus className="w-3 h-3 rotate-45" />
               Edit ALL matching ({rows.length})
@@ -1158,7 +1158,7 @@ function BulkCleanupTab({ pushToast }) {
                 Cancel
               </button>
               <button onClick={handleBulkEdit} disabled={editing}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-600 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
                 {editing ? <FaSpinner className="animate-spin w-3 h-3" /> : <FaPlus className="w-3 h-3 rotate-45" />}
                 Apply
               </button>

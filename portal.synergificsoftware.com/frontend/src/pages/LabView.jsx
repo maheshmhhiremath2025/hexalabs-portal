@@ -118,7 +118,7 @@ export default function LabView() {
               onClick={() => setGuideOpen(!guideOpen)}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                 guideOpen
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
             >
@@ -142,7 +142,7 @@ export default function LabView() {
           <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mr-1">Services:</span>
           {vncLabel && (
             <a href={desktopUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
               <FaExternalLinkAlt className="w-2 h-2" /> {vncLabel}
             </a>
           )}

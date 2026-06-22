@@ -416,7 +416,7 @@ const AnalogClock = ({ selectedTime, onTimeChange }) => {
                   onClick={handleAMPMToggle}
                   className={`text-sm font-semibold px-3 py-1.5 rounded-md border transition-all ${
                     editIsPM 
-                      ? 'bg-blue-600 text-white border-blue-700 shadow-lg' 
+                      ? 'bg-indigo-600 text-white border-blue-700 shadow-lg' 
                       : 'bg-white text-gray-900 border-blue-500 hover:bg-blue-50'
                   }`}
                 >
@@ -840,7 +840,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
                     onClick={() => setTimeInputMode('analog')}
                     className={`px-3 py-1 text-xs rounded-lg ${
                       timeInputMode === 'analog'
-                        ? 'bg-blue-600 text-white shadow-md'
+                        ? 'bg-indigo-600 text-white shadow-md'
                         : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                     }`}
                   >
@@ -850,7 +850,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
                     onClick={() => setTimeInputMode('digital')}
                     className={`px-3 py-1 text-xs rounded-lg ${
                       timeInputMode === 'digital'
-                        ? 'bg-blue-600 text-white shadow-md'
+                        ? 'bg-indigo-600 text-white shadow-md'
                         : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                     }`}
                   >
@@ -1073,7 +1073,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
           <button
             onClick={addSchedule}
             disabled={!selectedTime || selectedDates.length === 0}
-            className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg hover:shadow-sm disabled:bg-blue-200 disabled:cursor-not-allowed disabled:shadow-none"
+            className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg hover:shadow-sm disabled:bg-blue-200 disabled:cursor-not-allowed disabled:shadow-none"
           >
             Add to Schedule List
           </button>
@@ -1121,7 +1121,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="w-full mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg hover:shadow-sm disabled:bg-blue-200 disabled:cursor-not-allowed disabled:shadow-none"
+              className="w-full mt-4 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg hover:shadow-sm disabled:bg-blue-200 disabled:cursor-not-allowed disabled:shadow-none"
             >
               {loading ? 'Creating Schedules...' : 'Submit All Schedules'}
             </button>
@@ -1162,7 +1162,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
               </p>
               <button
                 onClick={() => setActiveTab('create')}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 Create Schedule
               </button>
@@ -1266,7 +1266,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
             onClick={() => setActiveTab('create')}
             className={`flex-1 py-2.5 px-4 text-sm font-medium rounded-lg ${
               activeTab === 'create'
-                ? 'bg-blue-600 text-white shadow-lg'
+                ? 'bg-indigo-600 text-white shadow-lg'
                 : 'text-blue-600 hover:text-gray-900 hover:bg-blue-100'
             }`}
           >
@@ -1276,7 +1276,7 @@ const Scheduler = ({ selectedTraining, apiRoutes }) => {
             onClick={() => setActiveTab('view')}
             className={`flex-1 py-2.5 px-4 text-sm font-medium rounded-lg ${
               activeTab === 'view'
-                ? 'bg-blue-600 text-white shadow-lg'
+                ? 'bg-indigo-600 text-white shadow-lg'
                 : 'text-blue-600 hover:text-gray-900 hover:bg-blue-100'
             }`}
           >

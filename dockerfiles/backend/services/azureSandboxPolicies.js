@@ -133,7 +133,7 @@ async function applyAllSandboxPolicies(policyClient, subscriptionId, rgName, tem
         policyType: 'Custom',
         mode: 'All',
         displayName: 'Sandbox: Allowed VM image publishers',
-        description: 'Only allows Ubuntu, Windows Server, RHEL, and Oracle Linux VM images',
+        description: 'Only allows Ubuntu, Windows Server, RHEL, Rocky, Oracle Linux VM images',
         policyRule: {
           if: {
             allOf: [
@@ -141,7 +141,7 @@ async function applyAllSandboxPolicies(policyClient, subscriptionId, rgName, tem
               {
                 not: {
                   anyOf: [
-                    { field: 'Microsoft.Compute/virtualMachines/storageProfile.imageReference.publisher', in: ['Canonical', 'MicrosoftWindowsServer', 'RedHat', 'Oracle'] },
+                    { field: 'Microsoft.Compute/virtualMachines/storageProfile.imageReference.publisher', in: ['Canonical', 'MicrosoftWindowsServer', 'RedHat', 'Oracle', 'resf', 'procomputers'] },
                     // Also allow images from image gallery (custom golden images)
                     { field: 'Microsoft.Compute/virtualMachines/storageProfile.imageReference.id', contains: '/images/' },
                   ],
@@ -157,7 +157,7 @@ async function applyAllSandboxPolicies(policyClient, subscriptionId, rgName, tem
 
     await policyClient.policyAssignments.create(scope, `sb-vmimg-${shortRg}`, {
       policyDefinitionId: policyDefId,
-      displayName: 'Sandbox: Ubuntu/Windows/RHEL/Oracle Linux only',
+      displayName: 'Sandbox: Ubuntu/Windows/RHEL/Rocky/Oracle Linux only',
     });
     appliedCount++;
   } catch (e) { logger.error(`[azure-policy] VM image policy failed: ${e.message}`); }

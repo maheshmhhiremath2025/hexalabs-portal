@@ -49,7 +49,7 @@ function getDockerForContainer(containerDoc) {
 const CONTAINER_IMAGES = {
   // === Real OS Desktops — KasmWeb (HTTPS/6901, SSL port proxy) ===
   // All desktops use kasmweb images: real OS, real desktop, real apps.
-  // Access via https://hexalabs.online:<port+10000>/
+  // Access via https://portal.labsoncloud.online:<port+10000>/
   'ubuntu-desktop': {
     image: 'kasmweb/desktop:1.16.0', label: 'Ubuntu Desktop (XFCE)', os: 'Ubuntu',
     category: 'desktop', vncPort: 6901, protocol: 'https', defaultUser: 'kasm_user',
@@ -93,7 +93,7 @@ const CONTAINER_IMAGES = {
     env: ['RAM_SIZE=4G', 'CPU_CORES=2', 'DISK_SIZE=30G', 'VERSION=tiny11'],
     shmSize: '512m',
     requiresKvm: true,
-    // Route to dedicated Windows host, proxy via https://hexalabs.online/win/<port>/
+    // Route to dedicated Windows host, proxy via https://portal.labsoncloud.online/win/<port>/
     windowsHost: true,
   },
 

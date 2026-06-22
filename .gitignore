@@ -31,3 +31,9 @@ dockerfiles/vm-templates/vm-templates/
 *.orig-*
 docker-compose-workers.yml
 docker-compose.yml.backup-*
+
+# Ops/maintenance Python scripts (contain server credentials)
+*.py
+__pycache__/
+_fetched_files/
+server_diff_result.txt

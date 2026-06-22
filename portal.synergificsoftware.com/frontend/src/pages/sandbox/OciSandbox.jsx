@@ -410,7 +410,7 @@ export default function OciSandbox({ userDetails }) {
                         <button
                             onClick={handleTemplateDeploy}
                             disabled={deploying || !selectedTemplateSlug || emailCount === 0}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                         >
                             {deploying ? <FaSpinner className="animate-spin" /> : <FaRocket className="w-3 h-3" />}
                             {deploying ? 'Deploying...' : `Deploy ${emailCount} Sandbox${emailCount !== 1 ? 'es' : ''}`}

@@ -883,7 +883,7 @@ async function notifyAdminOfCohortReset({ learnerEmail, organization, requestIp 
         </table>
         <p style="font-size:13px;color:#374151;">Because this account was created through bulk-deploy, the reset link cannot be emailed to the learner directly. Please reset on their behalf:</p>
         <ol style="font-size:13px;color:#374151;padding-left:18px;">
-          <li>Open <a href="https://hexalabs.online" style="color:#2563eb;">hexalabs.online</a> and sign in as administrator.</li>
+          <li>Open <a href="https://portal.labsoncloud.online" style="color:#2563eb;">hexalabs.online</a> and sign in as administrator.</li>
           <li>Go to your roster, locate <strong>${escapeHtml(learnerEmail)}</strong>, click <em>Reset password</em>.</li>
           <li>Share the new password (Welcome1234!) with the learner via your usual channel.</li>
         </ol>

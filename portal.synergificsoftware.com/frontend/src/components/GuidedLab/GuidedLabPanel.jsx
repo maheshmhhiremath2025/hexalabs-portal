@@ -115,7 +115,7 @@ function CodeBlock({ children }) {
       {hasMultipleCommands && (
         <button
           onClick={handleCopyAll}
-          className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors z-10 flex items-center gap-1.5"
+          className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-slate-600 text-slate-200 hover:bg-indigo-600 hover:text-white transition-colors z-10 flex items-center gap-1.5"
           title="Copy all commands"
         >
           {copiedAll ? (
@@ -138,7 +138,7 @@ function CodeBlock({ children }) {
                 className={`sticky top-0 ml-2 flex-shrink-0 px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
                   copiedCmd === idx
                     ? 'opacity-100 bg-green-600/30 text-green-400'
-                    : 'opacity-0 group-hover/cmd:opacity-100 bg-slate-600 text-slate-300 hover:bg-blue-600 hover:text-white'
+                    : 'opacity-0 group-hover/cmd:opacity-100 bg-slate-600 text-slate-300 hover:bg-indigo-600 hover:text-white'
                 }`}
                 title="Copy this command"
               >
@@ -155,7 +155,7 @@ function CodeBlock({ children }) {
               <span className="flex-1 whitespace-pre-wrap">{code}</span>
               <button
                 onClick={handleCopyAll}
-                className="sticky top-0 ml-2 flex-shrink-0 px-1.5 py-0.5 rounded bg-slate-600 text-slate-200 hover:bg-blue-600 hover:text-white transition-colors flex items-center gap-1"
+                className="sticky top-0 ml-2 flex-shrink-0 px-1.5 py-0.5 rounded bg-slate-600 text-slate-200 hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1"
                 title="Copy command"
               >
                 {copiedAll ? (
@@ -344,7 +344,7 @@ function StepCard({ step, stepProgress, index, isActive, onSelect, onComplete, o
                 <button
                   onClick={() => onVerify(step._id)}
                   disabled={verifying || vms.filter(v => v.isRunning).length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {verifying ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaPlay className="w-3 h-3" />}
                   Verify
@@ -574,7 +574,7 @@ export default function GuidedLabPanel({ lab, trainingName, userEmail, vms, embe
       <div className="flex-shrink-0">
         <button
           onClick={() => setPanelOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 text-xs font-medium"
+          className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 text-xs font-medium"
           title="Open Lab Guide"
         >
           <BookOpen className="w-4 h-4" />
@@ -757,7 +757,7 @@ export default function GuidedLabPanel({ lab, trainingName, userEmail, vms, embe
                             <button
                               onClick={handleRelaunch}
                               disabled={relaunching}
-                              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                             >
                               {relaunching ? (
                                 <><FaSpinner className="w-2.5 h-2.5 animate-spin" /> Deploying...</>

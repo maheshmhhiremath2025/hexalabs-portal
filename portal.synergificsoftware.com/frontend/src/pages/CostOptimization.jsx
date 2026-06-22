@@ -74,7 +74,7 @@ export default function CostOptimization() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">Scan Azure for leaked NICs, public IPs, unattached disks, and old snapshots.</p>
             <button onClick={scanOrphans} disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
               {loading ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaSearch className="w-3 h-3" />}
               {loading ? 'Scanning...' : 'Scan Azure'}
             </button>
@@ -132,7 +132,7 @@ export default function CostOptimization() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">Analyze running VMs and find ones that can be downsized based on 7-day CPU usage.</p>
             <button onClick={scanRightSizing} disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
               {loading ? <FaSpinner className="w-3 h-3 animate-spin" /> : <FaSearch className="w-3 h-3" />}
               {loading ? 'Analyzing...' : 'Analyze VMs'}
             </button>

@@ -148,7 +148,7 @@ const Azure = ({ apiRoutes }) => {
           </div>
 
           <a
-            href="https://hexalabs.online/azure-sandbox.pdf"
+            href="https://portal.labsoncloud.online/azure-sandbox.pdf"
             target="_blank"
             rel="noreferrer"
             className="bg-white/20 backdrop-blur-sm p-4 rounded-xl shadow-sm hover:bg-white/30 transition text-center text-sm font-semibold"

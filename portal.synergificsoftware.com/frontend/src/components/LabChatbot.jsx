@@ -45,7 +45,7 @@ export default function LabChatbot() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 flex items-center justify-center transition-colors"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 flex items-center justify-center transition-colors"
         title="Lab Help"
       >
         <FaCommentDots className="text-xl" />
@@ -59,7 +59,7 @@ export default function LabChatbot() {
       style={{ width: 350, height: 450 }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white shrink-0">
         <div>
           <div className="text-sm font-semibold">Lab Assistant</div>
           <div className="text-xs opacity-80">Ask about your cloud labs</div>
@@ -86,7 +86,7 @@ export default function LabChatbot() {
             <div
               className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-indigo-600 text-white'
                   : 'bg-gray-200 text-gray-800'
               }`}
             >
@@ -121,7 +121,7 @@ export default function LabChatbot() {
           <button
             onClick={send}
             disabled={!input.trim() || loading}
-            className="w-9 h-9 bg-blue-600 text-white rounded-lg flex items-center justify-center disabled:opacity-40 hover:bg-blue-700 transition-colors"
+            className="w-9 h-9 bg-indigo-600 text-white rounded-lg flex items-center justify-center disabled:opacity-40 hover:bg-indigo-700 transition-colors"
           >
             <FaPaperPlane className="text-xs" />
           </button>

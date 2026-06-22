@@ -741,7 +741,7 @@ const Account = ({ userDetails, apiRoutes }) => {
             <button
               onClick={handleRefresh}
               disabled={refreshing || paymentProcessing}
-              className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg ${refreshing || paymentProcessing ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+              className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg ${refreshing || paymentProcessing ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
             >
               <FaSync className={refreshing || paymentProcessing ? 'animate-spin' : ''} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -749,7 +749,7 @@ const Account = ({ userDetails, apiRoutes }) => {
             <button
               disabled={!paymentButton || paymentProcessing}
               onClick={() => setModalVisible(true)}
-              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg ${paymentButton && !paymentProcessing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'}`}
+              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg ${paymentButton && !paymentProcessing ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}`}
             >
               <FaArrowAltCircleRight />
               {paymentProcessing ? 'Processing...' : payableInvoices.length > 0 ? 'Pay Invoices' : 'No Invoices'}
@@ -780,7 +780,7 @@ const Account = ({ userDetails, apiRoutes }) => {
 
       {/* Transactions Table */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
-        <div className="bg-blue-600 text-white px-6 py-3 flex justify-between items-center">
+        <div className="bg-indigo-600 text-white px-6 py-3 flex justify-between items-center">
           <div>
             <h4 className="text-lg font-semibold">Transactions</h4>
             {organization && <p className="text-sm text-blue-100">Organization: {organization}</p>}

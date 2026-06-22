@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const { renderEmail, steps, rawHtml, credentials, info, BRAND } = require('../../services/emailTemplate');
 
-const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://hexalabs.online').replace(/\/+$/, '');
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://portal.labsoncloud.online').replace(/\/+$/, '');
 const GUAC_LINK_SECRET = process.env.GUACAMOLE_LINK_SECRET
   || process.env.GUACAMOLE_USER_SECRET
   || process.env.GUACAMOLE_ADMIN_PASS

@@ -1,5 +1,5 @@
-// Corporate enterprise login — animated dark left panel + clean white right.
-// Split two-panel layout. Core login flow unchanged.
+// Clean sky/cloud login — centered glassmorphism card over airy gradient.
+// Core login flow unchanged.
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -8,48 +8,34 @@ import { useBranding } from '../contexts/BrandingContext';
 import DemoRequestModal from '../components/DemoRequestModal';
 import {
   FaEnvelope, FaLock, FaArrowRight, FaShieldAlt,
-  FaBolt, FaGlobe, FaMicrochip, FaUserLock,
-  FaEye, FaEyeSlash, FaCertificate, FaCheckCircle,
+  FaEye, FaEyeSlash, FaCertificate,
   FaAws, FaMicrosoft, FaGoogle, FaRedhat, FaCloud, FaDocker,
 } from 'react-icons/fa';
 
 const SUPPORTED_CLOUDS = [
-  { icon: FaAws,       label: 'AWS',            color: '#FF9900' },
-  { icon: FaMicrosoft, label: 'Azure',          color: '#00BCF2' },
-  { icon: FaGoogle,    label: 'Google Cloud',   color: '#4285F4' },
-  { icon: FaCloud,     label: 'Oracle Cloud',   color: '#F80000' },
-  { icon: FaRedhat,    label: 'OpenShift',      color: '#EE0000' },
-  { icon: FaDocker,    label: 'Containers',     color: '#2496ED' },
+  { icon: FaAws,       label: 'AWS',          color: '#FF9900' },
+  { icon: FaMicrosoft, label: 'Azure',        color: '#00BCF2' },
+  { icon: FaGoogle,    label: 'Google Cloud', color: '#4285F4' },
+  { icon: FaCloud,     label: 'Oracle Cloud', color: '#F80000' },
+  { icon: FaRedhat,    label: 'OpenShift',    color: '#EE0000' },
+  { icon: FaDocker,    label: 'Containers',   color: '#2496ED' },
 ];
 
-const FEATURES = [
-  { icon: FaBolt,      title: 'Instant Provisioning', desc: 'Workspaces in seconds, VMs in minutes. No tickets, no waiting.' },
-  { icon: FaGlobe,     title: 'Multi-Cloud',          desc: 'AWS, Azure, GCP, OCI, and Red Hat OpenShift from one interface.' },
-  { icon: FaMicrochip, title: 'Cost Guardrails',      desc: 'Quotas, idle auto-shutdown, expiry cleanup, budget caps — built in.' },
-  { icon: FaUserLock,  title: 'Enterprise Security',  desc: 'ISO 9001 & 10004 certified, SSL everywhere, hardened IAM per sandbox.' },
-];
-
-const STATS = [
-  { label: 'Clouds', value: '5' },
-  { label: 'Lab Images', value: '103+' },
-  { label: 'Deploy Time', value: '< 3s' },
-  { label: 'White Label', value: 'Ready' },
-];
-
-// Chrome autofill override for the white-background form
-const AUTOFILL_OVERRIDE_CSS = `
+// Chrome autofill override — light card
+const AUTOFILL_CSS = `
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
   input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #f9fafb inset !important;
-    -webkit-text-fill-color: #111827 !important;
-    caret-color: #111827 !important;
+    -webkit-box-shadow: 0 0 0 30px rgba(255,255,255,0.85) inset !important;
+    -webkit-text-fill-color: #1e293b !important;
+    caret-color: #1e293b !important;
     transition: background-color 5000s ease-in-out 0s;
   }
 `;
 
-const AUTOFILL_OVERRIDE_CSS_WL = `
+// Chrome autofill override — whitelabel (light bg)
+const AUTOFILL_CSS_WL = `
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
@@ -61,197 +47,181 @@ const AUTOFILL_OVERRIDE_CSS_WL = `
   }
 `;
 
-// ─── Left panel animated background CSS ──────────────────────────────────
-const LEFT_PANEL_CSS = `
-  @keyframes aurora {
+const PAGE_CSS = `
+  @keyframes sky-drift {
     0%   { background-position: 0% 50%; }
-    25%  { background-position: 100% 30%; }
-    50%  { background-position: 60% 100%; }
-    75%  { background-position: 20% 0%; }
+    50%  { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
-  @keyframes float1 {
-    0%, 100% { transform: translate(0, 0) scale(1);    opacity: 0.5; }
-    33%       { transform: translate(55px, -35px) scale(1.18); opacity: 0.7; }
-    66%       { transform: translate(-25px, 28px) scale(0.88); opacity: 0.4; }
+  @keyframes sky-float1 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.35; }
+    50%      { transform: translate(30px, -20px) scale(1.1); opacity: 0.55; }
   }
-  @keyframes float2 {
-    0%, 100% { transform: translate(0, 0) scale(1);    opacity: 0.4; }
-    33%       { transform: translate(-45px, 45px) scale(1.12); opacity: 0.6; }
-    66%       { transform: translate(38px, -22px) scale(0.82); opacity: 0.3; }
+  @keyframes sky-float2 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.25; }
+    50%      { transform: translate(-25px, 15px) scale(1.15); opacity: 0.45; }
   }
-  @keyframes float3 {
-    0%, 100% { transform: translate(-50%,-50%) scale(1);    opacity: 0.3; }
-    50%       { transform: translate(-50%,-50%) scale(1.25); opacity: 0.5; }
+  @keyframes sky-float3 {
+    0%, 100% { transform: translateX(0); opacity: 0.2; }
+    50%      { transform: translateX(20px); opacity: 0.35; }
   }
-  @keyframes shimmer {
-    0%   { transform: translateX(-120%) skewX(-15deg); }
-    100% { transform: translateX(220%)  skewX(-15deg); }
+  @keyframes sky-ring {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
   }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(14px); }
+  @keyframes sky-fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 18px rgba(20,184,166,0.12); }
-    50%       { box-shadow: 0 0 36px rgba(20,184,166,0.28), 0 0 56px rgba(251,146,60,0.08); }
+  @keyframes sky-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.7; }
   }
 
-  /* ── Background: deep charcoal → rich teal-emerald → warm midnight ── */
-  .lp-aurora-bg {
-    background: linear-gradient(-45deg,
-      #0b1a17,
-      #0d2b22,
-      #112418,
-      #0a1f1c,
-      #13241a,
-      #0c1e18
-    );
-    background-size: 400% 400%;
-    animation: aurora 22s ease infinite;
+  .sky-bg {
+    background: linear-gradient(135deg, #e0ecff 0%, #d4e4ff 20%, #c9dbff 40%, #dfe8f8 60%, #eef2fb 80%, #f0f4ff 100%);
+    background-size: 300% 300%;
+    animation: sky-drift 20s ease infinite;
   }
 
-  /* Orb 1 — warm amber/orange glow, top-left */
-  .lp-orb-1 {
+  /* Fluffy cloud shapes built from overlapping circles */
+  .sky-cloud {
     position: absolute;
-    width: 300px; height: 300px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(251,146,60,0.28) 0%, rgba(245,101,32,0.12) 50%, transparent 70%);
-    filter: blur(65px);
-    top: -8%; left: -12%;
-    animation: float1 19s ease-in-out infinite;
     pointer-events: none;
+    filter: blur(2px);
+    opacity: 0.9;
   }
-
-  /* Orb 2 — teal/cyan glow, bottom-right */
-  .lp-orb-2 {
-    position: absolute;
-    width: 240px; height: 240px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(20,184,166,0.32) 0%, rgba(6,182,212,0.12) 50%, transparent 70%);
-    filter: blur(55px);
-    bottom: 8%; right: -10%;
-    animation: float2 24s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  /* Orb 3 — emerald pulse, centre */
-  .lp-orb-3 {
-    position: absolute;
-    width: 200px; height: 200px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(52,211,153,0.2) 0%, transparent 70%);
-    filter: blur(48px);
-    top: 42%; left: 50%;
-    animation: float3 16s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  /* Dot-grid overlay */
-  .lp-grid {
-    position: absolute; inset: 0;
-    background-image: radial-gradient(circle, rgba(134,239,172,0.07) 1px, transparent 1px);
-    background-size: 30px 30px;
-    pointer-events: none;
-    mask-image: radial-gradient(ellipse 75% 65% at 50% 45%, black 25%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 45%, black 25%, transparent 100%);
-  }
-
-  /* Diagonal shimmer sweep */
-  .lp-shimmer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-  .lp-shimmer::after {
+  .sky-cloud::before, .sky-cloud::after, .sky-cloud span {
     content: '';
     position: absolute;
-    top: -50%; left: -50%;
-    width: 200%; height: 200%;
-    background: linear-gradient(
-      105deg,
-      transparent 0%,
-      rgba(255,255,255,0.015) 44%,
-      rgba(255,255,255,0.04)  50%,
-      rgba(255,255,255,0.015) 56%,
-      transparent 100%
-    );
-    animation: shimmer 9s ease-in-out infinite;
+    background: rgba(255,255,255,0.85);
+    border-radius: 50%;
+  }
+  /* Cloud 1 — large, top-right */
+  .sky-cloud1 {
+    width: 240px; height: 80px; top: 8%; right: 8%;
+    background: rgba(255,255,255,0.8);
+    border-radius: 80px;
+    animation: sky-float1 22s ease-in-out infinite;
+  }
+  .sky-cloud1::before { width: 100px; height: 100px; top: -50px; left: 40px; background: rgba(255,255,255,0.85); border-radius: 50%; }
+  .sky-cloud1::after  { width: 130px; height: 130px; top: -70px; left: 90px; background: rgba(255,255,255,0.8); border-radius: 50%; }
+  .sky-cloud1 span    { width: 80px;  height: 80px;  top: -40px; left: 150px; background: rgba(255,255,255,0.85); border-radius: 50%; display: block; }
+
+  /* Cloud 2 — medium, bottom-left */
+  .sky-cloud2 {
+    width: 180px; height: 60px; bottom: 12%; left: 5%;
+    background: rgba(255,255,255,0.75);
+    border-radius: 60px;
+    animation: sky-float2 26s ease-in-out infinite;
+  }
+  .sky-cloud2::before { width: 80px; height: 80px; top: -40px; left: 30px; background: rgba(255,255,255,0.8); border-radius: 50%; }
+  .sky-cloud2::after  { width: 100px; height: 100px; top: -55px; left: 65px; background: rgba(255,255,255,0.75); border-radius: 50%; }
+  .sky-cloud2 span    { width: 60px;  height: 60px;  top: -30px; left: 110px; background: rgba(255,255,255,0.8); border-radius: 50%; display: block; }
+
+  /* Cloud 3 — small, top-left */
+  .sky-cloud3 {
+    width: 140px; height: 48px; top: 18%; left: 12%;
+    background: rgba(255,255,255,0.7);
+    border-radius: 48px;
+    animation: sky-float3 18s ease-in-out infinite;
+  }
+  .sky-cloud3::before { width: 65px; height: 65px; top: -32px; left: 20px; background: rgba(255,255,255,0.75); border-radius: 50%; }
+  .sky-cloud3::after  { width: 80px; height: 80px; top: -42px; left: 50px; background: rgba(255,255,255,0.7); border-radius: 50%; }
+
+  /* Cloud 4 — tiny, mid-right */
+  .sky-cloud4 {
+    width: 110px; height: 38px; top: 55%; right: 10%;
+    background: rgba(255,255,255,0.65);
+    border-radius: 38px;
+    animation: sky-float1 20s ease-in-out infinite reverse;
+  }
+  .sky-cloud4::before { width: 55px; height: 55px; top: -28px; left: 15px; background: rgba(255,255,255,0.7); border-radius: 50%; }
+  .sky-cloud4::after  { width: 65px; height: 65px; top: -35px; left: 40px; background: rgba(255,255,255,0.65); border-radius: 50%; }
+
+  /* Cloud 5 — small, bottom-right */
+  .sky-cloud5 {
+    width: 160px; height: 52px; bottom: 22%; right: 18%;
+    background: rgba(255,255,255,0.6);
+    border-radius: 52px;
+    animation: sky-float2 24s ease-in-out infinite reverse;
+  }
+  .sky-cloud5::before { width: 70px; height: 70px; top: -36px; left: 25px; background: rgba(255,255,255,0.65); border-radius: 50%; }
+  .sky-cloud5::after  { width: 85px; height: 85px; top: -45px; left: 60px; background: rgba(255,255,255,0.6); border-radius: 50%; }
+
+  /* Orbital rings behind card */
+  .sky-ring1 {
+    position: absolute; width: 520px; height: 520px; top: 50%; left: 50%;
+    border-radius: 50%;
+    border: 1px solid rgba(99,130,241,0.08);
+    animation: sky-ring 25s linear infinite;
+    pointer-events: none;
+  }
+  .sky-ring2 {
+    position: absolute; width: 620px; height: 620px; top: 50%; left: 50%;
+    border-radius: 50%;
+    border: 1px solid rgba(139,152,246,0.06);
+    animation: sky-ring 35s linear infinite reverse;
+    pointer-events: none;
+  }
+  .sky-ring3 {
+    position: absolute; width: 440px; height: 440px; top: 50%; left: 50%;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(99,130,241,0.05);
+    animation: sky-ring 18s linear infinite;
+    pointer-events: none;
   }
 
-  /* Staggered content fade-up */
-  .lp-fade-up { animation: fadeUp 0.65s ease-out both; }
-  .lp-fade-d1 { animation-delay: 0.1s; }
-  .lp-fade-d2 { animation-delay: 0.22s; }
-  .lp-fade-d3 { animation-delay: 0.38s; }
-  .lp-fade-d4 { animation-delay: 0.52s; }
-  .lp-fade-d5 { animation-delay: 0.68s; }
+  .sky-fade-up { animation: sky-fadeUp 0.6s ease-out both; }
+  .sky-d1 { animation-delay: 0.05s; }
+  .sky-d2 { animation-delay: 0.15s; }
+  .sky-d3 { animation-delay: 0.25s; }
+  .sky-d4 { animation-delay: 0.35s; }
+  .sky-d5 { animation-delay: 0.45s; }
 
-  /* Feature cards */
-  .lp-feature-card {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background: linear-gradient(135deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.008) 100%);
-    border: 1px solid rgba(255,255,255,0.055);
-    transition: all 0.28s ease;
-  }
-  .lp-feature-card:hover {
-    background: linear-gradient(135deg, rgba(20,184,166,0.09) 0%, rgba(52,211,153,0.04) 100%);
-    border-color: rgba(20,184,166,0.25);
-    box-shadow: 0 4px 20px rgba(20,184,166,0.1);
-    transform: translateX(4px);
-  }
-  .lp-feature-card:hover .lp-icon-box {
-    background: rgba(20,184,166,0.18);
-    box-shadow: 0 0 14px rgba(20,184,166,0.35);
-    color: #2dd4bf;
+  .sky-card {
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow:
+      0 8px 32px rgba(99,130,241,0.08),
+      0 2px 8px rgba(0,0,0,0.04),
+      inset 0 1px 0 rgba(255,255,255,0.8);
   }
 
-  /* Stats / trust bar */
-  .lp-stats-card {
-    animation: pulse-glow 4.5s ease-in-out infinite;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  /* Big metric cards (3-column row) */
-  .lp-metric-card {
-    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
-    border: 1px solid rgba(255,255,255,0.07);
+  .sky-input {
+    background: rgba(255,255,255,0.7);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    transition: all 0.25s ease;
+    border: 1px solid rgba(148,163,184,0.25);
+    transition: all 0.2s ease;
   }
-  .lp-metric-card:hover {
-    border-color: rgba(20,184,166,0.22);
-    background: linear-gradient(135deg, rgba(20,184,166,0.07) 0%, rgba(52,211,153,0.02) 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(20,184,166,0.1);
-  }
-
-  /* Compact capability rows */
-  .lp-capability {
-    background: rgba(255,255,255,0.02);
-    border: 1px solid rgba(255,255,255,0.04);
-    transition: all 0.22s ease;
-  }
-  .lp-capability:hover {
-    background: rgba(20,184,166,0.06);
-    border-color: rgba(20,184,166,0.16);
-    transform: translateX(4px);
-  }
-  .lp-capability:hover .lp-icon-box {
-    background: rgba(20,184,166,0.18);
-    color: #2dd4bf;
-    box-shadow: 0 0 12px rgba(20,184,166,0.3);
+  .sky-input:focus {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(99,102,241,0.5);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.1), 0 2px 8px rgba(99,102,241,0.08);
   }
 
-  /* Respect reduced-motion */
+  .sky-btn {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    box-shadow: 0 4px 14px rgba(30,41,59,0.25), 0 2px 6px rgba(0,0,0,0.08);
+    transition: all 0.2s ease;
+  }
+  .sky-btn:hover {
+    box-shadow: 0 6px 20px rgba(30,41,59,0.35), 0 3px 8px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+  }
+  .sky-btn:active { transform: translateY(0); }
+
   @media (prefers-reduced-motion: reduce) {
-    .lp-aurora-bg, .lp-orb-1, .lp-orb-2, .lp-orb-3,
-    .lp-stats-card { animation: none !important; }
-    .lp-shimmer::after { animation: none !important; }
-    .lp-fade-up { animation: none !important; opacity: 1; }
+    .sky-bg, .sky-cloud1, .sky-cloud2, .sky-cloud3, .sky-cloud4, .sky-cloud5,
+    .sky-ring1, .sky-ring2, .sky-ring3 { animation: none !important; }
+    .sky-fade-up { animation: none !important; opacity: 1; }
   }
 `;
 
-// ─── Main component ──────────────────────────────────────────────────────
+// ─── Main component ─────────────────────────────────────────────────────
 const Login = ({ onLogin, apiRoutes }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -316,11 +286,11 @@ const Login = ({ onLogin, apiRoutes }) => {
   const companyName = branding.companyName || 'Hexalabs';
   const logoUrl = branding.logoUrl || '/logo/logo.png';
 
-  // ─── Whitelabel split layout ─────────────────────────────────────────
+  // ─── Whitelabel layout (unchanged) ──────────────────────────────────
   if (branding && (branding.customDomain || branding.organization)) {
     return (
       <div className="min-h-screen flex flex-col lg:flex-row bg-white" style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
-        <style>{AUTOFILL_OVERRIDE_CSS_WL}</style>
+        <style>{AUTOFILL_CSS_WL}</style>
         <section className="flex flex-1 items-center justify-center px-6 py-12 lg:px-16">
           <div className="w-full max-w-md">
             <div className="flex justify-center mb-10">
@@ -433,313 +403,195 @@ const Login = ({ onLogin, apiRoutes }) => {
     );
   }
 
-  // ─── Corporate enterprise layout (canonical domain) ────────────────────
+  // ─── Corporate — Sky / cloud centered layout ──────────────────────────
   return (
     <div
-      className="min-h-screen overflow-hidden selection:bg-blue-500/30"
+      className="sky-bg min-h-screen relative overflow-hidden flex flex-col items-center justify-center selection:bg-indigo-500/20"
       style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}
     >
-      <style>{AUTOFILL_OVERRIDE_CSS}{LEFT_PANEL_CSS}</style>
-      <div className="flex min-h-screen w-full">
+      <style>{AUTOFILL_CSS}{PAGE_CSS}</style>
 
-        {/* ── Left: Animated branding panel ──────────────────────────── */}
-        <section className="lp-aurora-bg relative hidden w-1/2 lg:flex flex-col justify-between p-8 xl:p-10 h-screen overflow-hidden">
-          {/* Animated background layers */}
-          <div className="lp-orb-1" />
-          <div className="lp-orb-2" />
-          <div className="lp-orb-3" />
-          <div className="lp-grid" />
-          <div className="lp-shimmer" />
+      {/* Fluffy cloud shapes */}
+      <div className="sky-cloud sky-cloud1"><span /></div>
+      <div className="sky-cloud sky-cloud2"><span /></div>
+      <div className="sky-cloud sky-cloud3" />
+      <div className="sky-cloud sky-cloud4" />
+      <div className="sky-cloud sky-cloud5" />
 
-          {/* Content — z-10 above background effects */}
-          <div className="relative z-10 flex flex-col space-y-4 min-h-0">
+      {/* Orbital rings */}
+      <div className="sky-ring1" />
+      <div className="sky-ring2" />
+      <div className="sky-ring3" />
 
-            {/* ── Header: logo + live status ── */}
-            <div className="flex items-center justify-between lp-fade-up lp-fade-d1">
-              <div className="flex items-center gap-2.5">
-                {logoUrl ? (
-                  <img
-                    src={logoUrl}
-                    alt={companyName}
-                    onError={(e) => { e.currentTarget.outerHTML = `<span class="text-base font-bold text-white">${companyName}</span>`; }}
-                    className="h-7 w-auto object-contain"
-                  />
-                ) : (
-                  <span className="text-base font-bold text-white">{companyName}</span>
-                )}
-                <div className="h-4 w-px bg-white/15" />
-                <span className="text-[11px] text-slate-500 font-medium tracking-wide">Cloud Portal</span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded-full border border-teal-500/25 bg-teal-500/10 px-3 py-1 backdrop-blur-sm">
-                <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
-                <span className="text-[10px] font-semibold text-teal-300 tracking-wide">All systems live</span>
-              </div>
-            </div>
+      {/* Top navigation bar */}
+      <nav className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 lg:px-10 py-4">
+        <div className="flex items-center gap-2.5">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={companyName}
+              onError={(e) => { e.currentTarget.outerHTML = `<span class="text-sm font-bold text-slate-700">${companyName}</span>`; }}
+              className="h-7 w-auto object-contain"
+            />
+          ) : (
+            <span className="text-sm font-bold text-slate-700">{companyName}</span>
+          )}
+          <div className="h-4 w-px bg-slate-300/50" />
+          <span className="text-[10px] text-slate-400 font-medium tracking-wide">Cloud Portal</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDemoOpen(true)}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 border border-slate-200/60 hover:border-slate-300 bg-white/50 hover:bg-white/80 backdrop-blur-sm rounded-lg transition-all"
+          >
+            Book demo
+          </button>
+          <Link
+            to="/signup"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 border border-slate-200/60 hover:border-slate-300 bg-white/50 hover:bg-white/80 backdrop-blur-sm rounded-lg transition-all"
+          >
+            Sign up
+          </Link>
+        </div>
+      </nav>
 
-            {/* ── Hero copy ── */}
-            <div className="lp-fade-up lp-fade-d2">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 mb-3">
-                <FaBolt className="w-2.5 h-2.5 text-orange-400" />
-                <span className="text-[10px] font-bold text-orange-300 uppercase tracking-widest">Enterprise Ready</span>
-              </div>
-              <h2 className="text-3xl xl:text-[2.4rem] font-black leading-[1.1] text-white">
-                Train teams on<br />
-                <span className="bg-gradient-to-r from-teal-300 via-emerald-300 to-orange-300 bg-clip-text text-transparent">
-                  real cloud.
-                </span>
-              </h2>
-              <p className="mt-2.5 text-slate-400 text-[13px] leading-relaxed max-w-sm">
-                {branding.loginBanner ||
-                  'Provision per-student sandboxes across AWS, Azure, GCP & OCI in seconds. Auto-cleanup. Cost controls. Your brand.'}
-              </p>
-            </div>
+      {/* ── Centered card ──────────────────────────────────────────── */}
+      <div className="relative z-10 w-full max-w-md px-5">
 
-            {/* ── 3 big metric cards ── */}
-            <div className="grid grid-cols-3 gap-2.5 lp-fade-up lp-fade-d3">
-              {[
-                { value: '5', label: 'Cloud Providers', color: 'text-white' },
-                { value: '103+', label: 'Lab Images', color: 'text-teal-300' },
-                { value: '< 3s', label: 'Deploy Time', color: 'text-orange-300' },
-              ].map(({ value, label, color }) => (
-                <div key={label} className="lp-metric-card rounded-xl p-3 text-center">
-                  <div className={`text-2xl font-black ${color} leading-none`}>{value}</div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-1">{label}</div>
-                </div>
-              ))}
-            </div>
+        {/* Login icon */}
+        <div className="sky-fade-up sky-d1 flex justify-center mb-5">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <FaLock className="w-5 h-5 text-white" />
+          </div>
+        </div>
 
-            {/* ── Compact capability rows ── */}
-            <div className="space-y-1.5 lp-fade-up lp-fade-d4">
-              {FEATURES.map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="lp-capability flex items-center gap-3 px-3 py-2 rounded-lg">
-                  <div className="lp-icon-box flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-teal-500/10 text-teal-400 transition-all duration-300">
-                    <Icon size={12} />
-                  </div>
-                  <div className="flex-1 min-w-0 flex items-baseline justify-between">
-                    <span className="text-[12px] font-semibold text-white">{title}</span>
-                    <span className="text-[10px] text-teal-500 font-medium ml-2 shrink-0">✓ Included</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Card */}
+        <div className="sky-card rounded-2xl p-7 sm:p-8 sky-fade-up sky-d2">
 
-            {/* ── Cloud provider logos ── */}
-            <div className="lp-fade-up lp-fade-d5">
-              <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">Supported Platforms</div>
-              <div className="flex items-center gap-4">
-                {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
-                  <div key={label} className="flex flex-col items-center gap-1 group cursor-default" title={label}>
-                    <Icon className="w-5 h-5 transition-all duration-300 group-hover:scale-125 group-hover:drop-shadow-lg" style={{ color }} />
-                    <span className="text-[9px] text-slate-600 group-hover:text-slate-300 font-medium transition-colors">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* Heading */}
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-bold text-slate-800">
+              {hasPriorLogin
+                ? <>Welcome back{priorEmailFirstName ? <>, <span className="text-indigo-600">{priorEmailFirstName}</span></> : ''}</>
+                : 'Sign in with email'}
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              {hasPriorLogin
+                ? 'Access your cloud training portal.'
+                : 'Enter your credentials to get started'}
+            </p>
           </div>
 
-          {/* ── Bottom: trust bar + footer ── */}
-          <div className="relative z-10 space-y-3 mt-auto pt-3">
-            {/* Trust badges row */}
-            <div className="lp-stats-card flex items-center justify-between rounded-xl px-4 py-3 bg-white/[0.03] border border-white/[0.07]">
-              <div className="flex items-center gap-1.5">
-                <FaShieldAlt className="text-teal-400 w-3.5 h-3.5" />
-                <span className="text-[10px] font-semibold text-slate-300">ISO 9001 · 10004</span>
+          {/* Error */}
+          {loginError && (
+            <div className="mb-4 flex items-center gap-2.5 p-3 bg-red-50/80 border border-red-200/60 rounded-xl text-sm text-red-600 backdrop-blur-sm">
+              <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-red-500 text-xs font-bold">!</span>
               </div>
-              <div className="h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1.5">
-                <FaLock className="text-teal-400 w-3.5 h-3.5" />
-                <span className="text-[10px] font-semibold text-slate-300">256-bit SSL</span>
-              </div>
-              <div className="h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1.5">
-                <FaCertificate className="text-orange-400 w-3.5 h-3.5" />
-                <span className="text-[10px] font-semibold text-slate-300">White Label</span>
-              </div>
-              <div className="h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.9)]" />
-                <span className="text-[10px] font-semibold text-orange-300">Live</span>
-              </div>
+              {loginError}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={loginUser} className="space-y-3.5">
+            <div className="relative">
+              <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 z-10" />
+              <input
+                ref={emailRef}
+                type="email"
+                required
+                autoComplete="email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Email address"
+                className="sky-input w-full h-11 rounded-xl pl-11 pr-4 text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none"
+              />
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-white/[0.05] pt-3 text-[10px]">
-              <span className="font-semibold text-slate-500">{companyName}</span>
-              <span className="text-slate-600">Enterprise Cloud Training Platform</span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Right: Sign-in form (white bg) ──────────────────────── */}
-        <section className="flex w-full flex-col justify-center p-8 lg:w-1/2 lg:p-16 xl:p-24 bg-white relative">
-          {/* Top-right CTAs */}
-          <div className="absolute top-5 right-5 lg:top-8 lg:right-8 z-20 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setDemoOpen(true)}
-              className="hidden md:inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-            >
-              Book demo
-              <FaArrowRight className="w-3 h-3" />
-            </button>
-            <Link
-              to="/signup"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Create account
-              <FaArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-
-          <div className="mx-auto w-full max-w-md">
-            {/* Mobile logo */}
-            <div className="lg:hidden flex items-center gap-3 mb-8">
-              <div className="h-10 w-10 rounded-lg bg-slate-900 flex items-center justify-center">
-                <img src={logoUrl} alt={companyName} className="h-6 w-6 object-contain"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              </div>
-              <div>
-                {logoUrl ? (
-                  <img src={logoUrl} alt={companyName} className="h-7 w-auto object-contain"
-                    onError={(e) => { e.currentTarget.outerHTML = `<div class="text-lg font-semibold text-gray-900">${companyName}</div>`; }} />
-                ) : (
-                  <div className="text-lg font-semibold text-gray-900">{companyName}</div>
-                )}
-                <div className="text-xs text-gray-500 font-medium">Cloud Portal</div>
-              </div>
+            <div className="relative">
+              <FaLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 z-10" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={handleCapsCheck}
+                onKeyUp={handleCapsCheck}
+                onBlur={() => setCapsLockOn(false)}
+                placeholder="Password"
+                className="sky-input w-full h-11 rounded-xl pl-11 pr-11 text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors z-10"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <FaEyeSlash className="w-3.5 h-3.5" /> : <FaEye className="w-3.5 h-3.5" />}
+              </button>
             </div>
 
-            {/* Heading */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {hasPriorLogin
-                  ? `Welcome back${priorEmailFirstName ? `, ${priorEmailFirstName}` : ''}`
-                  : 'Sign in to your account'}
-              </h2>
-              <p className="mt-2 text-sm text-gray-500">
-                {hasPriorLogin
-                  ? 'Access your cloud training portal.'
-                  : 'Enter your credentials to access the portal.'}
-              </p>
-            </div>
-
-            {/* Error */}
-            {loginError && (
-              <div className="mb-6 flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-red-500 text-xs font-bold">!</span>
-                </div>
-                {loginError}
+            {capsLockOn && (
+              <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Caps Lock is on
               </div>
             )}
 
-            {/* Form */}
-            <form onSubmit={loginUser} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>
-                <div className="relative">
-                  <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    ref={emailRef}
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="you@company.com"
-                    className="w-full h-12 bg-gray-50 border border-gray-300 rounded-lg pl-12 pr-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder:text-gray-400 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-medium text-gray-700">Password</label>
-                  <Link to="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handleCapsCheck}
-                    onKeyUp={handleCapsCheck}
-                    onBlur={() => setCapsLockOn(false)}
-                    placeholder="Enter your password"
-                    className="w-full h-12 bg-gray-50 border border-gray-300 rounded-lg pl-12 pr-12 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder:text-gray-400 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {capsLockOn && (
-                  <div className="mt-1.5 text-xs text-amber-600 font-medium flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Caps Lock is on
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    Sign in
-                    <FaArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* Cloud providers */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider text-center mb-4">
-                Deploy across
-              </div>
-              <div className="flex items-center justify-center gap-5">
-                {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
-                  <div key={label} className="flex flex-col items-center gap-1" title={label}>
-                    <Icon className="w-6 h-6 transition-colors" style={{ color }} />
-                    <span className="text-[10px] text-gray-400 font-medium">{label}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center justify-end">
+              <Link to="/forgot-password" className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors">
+                Forgot password?
+              </Link>
             </div>
 
-            {/* Footer trust badges */}
-            <div className="mt-8 pt-5 border-t border-gray-100">
-              <div className="flex items-center justify-center gap-5 text-[11px] text-gray-400 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <FaLock className="w-3 h-3 text-green-500" /> 256-bit SSL
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <FaCertificate className="w-3 h-3 text-green-500" /> ISO Certified
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <FaCheckCircle className="w-3 h-3 text-green-500" /> Live
-                </span>
-              </div>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="sky-btn w-full h-11 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  Get Started
+                  <FaArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-slate-200/60" />
+            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Deploy across</span>
+            <div className="flex-1 h-px bg-slate-200/60" />
           </div>
-        </section>
+
+          {/* Cloud providers */}
+          <div className="flex items-center justify-center gap-4">
+            {SUPPORTED_CLOUDS.map(({ icon: Icon, label, color }) => (
+              <div key={label} className="group cursor-default" title={label}>
+                <div className="w-9 h-9 rounded-xl bg-white/60 border border-slate-200/40 flex items-center justify-center group-hover:border-slate-300/60 group-hover:bg-white/80 group-hover:shadow-sm transition-all">
+                  <Icon className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-all" style={{ color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Trust footer below card */}
+        <div className="sky-fade-up sky-d4 mt-5 flex items-center justify-center gap-4 text-[10px] text-slate-400 font-medium">
+          <span className="flex items-center gap-1"><FaShieldAlt className="w-2.5 h-2.5 text-indigo-400/60" /> ISO Certified</span>
+          <span className="h-2.5 w-px bg-slate-300/40" />
+          <span className="flex items-center gap-1"><FaLock className="w-2.5 h-2.5 text-indigo-400/60" /> 256-bit SSL</span>
+          <span className="h-2.5 w-px bg-slate-300/40" />
+          <span className="flex items-center gap-1"><FaCertificate className="w-2.5 h-2.5 text-indigo-400/60" /> White Label</span>
+        </div>
       </div>
 
       {/* Demo request modal */}

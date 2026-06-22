@@ -408,7 +408,7 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, onResetP
           {vm.type === 'container' ? (
             <a href={vm.accessUrl} target="_blank" rel="noopener noreferrer"
               className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
+                vm.isRunning ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-400 pointer-events-none'
               }`}>
               <FaDesktop className="w-2.5 h-2.5" />
               Open Desktop
@@ -424,7 +424,7 @@ const VmRow = ({ vm, onSelect, onLaunch, onCapture, onDelete, onShadow, onResetP
               {(vm.guacamole || vm.dcv) && (
                 <button onClick={() => onLaunch(vm)} disabled={!vm.isRunning || disabled}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                    vm.isRunning ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    vm.isRunning ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}>
                   <FaDesktop className="w-2.5 h-2.5" />
                   Open in Browser
@@ -964,7 +964,7 @@ const VmDetails = ({ userDetails, selectedTraining, apiRoutes }) => {
     // NICE DCV path (Hexalabs Edge / AWS) — direct HTTPS to instance:8443, no Guacamole hop
     if (vm.dcv && vm.publicIp) {
       const dcvUrl = vm.dcvPort
-        ? 'https://hexalabs.online:' + vm.dcvPort + '/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true'
+        ? 'https://portal.labsoncloud.online:' + vm.dcvPort + '/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true'
         : 'https://' + vm.publicIp + ':8443/?username=' + encodeURIComponent(vm.adminUsername || 'labuser') + '&password=' + encodeURIComponent(vm.adminPass || '') + '&autoconnect=true';
       window.open(dcvUrl, '_blank', 'noopener');
       return;
@@ -1578,7 +1578,7 @@ function VmSettingsPanel({ trainingName, vms, onUpdate, show }) {
 
       <div className="flex items-center gap-2">
         <button onClick={handleSave} disabled={saving}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
         {expiryDate && (

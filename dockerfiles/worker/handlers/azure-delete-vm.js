@@ -8,7 +8,7 @@ const queues = require('./../queues');
 const handler = async (job) => {
   const vm = job.data
   const data = await VM.findOne({ name: vm.name }, "isRunning isAlive logs duration quota remarks -_id");
-       if (data.isRunning) {
+       if (data && data.isRunning) {
         const currentTime = new Date();
 
         // Find the log entry where stop is null

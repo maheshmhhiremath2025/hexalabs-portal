@@ -72,17 +72,21 @@ async function queryOneAzureChunk(chunkFrom, chunkTo) {
     },
   };
   let lastErr;
-  // Two retry waves on 429: 15s, 60s. Cost Mgmt's rate-limit counter resets ~60s.
-  for (const wait of [0, 15000, 60000]) {
-    if (wait) await new Promise(r => setTimeout(r, wait));
+  // Three retry waves on 429 with exponential backoff.
+  // Azure Cost Mgmt rate-limit resets after ~60-90s; give it ample room.
+  for (const wait of [0, 30000, 90000, 180000]) {
+    if (wait) {
+      logger.warn(`[costCenter] 429 on chunk ${chunkFrom.toISOString().slice(0,10)}→${chunkTo.toISOString().slice(0,10)} — waiting ${wait/1000}s before retry`);
+      await new Promise(r => setTimeout(r, wait));
+    }
     try {
       return await costClient.query.usage(scope, body);
     } catch (err) {
       lastErr = err;
       if (!/too many requests|429/i.test(err.message)) throw err;
-      logger.warn(`[costCenter] 429 on chunk ${chunkFrom.toISOString().slice(0,10)}→${chunkTo.toISOString().slice(0,10)} — backing off`);
     }
   }
+  logger.error(`[costCenter] chunk ${chunkFrom.toISOString().slice(0,10)}→${chunkTo.toISOString().slice(0,10)} failed after all retries`);
   throw lastErr;
 }
 
@@ -95,7 +99,7 @@ async function queryAzureCostByResource(startDate, endDate) {
   // (the screenshot bug where Untracked showed ₹3.1L). Multiple smaller chunks let some
   // succeed even if others fail; each chunk also less likely to hit the 5000-row first-page cap.
   const CHUNK_DAYS = 7;
-  const INTER_CHUNK_MS = 4000;
+  const INTER_CHUNK_MS = 8000;
   const chunks = [];
   let cursor = new Date(startDate);
   while (cursor < endDate) {
@@ -191,7 +195,7 @@ async function queryAzureUngroupedTotal(startDate, endDate) {
       aggregation: { totalCost: { name: 'Cost', function: 'Sum' } },
     },
   };
-  for (const wait of [0, 15000, 60000]) {
+  for (const wait of [0, 30000, 90000]) {
     if (wait) await new Promise(r => setTimeout(r, wait));
     try {
       const r = await costClient.query.usage(scope, body);
@@ -201,6 +205,7 @@ async function queryAzureUngroupedTotal(startDate, endDate) {
         logger.warn('[costCenter] ungrouped total failed: ' + err.message);
         return 0;
       }
+      logger.warn('[costCenter] 429 on ungrouped total — waiting ' + (wait ? wait/1000 : 30) + 's');
     }
   }
   return 0;
@@ -710,7 +715,7 @@ const cacheByRange = new Map();
 const inFlightByRange = new Map();
 const CACHE_MS = 30 * 60 * 1000; // 30 min
 const MAX_DAYS = 364; // Azure Cost Mgmt API rejects > 365 days inclusive (treats it as >1yr); 364 is the safe cap.
-const CACHE_PERSIST_PATH = '/var/lib/synergific-portal/costCenter-cache.json';
+const CACHE_PERSIST_PATH = require('path').join(__dirname, '..', '.cache', 'costCenter-cache.json');
 
 (function hydrateCacheFromDisk() {
   try {
@@ -734,7 +739,7 @@ function persistCacheToDisk() {
 
 async function getCostCenter({ from, to, days, force = false } = {}) {
   // Resolve start/end. Priority: explicit from/to > legacy `days` > default = last MAX_DAYS.
-  const end = to ? new Date(to) : new Date();
+  let end = to ? new Date(to) : new Date();
   let start;
   if (from) {
     start = new Date(from);
@@ -747,6 +752,13 @@ async function getCostCenter({ from, to, days, force = false } = {}) {
   const span = (end - start) / 86400000;
   if (span > MAX_DAYS) start = new Date(end.getTime() - MAX_DAYS * 86400000);
   if (start > end) start = new Date(end.getTime() - 86400000);
+
+  // Round start/end to the nearest hour so cache keys are stable across
+  // rapid-fire frontend requests (each sends to=new Date() which differs
+  // by milliseconds, creating new keys and new Azure API calls every time).
+  const ROUND_MS = 60 * 60 * 1000; // 1 hour
+  start = new Date(Math.floor(start.getTime() / ROUND_MS) * ROUND_MS);
+  end   = new Date(Math.ceil(end.getTime() / ROUND_MS) * ROUND_MS);
 
   const cacheKey = `${start.toISOString()}|${end.toISOString()}`;
   const cached = cacheByRange.get(cacheKey);

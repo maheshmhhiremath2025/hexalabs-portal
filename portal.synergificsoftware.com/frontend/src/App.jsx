@@ -70,7 +70,206 @@ const B2BCourseAnalyses    = lazy(() => import('./pages/b2b/B2BCourseAnalyses'))
 function RouteFallback() {
   return (
     <div className="flex items-center justify-center py-20">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
+// ── Light splash screen after login ──────────────────────────────────────
+const SPLASH_CSS = `
+  @keyframes sp-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sp-fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes sp-drift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes sp-orb1 {
+    0%   { transform: translate(0,0) scale(1); }
+    33%  { transform: translate(50px,-30px) scale(1.08); }
+    66%  { transform: translate(-25px,40px) scale(0.95); }
+    100% { transform: translate(0,0) scale(1); }
+  }
+  @keyframes sp-orb2 {
+    0%   { transform: translate(0,0) scale(1); }
+    33%  { transform: translate(-40px,25px) scale(1.05); }
+    66%  { transform: translate(35px,-50px) scale(0.92); }
+    100% { transform: translate(0,0) scale(1); }
+  }
+  @keyframes sp-orb3 {
+    0%   { transform: translate(0,0) scale(1); }
+    33%  { transform: translate(25px,35px) scale(1.06); }
+    66%  { transform: translate(-40px,-15px) scale(0.94); }
+    100% { transform: translate(0,0) scale(1); }
+  }
+  @keyframes sp-logoIn {
+    from { opacity: 0; transform: scale(0.7); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes sp-ringDraw {
+    from { stroke-dashoffset: 352; }
+    to   { stroke-dashoffset: 0; }
+  }
+  @keyframes sp-ringPulse {
+    0%, 100% { filter: drop-shadow(0 0 3px rgba(79,70,229,0.15)); }
+    50%      { filter: drop-shadow(0 0 10px rgba(79,70,229,0.3)); }
+  }
+  @keyframes sp-textUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sp-barFill {
+    from { width: 0%; }
+    to   { width: 100%; }
+  }
+  @keyframes sp-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 1; }
+  }
+  @keyframes sp-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+`;
+
+function SplashScreen({ userDetails, fadeOut }) {
+  const firstName = (userDetails?.email || '').split('@')[0].split(/[._-]/)[0];
+  const displayName = firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1) : '';
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
+      style={{
+        fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+        background: 'linear-gradient(135deg, #f0f4ff 0%, #e8eeff 30%, #f5f0ff 60%, #fdf2f8 100%)',
+        backgroundSize: '200% 200%',
+        animation: fadeOut
+          ? 'sp-fadeOut 0.4s ease-in forwards'
+          : 'sp-drift 12s ease infinite, sp-fadeIn 0.3s ease-out',
+      }}
+    >
+      <style>{SPLASH_CSS}</style>
+
+      {/* Soft gradient orbs */}
+      <div className="absolute pointer-events-none" style={{
+        width: 500, height: 500, top: '-5%', left: '-10%',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
+        filter: 'blur(40px)',
+        animation: 'sp-orb1 14s ease-in-out infinite',
+      }} />
+      <div className="absolute pointer-events-none" style={{
+        width: 450, height: 450, bottom: '-5%', right: '-10%',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(168,85,247,0.1) 0%, transparent 70%)',
+        filter: 'blur(40px)',
+        animation: 'sp-orb2 16s ease-in-out infinite',
+      }} />
+      <div className="absolute pointer-events-none" style={{
+        width: 350, height: 350, top: '50%', left: '50%',
+        marginTop: -175, marginLeft: -175,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(236,72,153,0.07) 0%, transparent 70%)',
+        filter: 'blur(40px)',
+        animation: 'sp-orb3 18s ease-in-out infinite',
+      }} />
+
+      {/* Center content */}
+      <div className="relative z-10 flex flex-col items-center" style={{
+        animation: 'sp-float 4s ease-in-out infinite',
+      }}>
+
+        {/* Logo with circular progress ring */}
+        <div className="relative" style={{
+          width: 110, height: 110,
+          animation: 'sp-logoIn 0.7s cubic-bezier(0.16,1,0.3,1) both',
+          marginBottom: 28,
+        }}>
+          {/* Progress ring SVG */}
+          <svg className="absolute inset-0" width="110" height="110" viewBox="0 0 110 110" style={{
+            animation: 'sp-ringPulse 2.5s ease-in-out infinite',
+          }}>
+            <circle cx="55" cy="55" r="52" fill="none" stroke="rgba(99,102,241,0.08)" strokeWidth="2" />
+            <circle cx="55" cy="55" r="52" fill="none"
+              stroke="url(#sp-grad)" strokeWidth="2.5" strokeLinecap="round"
+              strokeDasharray="327" strokeDashoffset="327"
+              style={{
+                animation: 'sp-ringDraw 2.4s cubic-bezier(0.4,0,0.2,1) 0.3s forwards',
+                transformOrigin: 'center',
+                transform: 'rotate(-90deg)',
+              }}
+            />
+            <defs>
+              <linearGradient id="sp-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="50%" stopColor="#a855f7" />
+                <stop offset="100%" stopColor="#ec4899" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          {/* Inner frosted circle with logo */}
+          <div className="absolute inset-0 flex items-center justify-center" style={{ padding: 10 }}>
+            <div style={{
+              width: '100%', height: '100%', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.8)',
+              boxShadow: '0 8px 32px rgba(99,102,241,0.08), 0 2px 8px rgba(0,0,0,0.03)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <img src="/logo/logo.png" alt="" style={{
+                height: 40, width: 40, objectFit: 'contain',
+              }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Welcome text */}
+        <h2 style={{
+          fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em',
+          color: '#1e293b', marginBottom: 6,
+          animation: 'sp-textUp 0.6s ease-out 0.3s both',
+        }}>
+          {displayName ? `Welcome, ${displayName}` : 'Welcome'}
+        </h2>
+        <p style={{
+          fontSize: 14, color: '#94a3b8',
+          fontWeight: 400,
+          animation: 'sp-textUp 0.6s ease-out 0.5s both',
+          marginBottom: 32,
+        }}>
+          Preparing your workspace
+        </p>
+
+        {/* Progress bar */}
+        <div style={{
+          width: 200, height: 3, borderRadius: 4,
+          background: 'rgba(99,102,241,0.08)',
+          overflow: 'hidden',
+          animation: 'sp-textUp 0.6s ease-out 0.6s both',
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: 0, left: 0,
+            height: '100%', borderRadius: 4,
+            background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+            animation: 'sp-barFill 2.4s cubic-bezier(0.4,0,0.2,1) 0.4s forwards',
+            width: '0%',
+          }} />
+        </div>
+
+        {/* Status text */}
+        <p style={{
+          fontSize: 11, color: '#cbd5e1',
+          marginTop: 14, fontWeight: 400,
+          animation: 'sp-pulse 2s ease-in-out infinite',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}>
+          Loading
+        </p>
+      </div>
     </div>
   );
 }
@@ -83,6 +282,8 @@ function AppInner() {
   const [selectedTraining, setSelectedTraining] = useState(null);
   const [selectedUser, setSelectedUser] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashFadeOut, setSplashFadeOut] = useState(false);
   const navigate = useNavigate();
   const { fetchBranding, resetBranding } = useBranding();
 
@@ -184,8 +385,17 @@ function AppInner() {
     setIsLoggedIn(true);
     const details = getUserDetails();
     setUserDetails(details);
-    // Selfservice users go to their dashboard, not home
-    navigate(details.userType === 'selfservice' ? '/my-labs' : '/');
+    // Show splash for 3 seconds, then navigate
+    setShowSplash(true);
+    setSplashFadeOut(false);
+    setTimeout(() => {
+      setSplashFadeOut(true);
+      setTimeout(() => {
+        setShowSplash(false);
+        setSplashFadeOut(false);
+        navigate(details.userType === 'selfservice' ? '/my-labs' : '/');
+      }, 400); // fade-out duration
+    }, 2600); // visible duration (total ~3s)
   };
 
   const sidebarWidth = sidebarCollapsed ? 72 : 260;
@@ -195,6 +405,9 @@ function AppInner() {
 
   return (
     <div className="min-h-screen bg-surface-50">
+      {/* Post-login splash screen */}
+      {showSplash && <SplashScreen userDetails={userDetails} fadeOut={splashFadeOut} />}
+
       {showChrome && (
         <Sidebar
           userDetails={userDetails}
@@ -205,7 +418,7 @@ function AppInner() {
       )}
 
       <div
-        className="min-h-screen transition-all duration-200"
+        className="min-h-screen transition-all duration-300"
         style={{ marginLeft: showChrome ? sidebarWidth : 0 }}
       >
         {showChrome && <Navbar userDetails={userDetails} />}

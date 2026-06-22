@@ -21,7 +21,7 @@ try {
 }
 
 const RESET_TTL_MS = 30 * 60 * 1000;
-const PORTAL_URL = process.env.PORTAL_URL || 'https://hexalabs.online';
+const PORTAL_URL = process.env.PORTAL_URL || 'https://portal.labsoncloud.online';
 const GENERIC_OK = { message: 'If an account exists for that email, instructions have been sent.' };
 
 function makeToken() {

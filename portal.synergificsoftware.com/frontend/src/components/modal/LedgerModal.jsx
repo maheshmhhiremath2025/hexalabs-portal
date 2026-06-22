@@ -721,7 +721,7 @@ const LedgerModal = ({
                                         <button
                                             type="button"
                                             onClick={addItem}
-                                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
                                         >
                                             <span>+ Add Item</span>
                                         </button>

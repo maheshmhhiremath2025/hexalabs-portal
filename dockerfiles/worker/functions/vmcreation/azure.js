@@ -95,19 +95,18 @@ async function createVirtualMachine(vmName, vmTemplate) {
         };
 
         if (official) {
-            // If using a captured custom image, set the imageId directly and avoid plan details
+            // If using a captured custom image, set the imageId directly
             vmParameters.storageProfile.imageReference = { id: imageId };
+        }
 
-           
-
-            // Plan details are only necessary if the image is a marketplace image, not a captured one
-            if (planPublisher && product) {
-                vmParameters.plan = {
-                    publisher: planPublisher,
-                    product: product,
-                    name: product
-                };
-            }
+        // Apply marketplace plan info whenever provided (needed for gallery images
+        // captured from Marketplace-sourced VMs, regardless of official flag)
+        if (planPublisher && product) {
+            vmParameters.plan = {
+                publisher: planPublisher,
+                product: product,
+                name: version || product  // version holds the plan SKU (e.g. "9-base")
+            };
         }
 
         if (licence !== "none") {
@@ -310,7 +309,7 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
     resourceGroup,
     location,
     vmSize,
-    osType = 'Windows',
+    osType = 'Linux',
     tags = {},
     nicName = `${vmName}-nic`,
     zone

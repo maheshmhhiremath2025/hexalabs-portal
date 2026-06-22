@@ -223,7 +223,7 @@ const CustomerManager = ({ customers, onClose, onDeleteCustomer }) => {
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200"
           >
             Close
           </button>
@@ -510,7 +510,7 @@ const Ledger = ({ apiRoutes }) => {
           </button>
           <button
             onClick={() => handleModalOpen('invoice')}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
           >
             <Plus className="w-3.5 h-3.5" />
             New Invoice

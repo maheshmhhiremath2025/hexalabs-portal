@@ -90,22 +90,22 @@ const SupportPage = () => {
       icon: FaPhone,
       title: 'Phone Support',
       description: '24/7 dedicated support line',
-      details: '+91 90354 06484 / +91 88849 07660',
+      details: '+91 63632 87509 / +91 88849 07660',
       availability: '24/7',
       action: 'Call Now',
       color: 'from-blue-500 to-cyan-500',
-      link: 'tel:+919035406484',
+      link: 'tel:+916363287509',
       secondaryLink: 'tel:+918884907660'
     },
     {
       icon: FaWhatsapp,
       title: 'WhatsApp',
       description: 'Quick chat support',
-      details: '+91 90354 06484 / +91 88849 07660',
+      details: '+91 63632 87509 / +91 88849 07660',
       availability: '24/7',
       action: 'Start Chat',
       color: 'from-green-500 to-emerald-500',
-      link: 'https://wa.me/919035406484',
+      link: 'https://wa.me/916363287509',
       secondaryLink: 'https://wa.me/918884907660'
     },
     {

@@ -77,13 +77,13 @@ const handler = async (job) => {
     ).lean();
 
     if (!vmDoc) {
-      return logger.error(`${vmName} not found in DB`);
+      logger.error(`${vmName} not found in DB`); return;
     }
     if (vmDoc.isRunning) {
-      return logger.error(`${vmName} is already running – skipping start`);
+      logger.error(`${vmName} is already running - skipping start`); return;
     }
     if (!vmDoc.isAlive) {
-      return logger.error(`${vmName} has exceeded quota and cannot start`);
+      logger.error(`${vmName} has exceeded quota and cannot start`); return;
     }
 
     // -----------------------------------------------------------------
@@ -163,6 +163,11 @@ const handler = async (job) => {
 
     const updateData = {
       isRunning: true,
+      // Clear the stale stop-state so the portal reflects the started VM. Without
+      // these, a VM stopped (remarks='Stopped') then started kept showing 'Stopped'
+      // and a leftover stop-cooldown timer in the Lab Console (drift fixed 2026-06-18).
+      remarks: 'Running',
+      stoppingUntil: null,
       vmSize: creationResult.vmSize || vmSize,
       location: creationResult.location || location,
     };

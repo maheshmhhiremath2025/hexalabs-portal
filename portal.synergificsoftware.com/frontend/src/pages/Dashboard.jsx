@@ -42,13 +42,13 @@ import {
  * Professional, clean design with real metrics
  */
 
-const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4"];
+const COLORS = ["#6366f1", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4"];
 const numberFmt = (n) => (typeof n === "number" && isFinite(n) ? n.toLocaleString('en-IN') : "—");
 
 /* -------------------- UI Building Blocks -------------------- */
 
 const Section = ({ title, subtitle, children, className = "" }) => (
-  <section className={`rounded-xl border border-gray-200 bg-white overflow-hidden ${className}`} style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+  <section className={`rounded-xl border border-gray-200/80 bg-white overflow-hidden hover:shadow-lg hover:border-gray-300/60 transition-all duration-300 ${className}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
     {(title || subtitle) && (
       <div className="px-5 py-3 border-b border-gray-100">
         {title && <h2 className="text-sm font-semibold text-gray-900">{title}</h2>}
@@ -70,7 +70,7 @@ const KpiCard = ({ icon: Icon, title, value, subtitle, accent = 'blue', loading:
   };
   const a = accents[accent] || accents.blue;
   return (
-    <div className={`bg-white border border-gray-200 border-l-[3px] ${a.border} rounded-xl p-4 hover:border-gray-300 transition-colors`} style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+    <div className={`bg-white border border-gray-200 border-l-[3px] ${a.border} rounded-xl p-4 hover:border-gray-300 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{title}</div>
@@ -239,7 +239,7 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
         <button
           onClick={fetchRealData}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-50 transition-all duration-200"
         >
           <FaSyncAlt className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -308,7 +308,7 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
               <div className={`text-xs font-semibold ${data.labDensity > 85 ? 'text-rose-600' : 'text-gray-900'}`}>{data.labDensity}%</div>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${data.labDensity > 85 ? 'bg-rose-500' : data.labDensity > 70 ? 'bg-amber-500' : 'bg-blue-500'}`} style={{ width: `${data.labDensity}%` }} />
+              <div className={`h-full rounded-full ${data.labDensity > 85 ? 'bg-rose-500' : data.labDensity > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`} style={{ width: `${data.labDensity}%` }} />
             </div>
 
             {/* Storage allocated — rough Azure managed-disk footprint */}
@@ -357,15 +357,15 @@ const Dashboard = ({ apiOpenRoutes, userDetails }) => {
               <AreaChart data={userGrowthData}>
                 <defs>
                   <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                 <XAxis dataKey="month" stroke="#9ca3af" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.07)' }} />
-                <Area type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} fill="url(#colorUsers)" />
+                <Area type="monotone" dataKey="users" stroke="#6366f1" strokeWidth={2} fill="url(#colorUsers)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>

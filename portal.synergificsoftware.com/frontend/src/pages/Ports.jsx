@@ -142,7 +142,7 @@ export default function Ports({ selectedTraining, apiRoutes }) {
                     <p className="text-sm text-gray-500 mt-0.5">Manage firewall port rules for your training VMs</p>
                 </div>
                 <button
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
                     onClick={openModal}
                     disabled={!selectedTraining || isLoading}
                 >
@@ -308,7 +308,7 @@ export default function Ports({ selectedTraining, apiRoutes }) {
                                     Cancel
                                 </button>
                                 <button onClick={submitOpen} disabled={!newPort.trim() || submitting}
-                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+                                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">
                                     {submitting ? 'Opening…' : 'Open Port'}
                                 </button>
                             </div>

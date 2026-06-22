@@ -171,7 +171,7 @@ const Table = ({ data, Search, modalVisible, deleteData, title, header, columns 
                                     onClick={() => setPage(pageNum)}
                                     className={`px-2.5 py-1 text-xs rounded transition-colors ${
                                         safePage === pageNum
-                                            ? 'bg-blue-600 text-white'
+                                            ? 'bg-indigo-600 text-white'
                                             : 'text-surface-600 hover:bg-surface-200'
                                     }`}
                                 >

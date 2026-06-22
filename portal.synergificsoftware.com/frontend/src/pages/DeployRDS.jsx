@@ -188,7 +188,7 @@ export default function DeployRDS({ userDetails }) {
         )}
 
         <button onClick={handleDeploy} disabled={deploying || !trainingName || !organization}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
           {deploying ? <FaSpinner className="animate-spin" /> : <FaWindows />}
           {deploying ? 'Deploying...' : `Deploy ${userCount} Windows Desktop${userCount > 1 ? 's' : ''}`}
         </button>
@@ -201,7 +201,7 @@ export default function DeployRDS({ userDetails }) {
               <span className="text-xs text-blue-600 tabular-nums">{progress.duration}s elapsed</span>
             </div>
             <div className="w-full bg-blue-100 rounded-full h-2">
-              <div className="h-2 rounded-full bg-blue-600 transition-all duration-700" style={{ width: `${progress.progress}%` }} />
+              <div className="h-2 rounded-full bg-indigo-600 transition-all duration-700" style={{ width: `${progress.progress}%` }} />
             </div>
             <div className="text-xs text-blue-700">{progress.phase}</div>
           </div>

@@ -123,7 +123,7 @@ export default function GcpSandbox({ userDetails }) {
                 maxLength={20} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
             </div>
             <button type="submit" disabled={creating || !projectName}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
               {creating ? <FaSpinner className="animate-spin" /> : <FaPlus className="w-3 h-3" />}
               Create
             </button>

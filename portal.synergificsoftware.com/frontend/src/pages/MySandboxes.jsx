@@ -209,7 +209,7 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId, resetProgress }) {
               onClick={() => onRelaunch(sandbox)}
               disabled={isRelaunching}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium
-                bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isRelaunching ? (
                 <>
@@ -575,7 +575,7 @@ export default function MySandboxes() {
                       key={tpl.slug}
                       onClick={() => handleDeployFirst(tpl)}
                       disabled={!!relaunchingId}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                     >
                       {isInFlight ? <FaRedo className="animate-spin w-3 h-3" /> : <FaCubes className="w-3 h-3" />}
                       Deploy {tpl.name} ({tpl.cloud.toUpperCase()})

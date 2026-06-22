@@ -22,7 +22,7 @@ function StageBar({ current }) {
           <React.Fragment key={label}>
             {i > 0 && <div className={`h-0.5 flex-1 ${done ? 'bg-blue-500' : 'bg-gray-200'}`} />}
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
-              ${active ? 'bg-blue-600 text-white' : done ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+              ${active ? 'bg-indigo-600 text-white' : done ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
               {done ? <FaCheckCircle className="text-[10px]" /> : <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">{i + 1}</span>}
               <span>{label}</span>
             </div>
@@ -145,7 +145,7 @@ function UploadStage({ onAnalyze }) {
       )}
 
       <button onClick={handleSubmit} disabled={!file || loading}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
         {loading ? <><FaSpinner className="animate-spin" /> Starting analysis...</> : <><FaRocket /> Analyze TOC & Generate Labs</>}
       </button>
     </div>
@@ -210,7 +210,7 @@ function GeneratingStage({ jobId, onComplete }) {
             <span>{elapsed}s elapsed</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+            <div className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
           </div>
           {progress.current && (
             <p className="text-xs text-gray-400 mt-1">Current: {progress.current}</p>
@@ -393,7 +393,7 @@ function ReviewStage({ result, onSave, onBack }) {
           <FaArrowLeft className="inline mr-1" /> Start Over
         </button>
         <button onClick={handleSave} disabled={saving || labs.length === 0}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
           {saving ? <><FaSpinner className="animate-spin" /> Saving...</> : <><FaSave /> Save All Labs & Template</>}
         </button>
       </div>
@@ -630,7 +630,7 @@ function SavedStage({ saveResult }) {
           View All Labs
         </button>
         <button onClick={() => window.location.reload()}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm">
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl text-sm">
           Generate Another Suite
         </button>
       </div>

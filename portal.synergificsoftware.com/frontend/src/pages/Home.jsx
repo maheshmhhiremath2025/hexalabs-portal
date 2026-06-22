@@ -36,17 +36,18 @@ export default function Home({ userDetails }) {
     <div className="max-w-7xl mx-auto space-y-6">
 
       {/* Hero welcome */}
-      <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}>
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+      <div className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-gradient-to-r from-[#13131a] via-[#111118] to-[#0e0e14]" style={{ boxShadow: '0 4px 24px rgba(0,0,0,0.18)' }}>
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.06] via-transparent to-violet-500/[0.04]" />
         <div className="relative px-7 py-6 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">
-              {greeting}, <span className="text-blue-400">{firstName}</span>
+              {greeting}, <span className="text-indigo-400">{firstName}</span>
             </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              {org} · {userType === 'superadmin' ? 'Super Admin' : userType === 'admin' ? 'Admin' : 'User'}
+            <p className="text-sm text-zinc-400 mt-1">
+              {org} · {userType === 'superadmin' ? 'Platform Owner' : userType === 'admin' ? 'Org Admin' : 'User'}
               {stats && !loading && (
-                <span className="ml-3 text-slate-500">
+                <span className="ml-3 text-zinc-500">
                   · {stats.users || 0} users · {stats.organization || 0} orgs · {stats.virtualMachines || 0} VMs
                 </span>
               )}
@@ -54,7 +55,7 @@ export default function Home({ userDetails }) {
           </div>
           <Link
             to="/vm/vmdetails"
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-lg shadow-indigo-500/20"
           >
             <FaServer className="w-3.5 h-3.5" /> Lab Console
           </Link>
@@ -121,7 +122,7 @@ export default function Home({ userDetails }) {
 
           {/* Deploy shortcuts */}
           {isAdmin && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="px-5 py-3 border-b border-gray-100">
                 <div className="text-sm font-semibold text-gray-900">Deploy</div>
                 <div className="text-[11px] text-gray-500">Provision labs for your customers</div>
@@ -136,7 +137,7 @@ export default function Home({ userDetails }) {
 
           {/* Cloud & B2B shortcuts */}
           {isAdmin && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="px-5 py-3 border-b border-gray-100">
                 <div className="text-sm font-semibold text-gray-900">Cloud Sandboxes & B2B</div>
               </div>
@@ -150,7 +151,7 @@ export default function Home({ userDetails }) {
 
           {/* For regular users — simplified */}
           {!isAdmin && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="px-5 py-3 border-b border-gray-100">
                 <div className="text-sm font-semibold text-gray-900">Your Lab</div>
               </div>
@@ -177,7 +178,7 @@ export default function Home({ userDetails }) {
 
           {/* Admin quick nav */}
           {isSuperAdmin && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="px-5 py-3 border-b border-gray-100">
                 <div className="text-sm font-semibold text-gray-900">Administration</div>
               </div>
@@ -193,13 +194,13 @@ export default function Home({ userDetails }) {
           )}
 
           {/* Resources */}
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div className="px-5 py-3 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Resources</div>
             </div>
             <div className="divide-y divide-gray-50">
               <NavRow to="/courses" icon={FaGraduationCap} label="Course Catalog" desc="Browse lab templates" />
-              <a href="https://hexalabs.online/support" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+              <a href="https://portal.labsoncloud.online/support" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center">
                   <FaBook className="w-3.5 h-3.5 text-gray-500" />
                 </div>
@@ -214,7 +215,7 @@ export default function Home({ userDetails }) {
           </div>
 
           {/* System status */}
-          <div className="bg-white border border-gray-200 rounded-xl px-5 py-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div className="bg-white border border-gray-200 rounded-xl px-5 py-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div className="flex items-center gap-3">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <div>
@@ -237,7 +238,7 @@ function MiniStat({ icon: Icon, label, value, accent }) {
     cyan: 'border-l-cyan-500', amber: 'border-l-amber-500', rose: 'border-l-rose-500',
   };
   return (
-    <div className={`bg-white border border-gray-200 border-l-[3px] ${accents[accent] || accents.blue} rounded-lg px-3 py-2.5`} style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+    <div className={`bg-white border border-gray-200 border-l-[3px] ${accents[accent] || accents.blue} rounded-lg px-3 py-2.5 hover:border-gray-300 hover:shadow-md transition-all duration-200`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div className="text-lg font-semibold text-gray-900 tabular-nums">{typeof value === 'number' ? value.toLocaleString('en-IN') : value}</div>
       <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{label}</div>
     </div>
@@ -246,15 +247,15 @@ function MiniStat({ icon: Icon, label, value, accent }) {
 
 function ActionCard({ to, icon: Icon, iconBg, title, desc }) {
   return (
-    <Link to={to} className="group flex items-center gap-3.5 px-5 py-4 hover:bg-gray-50/70 transition-colors">
-      <div className={`w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+    <Link to={to} className="group flex items-center gap-3.5 px-5 py-4 hover:bg-indigo-50/50 transition-all duration-200">
+      <div className={`w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-105 ${iconBg}`}>
         <Icon className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors">{title}</div>
+        <div className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition-colors">{title}</div>
         <div className="text-[11px] text-gray-500">{desc}</div>
       </div>
-      <FaArrowRight className="w-3 h-3 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+      <FaArrowRight className="w-3 h-3 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
     </Link>
   );
 }
@@ -276,7 +277,7 @@ function NavRow({ to, icon: Icon, label, desc }) {
 
 function ProviderCard({ icon: Icon, name, color, bg, border, count, label }) {
   return (
-    <div className={`rounded-xl ${bg} border ${border} px-4 py-3.5 text-center`}>
+    <div className={`rounded-xl ${bg} border ${border} px-4 py-3.5 text-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}>
       <Icon className="w-5 h-5 mx-auto mb-2" style={{ color }} />
       <div className="text-lg font-semibold text-gray-900">{count ?? '—'}</div>
       <div className="text-[10px] text-gray-500 uppercase tracking-wider">{name} {label}</div>
@@ -296,7 +297,7 @@ const FAQ_ITEMS = [
 function FaqSection() {
   const [open, setOpen] = React.useState(null);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div className="px-5 py-3 border-b border-gray-100">
         <div className="text-sm font-semibold text-gray-900">Frequently asked questions</div>
       </div>

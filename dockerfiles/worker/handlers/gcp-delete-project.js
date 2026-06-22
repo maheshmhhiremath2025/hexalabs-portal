@@ -15,8 +15,7 @@ const handler = async (job) => {
 
   } catch (error) {
     logger.error(`Error Deleting Project: ${projectId}`, error)
-    return new error
-  }
+    throw new Error(error?.message || String(error));  }
   };
   
   module.exports = handler;

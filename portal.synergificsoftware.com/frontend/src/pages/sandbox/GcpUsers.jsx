@@ -408,7 +408,7 @@ export default function GcpUsers({ userDetails }) {
             <button
               onClick={handleBulkDeploy}
               disabled={deploying || !selectedTemplate || getEmailList().length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {deploying ? <FaSpinner className="animate-spin" /> : <FaRocket className="w-3 h-3" />}
               {deploying ? 'Deploying...' : `Deploy ${getEmailList().length} Sandbox${getEmailList().length !== 1 ? 'es' : ''}`}
@@ -493,7 +493,7 @@ export default function GcpUsers({ userDetails }) {
           </div>
           <div className="flex gap-2">
             <button type="submit" disabled={creating}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
               {creating ? <FaSpinner className="animate-spin" /> : <FaPlus className="w-3 h-3" />} Create User
             </button>
             <button type="button" onClick={() => setShowForm(false)}

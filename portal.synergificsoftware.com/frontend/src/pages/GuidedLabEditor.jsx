@@ -541,7 +541,7 @@ function DeployModal({ lab, onClose }) {
           <div className="flex items-center gap-2">
             {isDone && (
               <button onClick={() => navigate('/vm/vmdetails')}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
                 <Monitor className="w-3.5 h-3.5" /> Open Lab Console
               </button>
             )}
@@ -1370,7 +1370,7 @@ export default function GuidedLabEditor() {
             )}
             {!readOnly && (
               <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+                className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">
                 {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FaSave className="w-3.5 h-3.5" />}
                 {isEdit ? 'Update Lab' : 'Create Lab'}
               </button>

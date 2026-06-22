@@ -66,7 +66,7 @@ export default function ResetPassword() {
                 Reset links are valid for 30 minutes. Please request a new one.
               </p>
             </div>
-            <Link to="/forgot-password" className="block text-center bg-blue-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-blue-700 transition-colors">
+            <Link to="/forgot-password" className="block text-center bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-indigo-700 transition-colors">
               Request a new reset link
             </Link>
             <Link to="/login" className="block text-center text-sm text-gray-600 hover:text-gray-900 mt-3">
@@ -112,7 +112,7 @@ export default function ResetPassword() {
               )}
               <button
                 type="submit" disabled={state === 'submitting'}
-                className="w-full bg-blue-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {state === 'submitting' ? 'Updating…' : 'Update password'}
               </button>

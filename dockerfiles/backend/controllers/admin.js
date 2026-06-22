@@ -73,7 +73,7 @@ const generateInvoicePDF = (invoiceData, organization) => {
         paintHeaderBar();
 
         // logo
-        const logoBuf = await fetchBufferFromUrl('https://hexalabs.online/logo/logo.png');
+        const logoBuf = await fetchBufferFromUrl('https://portal.labsoncloud.online/logo/logo.png');
         if (logoBuf) doc.image(logoBuf, 50, 20, { height: 60 });
         else { setFont(true, 22, '#333333'); doc.text('HEXALABS', 50, 30); }
 
@@ -1058,7 +1058,7 @@ const handleAddTransaction = async (req, res) => {
                     <div style="display: flex; align-items: center;">
                         <div style="background: white; padding: 10px; border-radius: 8px; margin-right: 20px; display: flex; align-items: center; justify-content: center;">
                         <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
-                            <img src="https://hexalabs.online/logo/logo.png"
+                            <img src="https://portal.labsoncloud.online/logo/logo.png"
                                 style="width: 100%; height: 100%; object-fit: contain;"
                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                         </div>

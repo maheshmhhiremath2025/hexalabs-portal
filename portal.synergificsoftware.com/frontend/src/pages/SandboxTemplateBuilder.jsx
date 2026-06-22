@@ -194,7 +194,7 @@ export default function SandboxTemplateBuilder() {
             <React.Fragment key={s.key}>
               {i > 0 && <div className={`h-0.5 flex-1 ${done ? 'bg-blue-500' : 'bg-gray-200'}`} />}
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
-                ${active ? 'bg-blue-600 text-white' : done ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                ${active ? 'bg-indigo-600 text-white' : done ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
                 {done ? <FaCheckCircle className="text-[10px]" /> : <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">{i + 1}</span>}
                 <span>{s.label}</span>
               </div>
@@ -264,7 +264,7 @@ export default function SandboxTemplateBuilder() {
           </div>
 
           <button onClick={handleAnalyze} disabled={!file || stage === 'analyzing'}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
             {stage === 'analyzing'
               ? <><FaSpinner className="animate-spin" /> Analyzing TOC...</>
               : <><FaMagic /> Analyze & Detect Services</>}
@@ -484,7 +484,7 @@ export default function SandboxTemplateBuilder() {
           {/* Actions */}
           <div className="flex gap-3">
             <button onClick={() => navigate(`/courses/${template.slug}`)}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm transition-colors">
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm transition-colors">
               <FaRocket /> Deploy Sandboxes
             </button>
             <button onClick={() => { setStage('upload'); setFile(null); setAnalysis(null); setTemplate(null); setAnalysisId(null); setError(''); }}

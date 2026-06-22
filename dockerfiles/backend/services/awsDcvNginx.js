@@ -1,7 +1,7 @@
 /**
  * AWS DCV Nginx Manager
  *
- * Per-VM nginx server block that proxies https://hexalabs.online:<dcvPort>
+ * Per-VM nginx server block that proxies https://portal.labsoncloud.online:<dcvPort>
  * → https://<ec2-ip>:8443 (the NICE DCV web client on the EC2 instance).
  *
  * Why a separate file from container-upstreams.conf:

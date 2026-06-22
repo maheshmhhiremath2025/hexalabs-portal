@@ -296,7 +296,7 @@ export default function DeployContainer({ userDetails }) {
         {/* Cost comparison line removed — pricing hidden from client-facing pages */}
 
         <button onClick={handleDeploy} disabled={deploying || !trainingName || !organization}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
           <FaDocker /> {deploying ? 'Deploying...' : `Deploy ${count} Workspace${count > 1 ? 's' : ''}`}
         </button>
 
@@ -312,7 +312,7 @@ export default function DeployContainer({ userDetails }) {
 
             {/* Progress bar */}
             <div className="w-full bg-blue-100 rounded-full h-2">
-              <div className="h-2 rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${deployProgress.progress}%` }} />
+              <div className="h-2 rounded-full bg-indigo-600 transition-all duration-500" style={{ width: `${deployProgress.progress}%` }} />
             </div>
 
             {/* Current step */}
@@ -408,7 +408,7 @@ function ContainerRow({ c, onAction }) {
       <td className="px-3 py-2.5">
         {c.isRunning ? (
           <div className="flex items-center gap-2">
-            <a href={c.accessUrl || `https://hexalabs.online/ws/${c.vncPort}/`} target="_blank" rel="noopener noreferrer"
+            <a href={c.accessUrl || `https://portal.labsoncloud.online/ws/${c.vncPort}/`} target="_blank" rel="noopener noreferrer"
               className="text-blue-600 hover:underline text-xs inline-flex items-center gap-1">
               <FaExternalLinkAlt className="w-2 h-2" /> Desktop
             </a>

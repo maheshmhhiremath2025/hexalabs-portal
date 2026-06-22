@@ -128,7 +128,7 @@ async function handleInviteMember(req, res) {
           </div>
           <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
             <p>You've been invited to join <strong>${team.name}</strong> on GetLabs Cloud Portal.</p>
-            <p>Login at <a href="https://hexalabs.online/login">hexalabs.online/login</a> with your email: <strong>${email}</strong></p>
+            <p>Login at <a href="https://portal.labsoncloud.online/login">hexalabs.online/login</a> with your email: <strong>${email}</strong></p>
             <p>Default password: <strong>Welcome1234!</strong> (change it after first login)</p>
           </div>
         </div>`
