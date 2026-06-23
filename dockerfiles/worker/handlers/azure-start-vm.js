@@ -157,7 +157,7 @@ const handler = async (job) => {
           resourceGroup,
           location,
           vmSize,
-          osType: vmTemplate.osType || 'Linux',
+          osType: vmTemplate.osType,  // auto-detected from snapshot if not set
           tags: vmTemplate.tags || {},
           nicName: vmTemplate.nicName || `${vmName}-nic`,
           planPublisher: vmTemplate.planPublisher,

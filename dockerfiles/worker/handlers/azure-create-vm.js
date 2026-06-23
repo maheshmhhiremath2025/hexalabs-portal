@@ -72,9 +72,12 @@ const handler = async (job) => {
       vmTemplate: {
         location: data.template.location,
         vmSize: data.template.vmSize,
-        osType: data.template.os || 'Windows',
-        tags: {}, // Add any tags if available from template
-        nicName: `${data.vmName}-nic` // Inferred from creation logic
+        osType: data.template.os,
+        tags: {},
+        nicName: `${data.vmName}-nic`,
+        planPublisher: data.template.planPublisher,
+        product: data.template.product,
+        version: data.template.version,
       }
     };
     await VM.create(vmDetails);

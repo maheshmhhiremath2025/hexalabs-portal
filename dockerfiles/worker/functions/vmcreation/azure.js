@@ -286,7 +286,7 @@ async function getLatestSeatSnapshot(resourceGroup, vmName) {
   return snaps[0];
 }
 
-async function createOsDiskFromSnapshot(resourceGroup, diskName, snapshotId, location, osType = 'Windows', tags = {}, zone) {
+async function createOsDiskFromSnapshot(resourceGroup, diskName, snapshotId, location, osType, tags = {}, zone) {
   const poll = await computeClient.disks.beginCreateOrUpdate(resourceGroup, diskName, {
     location,
     osType,
@@ -309,7 +309,7 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
     resourceGroup,
     location,
     vmSize,
-    osType = 'Linux',
+    osType,
     tags = {},
     nicName = `${vmName}-nic`,
     zone,
@@ -321,6 +321,11 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
   const nic = await getExistingNic(resourceGroup, nicName);
   // 2) Find latest seat OS snapshot
   const latestSnap = await getLatestSeatSnapshot(resourceGroup, vmName);
+
+  // Auto-detect osType: prefer explicit template value → snapshot metadata → fallback
+  const resolvedOsType = osType || latestSnap.osType || 'Linux';
+  logger.info(`[startFromSnapshot] ${vmName}: osType=${resolvedOsType} (source: ${osType ? 'template' : latestSnap.osType ? 'snapshot' : 'default'})`);
+
   // 3) Create OS disk from that snapshot
   const osDiskName = `${vmName}-os`; // transient; will be deleted on next Stop
 
@@ -351,7 +356,7 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
   }
   // --------------------------------------------------
 
-  const osDisk = await createOsDiskFromSnapshot(resourceGroup, osDiskName, latestSnap.id, location, osType, tags, zone);
+  const osDisk = await createOsDiskFromSnapshot(resourceGroup, osDiskName, latestSnap.id, location, resolvedOsType, tags, zone);
   // 4) Create VM (Spot is fine; eviction policy deallocate)
   // Snapshot carries the source VM's security type — the new VM shell must match,
   // otherwise Azure rejects with "Security type ... not compatible with attached OS Disk".
@@ -365,7 +370,7 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
         name: osDisk.name,
         createOption: 'Attach',
         managedDisk: { id: osDisk.id },
-        osType
+        osType: resolvedOsType
       }
     },
     networkProfile: { networkInterfaces: [{ id: nic.id, primary: true }] },
