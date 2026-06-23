@@ -20,13 +20,27 @@ const computeClient = new ComputeManagementClient(credentials, subscriptionId);
 /**
  * Start VM directly if it exists (for ongoing labs)
  */
-async function startExistingVM(vmName, resourceGroup, nicNameOverride) {
+async function startExistingVM(vmName, resourceGroup, nicNameOverride, planInfo) {
   try {
     logger.info(`Attempting to start existing VM: ${vmName}`);
-    
+
     // Check if VM exists and get its current state
     const vm = await computeClient.virtualMachines.get(resourceGroup, vmName);
-    
+
+    // If this VM was created from a Marketplace image (e.g. Rocky Linux) the
+    // plan block must be set on the VM resource before Azure will allow a start.
+    // Missing plan → VMMarketplaceInvalidInput even for a plain power-on.
+    if (planInfo && planInfo.publisher && planInfo.product && !vm.plan?.publisher) {
+      logger.info(`${vmName}: patching missing Marketplace plan before start`);
+      await computeClient.virtualMachines.beginUpdateAndWait(resourceGroup, vmName, {
+        plan: {
+          publisher: planInfo.publisher,
+          product:   planInfo.product,
+          name:      planInfo.name || planInfo.product,
+        },
+      });
+    }
+
     // Start the VM
     await computeClient.virtualMachines.beginStartAndWait(resourceGroup, vmName);
     
@@ -126,7 +140,10 @@ const handler = async (job) => {
     // 3. Try to start existing VM first (for ongoing labs)
     // -----------------------------------------------------------------
     try {
-      creationResult = await startExistingVM(vmName, resourceGroup, vmTemplate.nicName);
+      const planInfo = (vmTemplate.planPublisher && vmTemplate.product)
+        ? { publisher: vmTemplate.planPublisher, product: vmTemplate.product, name: vmTemplate.version || vmTemplate.product }
+        : null;
+      creationResult = await startExistingVM(vmName, resourceGroup, vmTemplate.nicName, planInfo);
       logger.info(`Started existing VM: ${vmName}`);
     } catch (vmError) {
       if (vmError.statusCode === 404) {
@@ -140,7 +157,7 @@ const handler = async (job) => {
           resourceGroup,
           location,
           vmSize,
-          osType: vmTemplate.osType || 'Windows',
+          osType: vmTemplate.osType || 'Linux',
           tags: vmTemplate.tags || {},
           nicName: vmTemplate.nicName || `${vmName}-nic`,
           planPublisher: vmTemplate.planPublisher,
