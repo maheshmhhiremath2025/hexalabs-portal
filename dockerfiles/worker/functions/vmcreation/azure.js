@@ -312,7 +312,10 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
     osType = 'Linux',
     tags = {},
     nicName = `${vmName}-nic`,
-    zone
+    zone,
+    planPublisher,
+    product,
+    version,
   } = vmTemplate;
   // 1) Get the NIC we keep for this seat
   const nic = await getExistingNic(resourceGroup, nicName);
@@ -373,6 +376,15 @@ async function createVirtualMachineFromLatestSnapshot(vmName, vmTemplate) {
     evictionPolicy: 'Deallocate',
     ...(zone ? { zones: [zone] } : {}),
   };
+  // Marketplace-sourced snapshots require the original plan block — same rule
+  // as createVirtualMachine. Without it Azure returns VMMarketplaceInvalidInput.
+  if (planPublisher && product) {
+    vmParams.plan = {
+      publisher: planPublisher,
+      product: product,
+      name: version || product,
+    };
+  }
   const poll = await computeClient.virtualMachines.beginCreateOrUpdate(resourceGroup, vmName, vmParams);
   await poll.pollUntilDone();
   // 5) Return IP for UI (derived from NIC ipConfiguration to support non-standard PIP names)

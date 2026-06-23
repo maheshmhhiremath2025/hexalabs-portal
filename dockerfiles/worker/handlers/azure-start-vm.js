@@ -143,6 +143,9 @@ const handler = async (job) => {
           osType: vmTemplate.osType || 'Windows',
           tags: vmTemplate.tags || {},
           nicName: vmTemplate.nicName || `${vmName}-nic`,
+          planPublisher: vmTemplate.planPublisher,
+          product: vmTemplate.product,
+          version: vmTemplate.version,
         });
         
         logger.info(`Created VM from snapshot: ${vmName}`);
