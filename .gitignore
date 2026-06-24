@@ -37,3 +37,22 @@ docker-compose.yml.backup-*
 __pycache__/
 _fetched_files/
 server_diff_result.txt
+
+# Session logs and deploy docs (may reference credentials)
+CLAUDE_SESSION_LOG.md
+PRODUCTION_DEPLOY.md
+
+# Credential / secret files
+*.pem
+*.key
+*.p12
+*.pfx
+.env.*
+!.env.example
+!.env.production
+
+# One-off ops scripts (may contain server references)
+patch_*.js
+recreate_*.js
+resize_*.js
+start_*.js
