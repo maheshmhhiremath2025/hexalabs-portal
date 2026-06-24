@@ -65,6 +65,17 @@ async function handleDeleteSandboxUser(req, res) {
             return res.status(400).send('Invalid request please share email')
         }
 
+        // Authorization: only admins/superadmins can delete other users.
+        // A sandboxuser can only delete their own account.
+        const callerType = req.user?.userType;
+        const callerEmail = req.user?.email;
+        if (callerType !== 'admin' && callerType !== 'superadmin') {
+            if (callerEmail !== email) {
+                logger.warn(`[sandbox] ${callerEmail} (${callerType}) tried to delete user ${email} — denied`);
+                return res.status(403).send('You do not have permission to delete this user');
+            }
+        }
+
         // 1. Mark as deleting before starting cleanup
         const userDoc = await SandboxUser.findOne({ email });
         if (!userDoc) {
@@ -213,6 +224,21 @@ async function handleDeleteSandbox(req, res) {
 
         if (!resourceGroupName) {
             return res.status(400).json({ error: 'Invalid request. Please provide resourceGroupName' });
+        }
+
+        // Ownership check: only admins/superadmins, or the sandbox user who owns
+        // this resource group, may delete it.
+        const callerType = req.user?.userType;
+        const callerEmail = req.user?.email;
+        if (callerType !== 'admin' && callerType !== 'superadmin') {
+            const ownerDoc = await SandboxUser.findOne({
+                email: callerEmail,
+                'sandbox.resourceGroupName': resourceGroupName,
+            });
+            if (!ownerDoc) {
+                logger.warn(`[sandbox] ${callerEmail} (${callerType}) tried to delete ${resourceGroupName} — denied`);
+                return res.status(403).json({ error: 'You do not have permission to delete this sandbox' });
+            }
         }
 
         // 1. Delete resource group directly via Azure SDK
