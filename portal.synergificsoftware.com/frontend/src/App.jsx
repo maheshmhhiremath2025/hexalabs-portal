@@ -62,6 +62,7 @@ const TocLabSuiteEditor    = lazy(() => import('./pages/TocLabSuiteEditor'))
 const SandboxTemplateBuilder = lazy(() => import('./pages/SandboxTemplateBuilder'))
 const RosaCluster          = lazy(() => import('./pages/RosaCluster'))
 const AroCluster           = lazy(() => import('./pages/AroCluster'))
+const CreateFreshVM        = lazy(() => import('./pages/CreateFreshVM'))
 const B2BCourseDetail      = lazy(() => import('./pages/b2b/B2BCourseDetail'))
 const B2BCourseAnalyses    = lazy(() => import('./pages/b2b/B2BCourseAnalyses'))
 
@@ -458,6 +459,7 @@ function AppInner() {
             <Route path='/sandbox/oci-sandbox' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<OciSandbox userDetails={userDetails} />} />} />
 
             <Route path='/createvm' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<CreateVM userDetails={userDetails} apiRoutes={apiRoutes} />} />} />
+            <Route path='/create-fresh-vm' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<CreateFreshVM userDetails={userDetails} apiRoutes={apiRoutes} />} />} />
             <Route path='/containers' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<DeployContainer userDetails={userDetails} />} />} />
             <Route path='/templates' element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']} element={<TemplateManager />} />} />
             <Route path='/template-routing' element={<RoleBasedRoute allowedRoles={['superadmin']} element={<TemplateRouting />} />} />

@@ -66,6 +66,13 @@ const sandboxuserSchema = new mongoose.Schema({
     deletionStatus: { type: String, enum: ['none', 'deleting', 'failed'], default: 'none' },
     batchExpiresAt: { type: Date, default: null },
     organization: { type: String, index: true },
+    // Persistent Azure AD user — survives sandbox delete so the same Entra
+    // identity is reused across all sandbox lifecycles for this learner.
+    azureAdUser: {
+        upn: { type: String },        // e.g. sb-john-abc4@hexalabs.online
+        password: { type: String },
+        objectId: { type: String },    // Entra object ID
+    },
 },
     { timestamps: true })
 

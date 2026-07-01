@@ -78,6 +78,12 @@ const handler = async (job) => {
         planPublisher: data.template.planPublisher,
         product: data.template.product,
         version: data.template.version,
+        // Marketplace image fields (for fresh VMs without imageId)
+        publisher: data.template.publisher,
+        offer: data.template.offer,
+        sku: data.template.sku,
+        resourceGroup: data.template.resourceGroup,
+        diskSizeGB: data.template.diskSizeGB || null,
       }
     };
     await VM.create(vmDetails);

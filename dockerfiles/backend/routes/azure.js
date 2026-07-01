@@ -3,7 +3,7 @@ const {handleGetTrainingName, handleGetTemplates, handleGetMachines, handleVMRes
 const {handleGetTrainingPorts, handleOpenTrainingPorts, handleCloseTrainingPorts} = require('./../controllers/users/port')
 const {handleGetExistingSchedule, handleDeleteSchedule, handleCreateSchedule, handleGetSchedulesByVm, handleBulkDeleteSchedules, handleBulkUpdateSchedules} = require("./../controllers/users/schedule")
 const {handleGetBillingStats, handleGetLogs, handleGetVMnames, handleGetCohortLogs} = require('./../controllers/users/billingStats')
-const {handleCreateMachines} = require ('./../controllers/users/azureVmCreate')
+const {handleCreateMachines, handleCreateFreshVMs, handleGetMarketplaceImages} = require ('./../controllers/users/azureVmCreate')
 const {handleVMOperations} = require('./../controllers/users/vm')
 const {handleKillTraining, handlePreviewKill} = require("./../controllers/killTraining")
 const { getVmAccessUrl } = require('../services/guacamoleService');
@@ -34,6 +34,8 @@ router.get('/vmnames', handleGetVMnames);
 router.get('/logs/cohort', handleGetCohortLogs);
 router.get('/machines', handleGetMachines)
 router.post('/machines', requireWorker, handleCreateMachines)
+router.get('/marketplace-images', handleGetMarketplaceImages);
+router.post('/marketplace-vm', requireWorker, handleCreateFreshVMs);
 router.patch('/machines', requireWorker, handleVMOperations);
 router.patch('/machinesRestart', requireWorker, handleVMRestart);
 router.get('/killTraining/preview', handlePreviewKill);

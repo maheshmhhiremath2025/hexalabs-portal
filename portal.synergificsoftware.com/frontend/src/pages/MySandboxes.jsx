@@ -3,7 +3,7 @@ import apiCaller from '../services/apiCaller';
 import {
   FaAws, FaCloud, FaGoogle,
   FaCopy, FaCheck, FaExternalLinkAlt, FaChevronDown, FaChevronUp,
-  FaCheckCircle, FaTimesCircle, FaCubes, FaRedo,
+  FaCheckCircle, FaTimesCircle, FaCubes, FaRedo, FaTrash,
 } from 'react-icons/fa';
 
 /* ------------------------------------------------------------------ */
@@ -181,13 +181,14 @@ function UsageIndicator({ hoursUsedToday = 0, dailyCapHours = 12 }) {
 /* ------------------------------------------------------------------ */
 /*  Sandbox card                                                       */
 /* ------------------------------------------------------------------ */
-function SandboxCard({ sandbox, onRelaunch, relaunchingId, resetProgress }) {
+function SandboxCard({ sandbox, onRelaunch, onDelete, relaunchingId, deletingId, resetProgress }) {
   const meta = CLOUD_META[sandbox.cloud] || CLOUD_META.aws;
   const { Icon, label, color, bg, border } = meta;
 
   const expMs = sandbox.expiresAt ? new Date(sandbox.expiresAt).getTime() : null;
   const isExpired = sandbox.status === 'expired' || (expMs && expMs <= Date.now());
   const isRelaunching = relaunchingId === `${sandbox.cloud}-${sandbox.templateSlug}`;
+  const isDeleting = deletingId === sandbox.resourceGroupName;
   const rp = resetProgress && resetProgress[sandbox.projectId];
   const isResetting = !!rp && (rp.status === 'resetting' || rp.status === 'queued');
 
@@ -220,6 +221,26 @@ function SandboxCard({ sandbox, onRelaunch, relaunchingId, resetProgress }) {
                 <>
                   <FaRedo className="text-[10px]" />
                   Launch Again
+                </>
+              )}
+            </button>
+          )}
+          {sandbox.resourceGroupName && (
+            <button
+              onClick={() => onDelete(sandbox)}
+              disabled={isDeleting || isRelaunching}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium
+                bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isDeleting ? (
+                <>
+                  <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <FaTrash className="text-[10px]" />
+                  Delete
                 </>
               )}
             </button>
@@ -356,6 +377,7 @@ export default function MySandboxes() {
   const [relaunchingId, setRelaunchingId] = useState(null);
   const [relaunchMsg, setRelaunchMsg] = useState(null);
   const [relaunchStartedAt, setRelaunchStartedAt] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const relaunchInFlightRef = useRef(false);
   const [, setProgressTick] = useState(0);
   const [resetProgress, setResetProgress] = useState({});
@@ -463,6 +485,43 @@ export default function MySandboxes() {
       setRelaunchingId(null);
       setRelaunchStartedAt(null);
       relaunchInFlightRef.current = false;
+    }
+  };
+
+  const handleDelete = async (sandbox) => {
+    if (!sandbox.resourceGroupName) return;
+    if (!window.confirm(`Delete this ${(sandbox.cloud || 'azure').toUpperCase()} sandbox?\n\nResource group "${sandbox.resourceGroupName}" and all resources inside it will be permanently deleted. You can deploy a new sandbox afterwards.`)) return;
+
+    setDeletingId(sandbox.resourceGroupName);
+    setRelaunchMsg(null);
+    try {
+      await apiCaller.delete('/sandbox/azure', { data: { resourceGroupName: sandbox.resourceGroupName } });
+      setRelaunchMsg({ type: 'success', text: 'Sandbox deleted successfully! You can deploy a new sandbox below.' });
+      // Re-fetch from API so the backend returns a retention card with the deploy/relaunch option
+      try {
+        const refreshRes = await apiCaller.get('/user/my-sandboxes');
+        setSandboxes(refreshRes.data.sandboxes || []);
+      } catch {
+        // Fallback: remove locally if refetch fails
+        setSandboxes(prev => prev.filter(s => s.resourceGroupName !== sandbox.resourceGroupName));
+      }
+    } catch (err) {
+      const status = err.response?.status;
+      const errData = err.response?.data;
+      let errText;
+      if (status === 403) {
+        errText = 'Permission denied — only the sandbox owner or an administrator can delete this sandbox.';
+      } else if (status === 400) {
+        errText = errData?.error || 'Invalid request. The sandbox reference may be missing or corrupted.';
+      } else {
+        const serverMsg = errData?.error || errData?.message || '';
+        errText = serverMsg
+          ? `Deletion failed: ${serverMsg}. Please try again or contact your administrator.`
+          : 'Failed to delete the sandbox. The cloud provider may be temporarily unavailable — please try again in a few minutes.';
+      }
+      setRelaunchMsg({ type: 'error', text: errText });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -595,7 +654,9 @@ export default function MySandboxes() {
               key={`${sb.cloud}-${i}`}
               sandbox={sb}
               onRelaunch={handleRelaunch}
+              onDelete={handleDelete}
               relaunchingId={relaunchingId}
+              deletingId={deletingId}
               resetProgress={resetProgress}
             />
           ))}

@@ -425,7 +425,7 @@ async function handleBulkDeployAzure(req, res) {
                             // hardcodes — when the template has its own customRoleId,
                             // students should only have that role, not the default.
                             try {
-                                const DEFAULT_SANDBOX_ROLE_SUFFIX = '57fce75e-14f9-4736-84e6-9c55ba17b975';
+                                const DEFAULT_SANDBOX_ROLE_SUFFIX = 'bfb6d235-8a98-4c0c-bc06-edea5dc83954';
                                 const existing = [];
                                 for await (const ra of authClient.roleAssignments.listForScope(scope)) existing.push(ra);
                                 const defaultRA = existing.find(ra =>

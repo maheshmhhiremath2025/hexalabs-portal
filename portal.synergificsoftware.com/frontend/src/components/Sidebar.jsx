@@ -427,9 +427,10 @@ export default function Sidebar({ userDetails, onLogout, collapsed, onToggleColl
               )}
 
               {/* Launch */}
-              {(userType === 'admin' || userType === 'superadmin') && anyMatch('Launch', 'Virtual Machine', 'Container', 'Templates', 'Workshop', 'Routing', 'RDP Desktop', 'Guided Labs', 'AI Lab Suite', 'ROSA', 'ARO') && (
+              {(userType === 'admin' || userType === 'superadmin') && anyMatch('Launch', 'Virtual Machine', 'Fresh VM', 'Container', 'Templates', 'Workshop', 'Routing', 'RDP Desktop', 'Guided Labs', 'AI Lab Suite', 'ROSA', 'ARO') && (
                 <Accordion id="launch" icon={FaBolt} label="Launch" collapsed={collapsed} openMap={effectiveOpenSections} setOpenMap={setOpenSections}>
                   {matchesSearch('Virtual Machine') && <NavItem to="/createvm" icon={FaLaptop} label="Virtual Machine" collapsed={false} />}
+                  {matchesSearch('Fresh VM') && <NavItem to="/create-fresh-vm" icon={FaServer} label="Fresh VM" collapsed={false} />}
                   {matchesSearch('Container') && <NavItem to="/containers" icon={FaDocker} label="Container" collapsed={false} />}
                   {matchesSearch('Templates') && <NavItem to="/templates" icon={FaLayerGroup} label="Templates" collapsed={false} />}
                   {matchesSearch('Workshop') && <NavItem to="/workshop" icon={FaRocket} label="Workshop" collapsed={false} />}

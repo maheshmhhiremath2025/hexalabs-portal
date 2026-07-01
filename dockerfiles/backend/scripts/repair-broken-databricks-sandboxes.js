@@ -9,7 +9,7 @@ const mongoose = require("mongoose");
 
 const SUB = process.env.SUBSCRIPTION_ID;
 const TENANT = process.env.TENANT_ID;
-const CUSTOM_ROLE_ID = `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823`;
+const CUSTOM_ROLE_ID = `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/dd15bbf4-d253-4042-a283-0ba786365fca`;
 
 const BROKEN = [
   { email: "azde5@g.com",  prefix: "azde5"  },

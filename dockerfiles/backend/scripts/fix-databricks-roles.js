@@ -7,8 +7,8 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 
 const SUB = process.env.SUBSCRIPTION_ID;
-const CUSTOM_ROLE_ID = `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823`;
-const DEFAULT_SANDBOX_ROLE_SUFFIX = "57fce75e-14f9-4736-84e6-9c55ba17b975";
+const CUSTOM_ROLE_ID = `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/dd15bbf4-d253-4042-a283-0ba786365fca`;
+const DEFAULT_SANDBOX_ROLE_SUFFIX = "bfb6d235-8a98-4c0c-bc06-edea5dc83954";
 
 (async () => {
   await mongoose.connect(process.env.MONGO_URI);
@@ -44,7 +44,7 @@ const DEFAULT_SANDBOX_ROLE_SUFFIX = "57fce75e-14f9-4736-84e6-9c55ba17b975";
         const existing = [];
         for await (const ra of auth.roleAssignments.listForScope(scope)) existing.push(ra);
         const mine = existing.filter(r => r.principalId === oid && r.scope === scope);
-        const hasCustom = mine.some(r => r.roleDefinitionId.includes("1043b243-4369-4a1b-a537-972204808823"));
+        const hasCustom = mine.some(r => r.roleDefinitionId.includes("dd15bbf4-d253-4042-a283-0ba786365fca"));
 
         if (hasCustom) {
           console.log(`[SKIP] ${upn} on ${sb.resourceGroupName} already has custom role`);

@@ -8,8 +8,8 @@ const SandboxTemplate = require('../models/sandboxTemplate');
   const existing = await SandboxTemplate.findOne({ slug: 'azure-databricks' });
   if (existing) {
     console.log('azure-databricks template already exists, updating...');
-    existing.customRoleId = '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823';
-    existing.policyInitiativeId = '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827';
+    existing.customRoleId = '/subscriptions/ba7b8c9b-59c4-475a-a85c-fff76751215a/providers/Microsoft.Authorization/roleDefinitions/dd15bbf4-d253-4042-a283-0ba786365fca';
+    existing.policyInitiativeId = '/subscriptions/ba7b8c9b-59c4-475a-a85c-fff76751215a/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827';
     await existing.save();
     console.log('Updated azure-databricks template');
   } else {
@@ -25,8 +25,8 @@ const SandboxTemplate = require('../models/sandboxTemplate');
         budgetInr: 500,
         region: 'southindia',
       },
-      customRoleId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/roleDefinitions/1043b243-4369-4a1b-a537-972204808823',
-      policyInitiativeId: '/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827',
+      customRoleId: '/subscriptions/ba7b8c9b-59c4-475a-a85c-fff76751215a/providers/Microsoft.Authorization/roleDefinitions/dd15bbf4-d253-4042-a283-0ba786365fca',
+      policyInitiativeId: '/subscriptions/ba7b8c9b-59c4-475a-a85c-fff76751215a/providers/Microsoft.Authorization/policySetDefinitions/ae62970e3e1c40d1b8dd0827',
       allowedServices: [
         { service: 'Microsoft.Databricks/workspaces', category: 'Analytics' },
       ],

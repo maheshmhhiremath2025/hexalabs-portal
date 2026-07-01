@@ -192,6 +192,7 @@ router.get('/my-sandboxes', restrictToLoggedinUserOnly, async (req, res) => {
           : null;
         sandboxes.push({
           cloud: 'azure',
+          resourceGroupName: sb.resourceGroupName || null,
           username: sb.credentials?.username || azureDoc.userId,
           password: sb.credentials?.password || '',
           accessUrl: sb.accessUrl || 'https://portal.azure.com',
@@ -658,12 +659,30 @@ router.post('/relaunch-sandbox', restrictToLoggedinUserOnly, async (req, res) =>
     } else if (cloud === 'azure') {
       const cleanName = userEmail.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 12);
       const rgName = `sb-${cleanName}-${Date.now().toString(36).slice(-5)}`;
-      // Static Entra user: reuse the UPN+password from the most recent prior sandbox
-      // entry so relaunch does NOT mint a new directory user every time. The cleanup
-      // automation still tears the user down at endDate/quota-exhausted (the "end").
+      // Persistent Entra user: reuse the AD user stored at the sandboxuser level
+      // so the same identity survives sandbox delete/relaunch cycles. Fall back to
+      // the last sandbox entry's credentials for backwards compatibility.
+      const storedAd = userDoc.azureAdUser;
       const priorSb = [...(userDoc.sandbox || [])].reverse().find(s => s.credentials && s.credentials.username);
-      const reuseUser = priorSb ? { upn: priorSb.credentials.username, password: priorSb.credentials.password } : undefined;
+      const reuseUser = storedAd?.upn
+        ? { upn: storedAd.upn, password: storedAd.password }
+        : priorSb ? { upn: priorSb.credentials.username, password: priorSb.credentials.password } : undefined;
       result = await createAzureSandbox(rgName, 'southindia', userDoc.userId, userEmail, { allowedVmSkus: template.allowedInstanceTypes?.azure, reuseUser });
+
+      // Persist the AD credentials on the user doc so they survive sandbox deletes.
+      // Because relaunch ROTATES the password on the same Entra identity, also
+      // refresh the stored password on every prior sandbox entry for this same
+      // user, so the portal always shows the current password — never a stale
+      // one from an earlier relaunch cycle.
+      if (result.objectId && result.username) {
+        userDoc.azureAdUser = { upn: result.username, password: result.password, objectId: result.objectId };
+        (userDoc.sandbox || []).forEach(s => {
+          if (s.credentials && s.credentials.username === result.username) {
+            s.credentials.password = result.password;
+          }
+        });
+        userDoc.markModified('sandbox');
+      }
 
       // If the template defines a customRoleId, replace the default sandbox
       // role with the custom one (mirrors controllers/sandbox.js bulk-deploy).
@@ -681,7 +700,7 @@ router.post('/relaunch-sandbox', restrictToLoggedinUserOnly, async (req, res) =>
             roleDefinitionId: template.customRoleId,
             scope,
           });
-          const DEFAULT_SANDBOX_ROLE_SUFFIX = '57fce75e-14f9-4736-84e6-9c55ba17b975';
+          const DEFAULT_SANDBOX_ROLE_SUFFIX = 'bfb6d235-8a98-4c0c-bc06-edea5dc83954';
           const existing = [];
           for await (const ra of authClient.roleAssignments.listForScope(scope)) existing.push(ra);
           const defaultRA = existing.find(ra =>
@@ -692,6 +711,28 @@ router.post('/relaunch-sandbox', restrictToLoggedinUserOnly, async (req, res) =>
         } catch (e) {
           console.error(`[relaunch-azure] customRoleId swap failed for ${rgName}: ${e.message}`);
         }
+      }
+
+      // Assign the policy initiative (sandboxmh / databricks-mh) to restrict
+      // services inside the resource group — mirrors worker/azure-create-sandbox.js.
+      try {
+        const { PolicyClient } = require('@azure/arm-policy');
+        const { ClientSecretCredential: PSCred } = require('@azure/identity');
+        const cryptoP = require('crypto');
+        const subId = process.env.SUBSCRIPTION_ID;
+        const pCred = new PSCred(process.env.TENANT_ID, process.env.CLIENT_ID, process.env.CLIENT_SECRET);
+        const policyClient = new PolicyClient(pCred, subId);
+        const scope = `/subscriptions/${subId}/resourceGroups/${rgName}`;
+        const initiativeId = template.policyInitiativeId
+          || `/subscriptions/${subId}/providers/Microsoft.Authorization/policySetDefinitions/22b100af047a471aa11e18a8`;
+        await policyClient.policyAssignments.create(scope, `sandbox-init-${cryptoP.randomUUID().slice(0, 8)}`, {
+          policyDefinitionId: initiativeId,
+          scope,
+          displayName: 'Sandbox Resource Restrictions',
+        });
+        console.log(`[relaunch-azure] Initiative assigned to ${rgName}`);
+      } catch (e) {
+        console.error(`[relaunch-azure] Initiative assignment failed for ${rgName}: ${e.message}`);
       }
 
       userDoc.sandbox.push({

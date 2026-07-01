@@ -13,9 +13,9 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const TENANT_ID = process.env.TENANT_ID;
 
 const CUSTOM_ROLE_ID =
-   "/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975";
+   `/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Authorization/roleDefinitions/bfb6d235-8a98-4c0c-bc06-edea5dc83954`;
 const INITIATIVE_ID =
-   "/subscriptions/337f2b3a-68b6-4a2e-befd-01a13f20c1d0/providers/Microsoft.Authorization/policySetDefinitions/22b100af047a471aa11e18a8";
+   `/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Authorization/policySetDefinitions/22b100af047a471aa11e18a8`;
 
 const credential = new ClientSecretCredential(TENANT_ID, CLIENT_ID, CLIENT_SECRET);
 const resourceClient = new ResourceManagementClient(credential, SUBSCRIPTION_ID);

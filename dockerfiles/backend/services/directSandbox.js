@@ -47,7 +47,10 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
 
   // 1. Provision Entra (Azure AD) user for sandbox access.
   //    Static-user policy: if caller passes options.reuseUser={upn,password},
-  //    look up the existing user by UPN, reuse it, and SKIP user creation.
+  //    look up the existing user by UPN, reuse the SAME identity, but ROTATE
+  //    its password so every relaunch issues a fresh credential. The UPN and
+  //    objectId stay constant (email never changes); only the password changes,
+  //    and the new value is what the portal displays.
   //    Only create a fresh Entra user on first-ever sandbox for this learner.
   let azureUsername = '';
   let azurePassword = '';
@@ -76,8 +79,22 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
       const existing = await graphClient.api(`/users/${encodeURIComponent(reuseUPN)}`).get();
       azureObjectId = existing.id;
       azureUsername = reuseUPN;
-      azurePassword = reusePass || '';
-      logger.info(`Azure AD user reused (static): ${azureUsername} (${azureObjectId})`);
+
+      // Rotate the password on the reused identity so the learner gets a fresh
+      // credential every relaunch. PATCH the existing user via Graph.
+      const rotatedPassword = `Sb${crypto.randomBytes(4).toString('hex')}!1`;
+      try {
+        await graphClient.api(`/users/${azureObjectId}`).update({
+          passwordProfile: { forceChangePasswordNextSignIn: false, password: rotatedPassword },
+        });
+        azurePassword = rotatedPassword;
+        logger.info(`Azure AD user reused + password rotated: ${azureUsername} (${azureObjectId})`);
+      } catch (rotErr) {
+        // Rotation failed — fall back to the prior password so sign-in still
+        // works, but surface it loudly. The displayed password may be stale.
+        azurePassword = reusePass || '';
+        logger.error(`Azure AD password rotation FAILED for ${azureUsername} (${azureObjectId}): ${rotErr.message}; falling back to prior password`);
+      }
     } catch (e) {
       // Prior user is gone (deleted out-of-band, tenant purged, etc.) — fall through to create new.
       logger.warn(`Azure AD reuse failed for ${reuseUPN}: ${e.message}; creating fresh user`);
@@ -119,7 +136,7 @@ async function createAzureSandbox(resourceGroupName, location = 'southindia', us
   // 3. Assign role to the new Azure AD user — retry on PrincipalNotFound
   // since AAD principals can take 5-30s to propagate to RBAC after creation.
   if (azureObjectId) {
-    const CUSTOM_ROLE_ID = `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/57fce75e-14f9-4736-84e6-9c55ba17b975`;
+    const CUSTOM_ROLE_ID = `/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/bfb6d235-8a98-4c0c-bc06-edea5dc83954`;
     const scope = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}`;
     let assigned = false;
     for (let i = 0; i < 6; i++) {

@@ -21,7 +21,7 @@ const networkClient = new NetworkManagementClient(credentials, subscriptionId);
 
 // Original function: Create VM from image (for initial creation using template/imageId)
 async function createVirtualMachine(vmName, vmTemplate) {
-    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version, securityType, zone} = vmTemplate;
+    const {location, imageId, resourceGroup, vmSize, vnet, licence, official, planPublisher, product, version, securityType, zone, publisher, offer, sku, marketplaceVersion, diskSizeGB} = vmTemplate;
     const nicName = vmName + "-nic";
     const publicIpName = vmName + "-public-IP";
     const publicIpParameters = {
@@ -70,11 +70,14 @@ async function createVirtualMachine(vmName, vmTemplate) {
                     createOption: 'FromImage',
                     managedDisk: {
                         storageAccountType: 'StandardSSD_LRS'
-                    }
+                    },
+                    ...(diskSizeGB > 0 ? { diskSizeGB } : {}),
                 },
-                imageReference: official ? null : { // Only set imageReference if not using a custom captured image
-                    id: imageId,
-                }
+                imageReference: imageId
+                    ? { id: imageId }
+                    : (publisher && offer && sku)
+                        ? { publisher, offer, sku, version: marketplaceVersion || 'latest' }
+                        : null,
             },
             networkProfile: {
                 networkInterfaces: [
@@ -94,11 +97,6 @@ async function createVirtualMachine(vmName, vmTemplate) {
             ...(zone ? { zones: [zone] } : {}),
         };
 
-        if (official) {
-            // If using a captured custom image, set the imageId directly
-            vmParameters.storageProfile.imageReference = { id: imageId };
-        }
-
         // Apply marketplace plan info whenever provided (needed for gallery images
         // captured from Marketplace-sourced VMs, regardless of official flag)
         if (planPublisher && product) {
@@ -113,9 +111,11 @@ async function createVirtualMachine(vmName, vmTemplate) {
             vmParameters.licenseType = licence;
         }
 
-        // Always add osProfile for generalized gallery images
-        // (required by Azure — generalized images lose their user accounts)
-        if (!official || imageId?.includes('/galleries/')) {
+        // Always add osProfile for generalized images:
+        // - non-official gallery images
+        // - gallery images (generalized)
+        // - marketplace images (always generalized, no imageId)
+        if (!official || imageId?.includes('/galleries/') || !imageId) {
             vmParameters.osProfile = {
                 computerName: vmName.slice(0, 15),
                 adminUsername: adminUsername,

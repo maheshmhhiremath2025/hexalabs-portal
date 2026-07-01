@@ -28,7 +28,11 @@ export const apiRoutes = {
 
     // ✅ NEW: used by Account.jsx to download invoice PDFs
     // Pattern with :id is supported by the component; backend should return application/pdf
-    downloadInvoiceApi: `/admin/ledger/invoice/pdf/:id`
+    downloadInvoiceApi: `/admin/ledger/invoice/pdf/:id`,
+
+    // Fresh VM (marketplace image creation)
+    marketplaceImagesApi: `/azure/marketplace-images`,
+    marketplaceVmApi: `/azure/marketplace-vm`
 };
 
 export const containerApiRoutes = {
